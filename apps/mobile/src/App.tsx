@@ -5,19 +5,34 @@ import { Pressable, Text, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { copy } from "./copy.ts";
+import { ThemeSettings } from "./ThemeSettings.tsx";
 
 export function App() {
+  // pt-BR first; Settings will keep the choice once it exists.
+  const [locale, setLocale] = useState<Locale>("pt-BR");
+  // Until there's navigation: the home screen or Settings › Theme.
+  const [screen, setScreen] = useState<"home" | "theme">("home");
   return (
     <SafeAreaProvider>
-      <Home />
+      {screen === "theme" ? (
+        <ThemeSettings locale={locale} onBack={() => setScreen("home")} />
+      ) : (
+        <Home locale={locale} setLocale={setLocale} openTheme={() => setScreen("theme")} />
+      )}
       <StatusBar style="auto" />
     </SafeAreaProvider>
   );
 }
 
-function Home() {
-  // pt-BR first; Settings will keep the choice once it exists.
-  const [locale, setLocale] = useState<Locale>("pt-BR");
+function Home({
+  locale,
+  setLocale,
+  openTheme,
+}: {
+  locale: Locale;
+  setLocale: (locale: Locale) => void;
+  openTheme: () => void;
+}) {
   const t = copy(locale);
   // Insets as padding: react-native-safe-area-context's SafeAreaView hides its Text children on
   // React Native 0.88.
@@ -37,6 +52,13 @@ function Home() {
         <Text className="text-label font-medium text-primary-foreground">
           {t("switchLanguage")}
         </Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        onPress={openTheme}
+        className="self-start rounded-lg bg-surface px-4 py-3 active:opacity-80"
+      >
+        <Text className="text-label font-medium text-foreground">{t("theme")}</Text>
       </Pressable>
     </View>
   );
