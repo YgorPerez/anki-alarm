@@ -2,6 +2,7 @@ import { nextRing, type Alarm, type Locale } from "@app/core";
 import { Effect } from "effect";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
+import type { ListRenderItemInfo } from "react-native";
 import { AppState, Pressable, FlatList, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { copy } from "./copy.ts";

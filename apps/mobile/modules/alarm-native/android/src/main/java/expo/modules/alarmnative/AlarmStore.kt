@@ -27,6 +27,7 @@ object AlarmStore {
   }
   @Synchronized fun event(ctx: Context, kind: String, alarmId: String? = null, newRing: JSONObject? = null, clearRing: Boolean = false) {
     val active = newRing ?: ring(ctx)
+    if (active == null && alarmId == null) return
     val events = JSONArray(prefs(ctx).getString("journal", "[]"))
     events.put(JSONObject().put("id", uuid7()).put("kind", kind).put("alarmId", alarmId ?: active?.getJSONObject("alarm")?.getString("id") ?: JSONObject.NULL)
       .put("ringId", active?.getString("id") ?: JSONObject.NULL).put("wallTime", System.currentTimeMillis()).put("elapsedRealtime", SystemClock.elapsedRealtime()))

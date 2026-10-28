@@ -62,3 +62,26 @@ it("persists a replayed journal once and acknowledges only after successful stor
   expect(repository.events()).toEqual([event]);
   expect(await Effect.runPromise(pending)).toEqual([]);
 });
+it("recovers the active ring on resume and dismisses only its matching ID", async () => {
+  const native = memoryAlarmService();
+  const controller = alarmController(memoryAlarmRepository());
+  const ring = { id: "ring-1", alarm, startedAt: 1000, phase: "ringing" };
+  native.deliver(
+    {
+      id: "event-1",
+      kind: "ringStarted",
+      alarmId: alarm.id,
+      ringId: ring.id,
+      wallTime: 1000,
+      elapsedRealtime: 500,
+    },
+    ring,
+  );
+  const run = <A>(effect: Effect.Effect<A, Error, AlarmService>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(native.layer)));
+  await run(Effect.flatMap(AlarmService, (service) => service.dismiss("stale-ring")));
+  expect(await run(controller.resume)).toEqual(ring);
+  await run(Effect.flatMap(AlarmService, (service) => service.dismiss(ring.id)));
+  await run(Effect.flatMap(AlarmService, (service) => service.dismiss(ring.id)));
+  expect(await run(controller.resume)).toBeNull();
+});

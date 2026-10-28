@@ -124,13 +124,14 @@ class AlarmService : Service() {
       stopSelf()
       return START_NOT_STICKY
     }
+    if (!AlarmStore.isRinging(this)) {
+      stopForeground(STOP_FOREGROUND_REMOVE)
+      stopSelf()
+      return START_NOT_STICKY
+    }
     if (intent == null) {
       AlarmStore.event(this, "serviceRestarted")
       log("service restarted by the system with a null intent (START_STICKY)")
-      if (!AlarmStore.isRinging(this)) {
-        stopSelf()
-        return START_NOT_STICKY
-      }
     }
     beginRinging(intent?.getStringExtra("reason") ?: "sticky restart")
     return START_STICKY
