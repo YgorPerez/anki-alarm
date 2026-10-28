@@ -1,5 +1,7 @@
+import { ReliabilityScreen } from "./ReliabilityScreen.tsx";
+import { reliabilityCopy } from "./reliability-copy.ts";
 import { UpdateOffer } from "./UpdateOffer.tsx";
-import { nextRing, type Alarm, type Locale } from "@app/core";
+import { nextRing, themeFor, type Alarm, type Locale } from "@app/core";
 import {
   AtkinsonHyperlegible_400Regular,
   AtkinsonHyperlegible_700Bold,
@@ -27,7 +29,7 @@ import { androidAlarmService, native } from "./alarm-android.ts";
 import { localData } from "./database.ts";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ThemeSettings } from "./ThemeSettings.tsx";
-import { initializeTheme } from "./theme.ts";
+import { initializeTheme, useThemeChoice } from "./theme.ts";
 import { ScopedTheme } from "uniwind";
 import { queryClient } from "./query.ts";
 import { useUI } from "./ui.ts";
@@ -58,6 +60,8 @@ const run = <A,>(effect: Effect.Effect<A, Error, AlarmService>) =>
 
 const currentTime = () => Date.now();
 function Home() {
+  const [onboarding, setOnboarding] = useState(() => !native.isOnboardingComplete());
+  const [showSettings, setShowSettings] = useState(false);
   const [showDecks, setShowDecks] = useState(false);
   const [controller] = useState(() => alarmController(repository));
   const client = useQueryClient();
@@ -85,6 +89,22 @@ function Home() {
   const [permissions, setPermissions] = useState(() => native.getPermissions());
   const t = copy(locale);
   const insets = useSafeAreaInsets();
+  const theme = useThemeChoice();
+  useEffect(() => {
+    const dark = themeFor(theme, "dark");
+    void run(
+      Effect.flatMap(AlarmService, (service) =>
+        service.setAppearance(
+          {
+            background: dark.background,
+            foreground: dark.foreground,
+            primary: dark["primary-ink"],
+          },
+          locale,
+        ),
+      ),
+    ).catch(() => setError(copy(locale)("alarmError")));
+  }, [locale, theme]);
   useEffect(() => {
     const refresh = () => {
       setPermissions(native.getPermissions());
@@ -151,6 +171,20 @@ function Home() {
         </View>
       </ScopedTheme>
     );
+  if (onboarding || showSettings)
+    return (
+      <ReliabilityScreen
+        permissions={permissions}
+        onboarding={onboarding}
+        locale={locale}
+        refresh={() => setPermissions(native.getPermissions())}
+        onExit={() => {
+          setOnboarding(false);
+          setShowSettings(false);
+        }}
+        switchLanguage={() => setLocale(locale === "en" ? "pt-BR" : "en")}
+      />
+    );
   if (showTheme) return <ThemeSettings locale={locale} onBack={() => setShowTheme(false)} />;
   if (showDecks)
     return (
@@ -160,6 +194,7 @@ function Home() {
         onTheme={() => setShowTheme(true)}
       />
     );
+
   return (
     <View
       className="flex-1 bg-background"
@@ -215,19 +250,13 @@ function Home() {
             <Text accessibilityRole="alert" className="text-body text-attention">
               {error || (alarmsQuery.isError ? t("alarmError") : "")}
             </Text>
-            <Text className="text-body text-foreground">{t("permission")}</Text>
-            {(["notifications", "exactAlarm", "fullScreenIntent", "overlay", "battery"] as const)
-              .filter((kind) => !permissions[kind])
-              .map((kind) => (
-                <Pressable
-                  key={kind}
-                  accessibilityRole="button"
-                  onPress={() => native.request(kind)}
-                >
-                  <Text className="text-body text-primary">{t(kind)}</Text>
-                </Pressable>
-              ))}
-            <Text className="text-label text-muted-foreground">{t("forceStop")}</Text>
+            <Pressable
+              accessibilityRole="button"
+              className="min-h-12 justify-center"
+              onPress={() => setShowSettings(true)}
+            >
+              <Text className="text-body text-primary">{reliabilityCopy(locale)("settings")}</Text>
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               onPress={() => setLocale(locale === "en" ? "pt-BR" : "en")}

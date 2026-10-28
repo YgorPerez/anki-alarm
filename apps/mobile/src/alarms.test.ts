@@ -83,3 +83,23 @@ it("recovers the active ring on resume and dismisses only its matching ID", asyn
   await run(Effect.flatMap(AlarmService, (service) => service.dismiss(ring.id)));
   expect(await run(controller.resume)).toBeNull();
 });
+it("re-reads reliability after a settings change and retains onboarding completion", async () => {
+  const memory = memoryAlarmService();
+  const read = Effect.flatMap(AlarmService, (service) => service.getPermissions).pipe(
+    Effect.provide(memory.layer),
+  );
+  expect((await Effect.runPromise(read)).overlay).toBe("unknown");
+  memory.permissions({ overlay: "granted" });
+  expect((await Effect.runPromise(read)).overlay).toBe("granted");
+  const complete = Effect.flatMap(AlarmService, (service) => service.completeOnboarding).pipe(
+    Effect.provide(memory.layer),
+  );
+  await Effect.runPromise(complete);
+  expect(
+    await Effect.runPromise(
+      Effect.flatMap(AlarmService, (service) => service.isOnboardingComplete).pipe(
+        Effect.provide(memory.layer),
+      ),
+    ),
+  ).toBe(true);
+});
