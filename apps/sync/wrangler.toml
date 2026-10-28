@@ -1,0 +1,4 @@
+# The sync service. D1 and R2 bindings come with sync itself (docs/adr/0001-sync-protocol.md).
+name = "app-sync"
+main = "src/worker.ts"
+compatibility_date = "2026-10-01"
