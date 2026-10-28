@@ -59,3 +59,34 @@ it("keeps read aloud through native, off for older alarms", () => {
   const { readAloud: _readAloud, ...legacy } = newAlarm("a");
   expect(ringAlarm(JSON.stringify(legacy)).readAloud).toBe(false);
 });
+
+it("keeps every alarm property through native", () => {
+  // Effect Schema drops keys it doesn't list: a property missing from the codec fails here.
+  const alarm = {
+    ...newAlarm("a"),
+    label: "Cedo",
+    enabled: false,
+    vibrate: false,
+    rampSeconds: 10,
+    rule: { hour: 6, minute: 30, repeatDays: [6] },
+    sound: { kind: "default" as const },
+    deckId: "deck",
+    need: 7,
+    snooze: false,
+    snoozeMinutes: 15,
+    snoozeCap: 4,
+    awakeCheck: true,
+    awakeCheckMinutes: 10,
+    readAloud: true,
+  };
+  // Every property here differs from its default, so a dropped one would show; a new property
+  // needs a value here too.
+  const defaults = new Map(Object.entries(newAlarm("a")));
+  const same = Object.entries(alarm).filter(
+    ([key, value]) => key !== "id" && JSON.stringify(value) === JSON.stringify(defaults.get(key)),
+  );
+  expect(same).toEqual([]);
+  expect(decodeAlarm(JSON.stringify(alarm))).toEqual(alarm);
+  const ring = `{"id":"r","alarm":${JSON.stringify(alarm)},"startedAt":1,"phase":"ringing"}`;
+  expect(decodeRing(ring)!.alarm).toEqual(alarm);
+});
