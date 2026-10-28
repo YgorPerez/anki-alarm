@@ -14,7 +14,7 @@ const IGNORED = [
   "apps/web/.output/**",
   "apps/web/.tanstack/**",
   "apps/web/src/routeTree.gen.ts",
-  "apps/sync/.wrangler/**",
+  "apps/*/.wrangler/**",
   "apps/sync/worker-configuration.d.ts",
   // The throwaway prototypes and what Impeccable generates.
   "prototypes/**",
@@ -42,11 +42,33 @@ export default defineConfig({
     jsPlugins: [
       // `vite-plus/prefer-vite-plus-imports`: Vite and Vitest come from Vite+.
       { name: "vite-plus", specifier: "vite-plus/oxlint-plugin" },
+      // The web's Tailwind classes against the theme (`apps/web/src/styles.css`, which imports
+      // `@app/design-tokens`) and its shadcn components (`apps/web/components.json`).
+      "@shadcn/lint",
     ],
+    settings: {
+      shadcn: {
+        themeImports: ["^@app/design-tokens/"],
+        note: "The tokens are in packages/design-tokens and DESIGN.md explains each one.",
+      },
+    },
     rules: {
       "vite-plus/prefer-vite-plus-imports": "error",
       "react/rules-of-hooks": "error",
       "react/exhaustive-deps": "error",
     },
+    overrides: [
+      {
+        files: ["apps/web/src/**"],
+        excludeFiles: ["apps/web/src/ui/shadcn/**"],
+        rules: {
+          "shadcn/no-unknown-classes": "error",
+          "shadcn/no-raw-colors": "error",
+          "shadcn/no-arbitrary-values": "error",
+          "shadcn/require-static-classes": "error",
+          "shadcn/no-restyle": ["error", { allow: ["layout"] }],
+        },
+      },
+    ],
   },
 });

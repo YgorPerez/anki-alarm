@@ -1,0 +1,9 @@
+@import "tailwindcss";
+@import "@app/design-tokens/tokens.css";
+@import "@app/design-tokens/web.css";
+
+@layer base {
+  body {
+    @apply bg-background text-foreground;
+  }
+}

@@ -26,3 +26,7 @@ peerDependencyRules:
 allowBuilds:
   esbuild: true
   workerd: true
+
+# A version gets in only a day after it's published, the time npm usually takes to pull one that
+# shipped malware. Strict: pnpm refuses a newer one instead of excluding it from the rule.
+minimumReleaseAgeStrict: true

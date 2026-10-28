@@ -15,5 +15,5 @@ apps/web/.tanstack/
 apps/web/.nitro/
 
 # Worker
-apps/sync/.wrangler/
-apps/sync/.dev.vars
+apps/*/.wrangler/
+apps/*/.dev.vars
