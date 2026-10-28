@@ -1,5 +1,5 @@
 import { UpdateOffer } from "./UpdateOffer.tsx";
-import { nextRing, type Alarm, type Locale } from "@app/core";
+import { nextRing, themeFor, type Alarm, type Locale } from "@app/core";
 import {
   AtkinsonHyperlegible_400Regular,
   AtkinsonHyperlegible_700Bold,
@@ -22,6 +22,7 @@ import {
 } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { copy } from "./copy.ts";
+import { useThemeChoice } from "./theme.ts";
 import { ThemeSettings } from "./ThemeSettings.tsx";
 import { ScopedTheme } from "uniwind";
 import { AlarmService, alarmController, type Ring } from "./alarms.ts";
@@ -56,17 +57,22 @@ function Home() {
   const [permissions, setPermissions] = useState(() => native.getPermissions());
   const t = copy(locale);
   const insets = useSafeAreaInsets();
+  const theme = useThemeChoice();
   useEffect(() => {
-    // Theme settings can replace these factory dark colors through the same service API.
+    const dark = themeFor(theme, "dark");
     void run(
       Effect.flatMap(AlarmService, (service) =>
         service.setAppearance(
-          { background: "#000000", foreground: "#ffffff", primary: "#c9b6ff" },
+          {
+            background: dark.background,
+            foreground: dark.foreground,
+            primary: dark["primary-ink"],
+          },
           locale,
         ),
       ),
     ).catch(() => setError(copy(locale)("alarmError")));
-  }, [locale]);
+  }, [locale, theme]);
   useEffect(() => {
     const refresh = () => {
       setPermissions(native.getPermissions());

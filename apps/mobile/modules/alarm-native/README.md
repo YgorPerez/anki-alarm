@@ -13,7 +13,7 @@ checks/requests and a change notification. Native state and journal live in devi
 SharedPreferences. Ring creation and dismissal commit state and their event in one write. Alarm
 IDs and ring/event IDs are UUIDv7. The temporary dismiss button is the replacement point for #41.
 
-Later alarm tickets add session signals, snooze, awake checks, read aloud and theme mirroring from
+Later alarm tickets add session signals, snooze, awake checks and read aloud from
 ADR 0005. Native does not count answers. The overlap event identifies the absorbed alarm; #41 must
 use its N without replacing the active ring's deck.
 
@@ -41,8 +41,8 @@ the alarm list exposes links to missing permissions. Force-stop removes alarms u
 ## Direct Boot (#43)
 
 `setAppearance({ background, foreground, primary }, locale)` on the Effect service mirrors hex
-colors and `pt-BR`/`en` into device-protected storage. The current shell sends factory dark colors;
-theme settings should pass their derived dark colors here. The native activity bundles Atkinson
+colors and `pt-BR`/`en` into device-protected storage. Home sends the chosen dark background,
+foreground and primary ink whenever the theme or locale changes. The native activity bundles Atkinson
 Hyperlegible and Android strings, uses a live clock, and offers no silence or snooze action.
 
 Custom sounds are copied atomically before scheduling. If the provider permission expires, keep
