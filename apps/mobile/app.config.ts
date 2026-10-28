@@ -1,5 +1,7 @@
 import type { ExpoConfig } from "expo/config";
 
+import { THEME_SWATCHES } from "../../packages/core/src/theme.ts";
+
 import { releaseVersion } from "../../packages/core/src/release.ts";
 
 const tag = process.env["RELEASE_TAG"];
@@ -29,9 +31,14 @@ const config: ExpoConfig = {
     requestHeaders: { "expo-channel-name": "production" },
   },
   extra: { eas: { projectId } },
-  // babel-preset-expo runs React Compiler on the app's code (babel-plugin-react-compiler).
   experiments: { reactCompiler: true },
-  plugins: ["expo-dev-client", "expo-sqlite", "expo-font", "./plugins/with-alarm-native.js"],
+  plugins: [
+    "expo-dev-client",
+    "expo-sqlite",
+    "expo-font",
+    "./plugins/with-alarm-native.js",
+    ["./plugins/with-theme-appearance.js", { swatches: THEME_SWATCHES }],
+  ],
 };
 
 export default config;

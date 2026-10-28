@@ -22,6 +22,13 @@ function Home() {
       >
         {t("switchLanguage")}
       </Button>
+      <Link
+        to="/settings/theme"
+        search={lang === "en" ? { lang } : {}}
+        className="self-start text-label text-primary-ink underline underline-offset-4"
+      >
+        {t("theme")}
+      </Link>
     </main>
   );
 }

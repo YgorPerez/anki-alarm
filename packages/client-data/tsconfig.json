@@ -1,0 +1,8 @@
+{
+  // Pure package, no build: whoever imports it (Metro, Vite, the Worker, Vitest) transpiles the
+  // `.ts`, so only erasable syntax. No `node` types and no DOM, so a rule runs the same on the
+  // phone, the web and the Worker.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "types": [] },
+  "include": ["src/**/*.ts"]
+}

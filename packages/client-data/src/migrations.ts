@@ -19,6 +19,21 @@ const migrations = [
       "CREATE TABLE IF NOT EXISTS alarm_events (id TEXT PRIMARY KEY, data TEXT NOT NULL)",
     ],
   },
+  {
+    id: 3,
+    database: "collection.db",
+    statements: [
+      "CREATE TABLE IF NOT EXISTS settings (id TEXT PRIMARY KEY NOT NULL, body TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, record_id TEXT NOT NULL, body TEXT NOT NULL)",
+    ],
+  },
+  {
+    id: 4,
+    database: "anki-alarm.db",
+    statements: [
+      "CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, record_id TEXT NOT NULL, body TEXT NOT NULL)",
+    ],
+  },
 ] as const;
 
 // Both initial migrations are additive and safe to replay on databases created before the ledger.

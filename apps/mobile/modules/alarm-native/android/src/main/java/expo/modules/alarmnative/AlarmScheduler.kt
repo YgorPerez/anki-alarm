@@ -17,7 +17,7 @@ object AlarmScheduler {
   fun launchIntent(ctx: Context): Intent =
     (if (!ctx.getSystemService(UserManager::class.java).isUserUnlocked) Intent(ctx, LockedAlarmActivity::class.java)
     else ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)!!)
-      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("alarm", true)
+      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("alarm", true)
   fun showIntent(ctx: Context): PendingIntent = PendingIntent.getActivity(ctx, 1, launchIntent(ctx), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   private fun operation(ctx: Context, id: String) = PendingIntent.getBroadcast(ctx, 0,
     Intent(ctx, AlarmReceiver::class.java).setAction(if(id == "watchdog") ACTION_WATCHDOG else ACTION_FIRE)
@@ -30,7 +30,7 @@ object AlarmScheduler {
     return NextRing.calculate(r.getInt("hour"), r.getInt("minute"), (0 until days.length()).map { days.getInt(it) },
       r.optString("onceDate").takeIf { it.isNotEmpty() }, now, ZoneId.systemDefault().id)
   }
-  @Synchronized fun setAlarms(ctx: Context, alarms: JSONArray, policy: JSONObject) {
+  @Synchronized fun setAlarms(ctx: Context, alarms: JSONArray, policy: JSONObject, now: Long = System.currentTimeMillis()) {
     val previous = AlarmStore.alarms(ctx)
     val copied = JSONArray()
     for (i in 0 until alarms.length()) {
@@ -39,29 +39,42 @@ object AlarmScheduler {
       val sound = alarm.optString("sound")
       if (sound.isNotEmpty() && sound != "null") {
         val file = java.io.File(ctx.createDeviceProtectedStorageContext().filesDir, "alarm-${alarm.getString("id")}.audio")
-        if (sound != Uri.fromFile(file).toString()) {
-          ctx.contentResolver.openInputStream(Uri.parse(sound))!!.use { input -> file.outputStream().use { input.copyTo(it) } }
+        val uri = Uri.fromFile(file).toString()
+        val copy = android.util.AtomicFile(file)
+        if (sound != uri) {
+          var output: java.io.FileOutputStream? = null
+          try {
+            ctx.contentResolver.openInputStream(Uri.parse(sound)).use { input ->
+              requireNotNull(input) { "Sound provider returned no stream" }
+              output = copy.startWrite()
+              input.copyTo(requireNotNull(output))
+              copy.finishWrite(output)
+            }
+          } catch (e: Exception) {
+            copy.failWrite(output)
+            AlarmStore.log(ctx, "Can't copy alarm sound; using saved copy or fallback: ${e.message}")
+          }
         }
-        alarm.put("sound", Uri.fromFile(file).toString())
+        alarm.put("sound", if (file.exists() && file.length() > 0) uri else JSONObject.NULL)
       }
       copied.put(alarm)
     }
     check(AlarmStore.prefs(ctx).edit().putString("alarms", copied.toString()).putString("policy", policy.toString()).commit())
     for (i in 0 until previous.length()) am(ctx).cancel(operation(ctx, previous.getJSONObject(i).getString("id")))
-    rearmAll(ctx, "setAlarms")
+    rearmAll(ctx, "setAlarms", now)
   }
-  @Synchronized fun fire(ctx: Context, id: String) {
+  @Synchronized fun fire(ctx: Context, id: String, now: Long = System.currentTimeMillis()) {
     val list = AlarmStore.alarms(ctx)
     val alarm = (0 until list.length()).map { list.getJSONObject(it) }.find { it.getString("id") == id } ?: return
     if (!alarm.optBoolean("enabled", true)) return
     val due = AlarmStore.prefs(ctx).getLong("due.$id", 0)
-    if (due == 0L || due > System.currentTimeMillis()) return
+    if (due == 0L || due > now) return
     AlarmStore.prefs(ctx).edit().remove("due.$id").commit()
     AlarmStore.fire(ctx, alarm)
-    rearmAll(ctx, "fired")
+    rearmAll(ctx, "fired", now)
   }
-  @Synchronized fun rearmAll(ctx: Context, why: String) {
-    val now = System.currentTimeMillis(); val list = AlarmStore.alarms(ctx)
+  @Synchronized fun rearmAll(ctx: Context, why: String, now: Long = System.currentTimeMillis()) {
+    val list = AlarmStore.alarms(ctx)
     for (i in 0 until list.length()) {
       val alarm = list.getJSONObject(i); val id = alarm.getString("id")
       if (!alarm.optBoolean("enabled", true)) continue
@@ -76,7 +89,11 @@ object AlarmScheduler {
         arm(ctx, id, at)
       } else { AlarmStore.prefs(ctx).edit().remove("due.$id").commit() }
     }
-    if (AlarmStore.isRinging(ctx) && (AlarmService.instance == null || why == "BOOT_COMPLETED")) AlarmService.start(ctx, "restored $why")
+    if (AlarmStore.isRinging(ctx)) {
+      val service = AlarmService.instance
+      if (service == null) AlarmService.start(ctx, "restored $why")
+      else if (why == "BOOT_COMPLETED") service.onUnlocked()
+    }
   }
   fun armWatchdog(ctx: Context, inMs: Long) = arm(ctx, "watchdog", System.currentTimeMillis() + inMs)
   fun cancelWatchdog(ctx: Context) = am(ctx).cancel(operation(ctx, "watchdog"))

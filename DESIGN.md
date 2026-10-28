@@ -187,6 +187,9 @@ same rules that made the factory values:
   reaches WCAG AA (4.5:1) on what it sits on.
 - On light grounds, solid fills (primary, Good) are deepened until white ink reads on them.
 - Tints and neutrals are sRGB mixes of the color with the ground.
+- Mid grounds, where neither white nor near-black text has much room, still reach AA: text falls
+  back to pure black or white, `surface` steps away from the text instead of toward it, and the
+  attention chip's tint moves toward the ground until its text reads on both.
 - Pairs closer than 0.09 in OKLab, among the grades, the primary and the secondary, get a warning,
   never a block.
 

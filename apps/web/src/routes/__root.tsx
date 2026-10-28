@@ -1,8 +1,9 @@
 import type { Locale } from "@app/core";
-import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { createRootRoute, HeadContent, Outlet, ScriptOnce, Scripts } from "@tanstack/react-router";
+import { useEffect, type ReactNode } from "react";
 
 import { copy } from "#/copy.ts";
+import { followTheme, THEME_SCRIPT } from "#/theme.ts";
 
 import css from "../styles.css?url";
 
@@ -32,10 +33,12 @@ function RootComponent() {
 
 function RootDocument({ children }: { children: ReactNode }) {
   const { lang = "pt-BR" } = Route.useSearch();
+  useEffect(followTheme, []);
   return (
     <html lang={lang}>
       <head>
         <HeadContent />
+        <ScriptOnce>{THEME_SCRIPT}</ScriptOnce>
       </head>
       <body>
         {children}
