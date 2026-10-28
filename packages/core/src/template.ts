@@ -1,4 +1,5 @@
 import type { Note, NoteType } from "./collection.ts";
+import { isRemoteSrc, MEDIA_SOUND, MEDIA_SRC, srcName, unescapeHtml } from "./media.ts";
 
 export interface RenderInput {
   note: Note;
@@ -132,15 +133,7 @@ const ruby = (value: string, replace: (base: string, reading: string) => string)
   value.replace(/ ?([^ >]+?)\[(.+?)\]/g, (_, base: string, reading: string) =>
     replace(base, reading),
   );
-const plain = (html: string) =>
-  html
-    .replace(/<[^>]*>/g, "")
-    .replaceAll("&nbsp;", " ")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&#39;", "'")
-    .replaceAll("&amp;", "&");
+const plain = unescapeHtml;
 const escape = (text: string) =>
   text
     .replaceAll("&", "&amp;")
@@ -217,13 +210,12 @@ function renderCloze(value: string, active: number, side: "front" | "back", only
 function resolveMedia(html: string, media: (name: string) => string) {
   const url = (name: string) => escape(media(plain(name)));
   return html
+    .replace(MEDIA_SRC, (match, start: string, ...groups: (string | undefined)[]) => {
+      const name = srcName([match, start, ...groups.slice(0, 3)]);
+      return isRemoteSrc(name) ? match : `${start}"${url(name)}"`;
+    })
     .replace(
-      /(<(?:img|audio|video|source)\b[^>]*?\bsrc=)(["']?)([^"'\s>]+)\2/gi,
-      (match, start: string, quote: string, name: string) =>
-        /^(?:[a-z][\w+.-]*:|\/)/i.test(name) ? match : `${start}"${url(name)}"`,
-    )
-    .replace(
-      /\[sound:([^\]]+)\]/g,
+      MEDIA_SOUND,
       (_, name: string) => `<audio controls preload="none" src="${url(name)}"></audio>`,
     );
 }

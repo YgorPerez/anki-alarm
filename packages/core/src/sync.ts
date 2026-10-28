@@ -4,7 +4,7 @@ import type { Field, Hlc, RecordKind, Tombstone } from "./collection.ts";
 import type { LogEntry } from "./study.ts";
 
 /** The record kinds that merge field by field. */
-export type SyncKind = RecordKind | "settings" | "alarms";
+export type SyncKind = RecordKind | "settings" | "alarms" | "media";
 export interface FieldRecord {
   id: string;
   fields: { [key: string]: Field<unknown> };
@@ -27,6 +27,7 @@ export const SYNC_KINDS: readonly SyncKind[] = [
   "cards",
   "settings",
   "alarms",
+  "media",
 ];
 
 /**

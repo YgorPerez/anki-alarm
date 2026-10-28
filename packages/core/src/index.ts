@@ -108,3 +108,11 @@ export {
   SYNC_KINDS,
 } from "./sync.ts";
 export type { FieldRecord, SyncChange, SyncKind } from "./sync.ts";
+export {
+  mediaFromRecord,
+  mediaPushPlan,
+  mediaReferences,
+  safeMediaName,
+  stampMedia,
+} from "./media.ts";
+export type { MediaFile, MediaRecord } from "./media.ts";
