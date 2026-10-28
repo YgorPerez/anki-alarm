@@ -230,6 +230,12 @@ while it reads.
 When allowed, snooze silences the alarm for its snooze length. Each snooze adds a fixed number of
 cards (2 by default) to that alarm's next ring, and snoozes stop being offered at the cap.
 
+A new alarm allows snooze, 9 minutes long, twice per ring. Snooze is offered before Start and
+during the session; the ring keeps its id and its progress, and rings again with N plus the cost
+of every snooze so far. The snoozed screen shows when it rings again, with how many cards, and how
+many snoozes are left, with Answer now to start the session early. An alarm that comes due while
+snoozed is folded into the ring. Decided in #46.
+
 ### Awake check
 
 When on, the awake check starts a delay after dismissal (5 minutes by default). A full-screen prompt

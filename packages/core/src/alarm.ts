@@ -20,6 +20,12 @@ export interface Alarm {
   deckId: string | null;
   /** N: the cards to rate Good or Easy before the alarm dismisses. */
   need: number;
+  /** Whether the ring offers snooze. */
+  snooze: boolean;
+  /** How long a snooze silences the ring. */
+  snoozeMinutes: number;
+  /** The snoozes one ring offers. */
+  snoozeCap: number;
 }
 
 /** The sounds shipped in the app. Native plays each from `res/raw/alarm_<id>`. */
@@ -62,26 +68,49 @@ export const newAlarm = (id: string): Alarm => ({
   sound: { kind: "bundled", id: "dawn" },
   deckId: null,
   need: 3,
+  snooze: true,
+  snoozeMinutes: 9,
+  snoozeCap: 2,
 });
 
 /** The largest N the editor offers. */
 export const MAX_NEED = 50;
 
-type StoredAlarm = Omit<Alarm, "sound" | "deckId" | "need"> & {
-  sound?: unknown;
-  deckId?: unknown;
-  need?: unknown;
-};
+/** Snooze lengths offered in the editor, in minutes. */
+export const SNOOZE_CHOICES = [5, 9, 10, 15, 20, 30] as const;
+/** The longest snooze a stored alarm keeps. */
+const MAX_SNOOZE_MINUTES = 60;
+/** The most snoozes per ring the editor offers. */
+export const MAX_SNOOZE_CAP = 10;
+
+type Upgraded = "sound" | "deckId" | "need" | "snooze" | "snoozeMinutes" | "snoozeCap";
+type StoredAlarm = Omit<Alarm, Upgraded> & Partial<Record<Upgraded, unknown>>;
+
+/** A whole number kept within `min..max`; anything else is the fallback. */
+const wholeIn = (value: unknown, min: number, max: number, fallback: number) =>
+  typeof value === "number" && Number.isInteger(value)
+    ? Math.min(max, Math.max(min, value))
+    : fallback;
+
 /** Reads a stored, synced or native alarm, filling in what older versions didn't save. */
-export function readAlarm({ sound, deckId, need, ...alarm }: StoredAlarm): Alarm {
+export function readAlarm({
+  sound,
+  deckId,
+  need,
+  snooze,
+  snoozeMinutes,
+  snoozeCap,
+  ...alarm
+}: StoredAlarm): Alarm {
+  const defaults = newAlarm(alarm.id);
   return {
     ...alarm,
     sound: parseAlarmSound(sound),
     deckId: typeof deckId === "string" && deckId ? deckId : null,
-    need:
-      typeof need === "number" && Number.isInteger(need)
-        ? Math.min(MAX_NEED, Math.max(1, need))
-        : newAlarm(alarm.id).need,
+    need: wholeIn(need, 1, MAX_NEED, defaults.need),
+    snooze: typeof snooze === "boolean" ? snooze : defaults.snooze,
+    snoozeMinutes: wholeIn(snoozeMinutes, 1, MAX_SNOOZE_MINUTES, defaults.snoozeMinutes),
+    snoozeCap: wholeIn(snoozeCap, 1, MAX_SNOOZE_CAP, defaults.snoozeCap),
   };
 }
 
@@ -129,6 +158,9 @@ export function alarmFromRecord(record: AlarmRecord): Alarm {
     sound: record.fields.sound?.value,
     deckId: record.fields.deckId?.value,
     need: record.fields.need?.value,
+    snooze: record.fields.snooze?.value,
+    snoozeMinutes: record.fields.snoozeMinutes?.value,
+    snoozeCap: record.fields.snoozeCap?.value,
   });
 }
 

@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { readAlarm } from "@app/core";
+import type { Ring } from "./alarms.ts";
 
 const alarm = Schema.Struct({
   id: Schema.String,
@@ -18,6 +19,10 @@ const alarm = Schema.Struct({
   // Alarms saved before #41 have no deck or N; Core fills them in.
   deckId: Schema.optional(Schema.Unknown),
   need: Schema.optional(Schema.Unknown),
+  // Alarms saved before #46 have no snooze settings.
+  snooze: Schema.optional(Schema.Unknown),
+  snoozeMinutes: Schema.optional(Schema.Unknown),
+  snoozeCap: Schema.optional(Schema.Unknown),
 });
 const event = Schema.Struct({
   id: Schema.String,
@@ -28,7 +33,15 @@ const event = Schema.Struct({
   elapsedRealtime: Schema.Number,
 });
 const ring = Schema.NullOr(
-  Schema.Struct({ id: Schema.String, alarm, startedAt: Schema.Number, phase: Schema.String }),
+  Schema.Struct({
+    id: Schema.String,
+    alarm,
+    startedAt: Schema.Number,
+    phase: Schema.String,
+    // Rings stored before #46 have no snoozes.
+    snoozes: Schema.optional(Schema.Number),
+    snoozedUntil: Schema.optional(Schema.NullOr(Schema.Number)),
+  }),
 );
 const decodeStored = Schema.decodeUnknownSync(Schema.fromJsonString(alarm));
 const decodeStoredList = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(alarm)));
@@ -36,7 +49,14 @@ const decodeStoredRing = Schema.decodeUnknownSync(Schema.fromJsonString(ring));
 export const decodeAlarm = (json: string) => readAlarm(decodeStored(json));
 export const decodeAlarms = (json: string) => decodeStoredList(json).map(readAlarm);
 export const decodeEvents = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(event)));
-export const decodeRing = (json: string) => {
+export const decodeRing = (json: string): Ring | null => {
   const active = decodeStoredRing(json);
-  return active && { ...active, alarm: readAlarm(active.alarm) };
+  return (
+    active && {
+      ...active,
+      alarm: readAlarm(active.alarm),
+      snoozes: active.snoozes ?? 0,
+      snoozedUntil: active.snoozedUntil ?? null,
+    }
+  );
 };

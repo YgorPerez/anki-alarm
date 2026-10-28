@@ -37,6 +37,10 @@ class AlarmService : Service() {
     private const val CHANNEL_ID = "alarm_ringing_v1"
     private const val NOTIFICATION_ID = 4242
     private const val WAY_BACK_ID = 4243
+    /** The start reason when a snooze's alarm fires: the same ring ramps up again. */
+    const val REASON_SNOOZE_ENDED = "snooze ended"
+    /** The start reason for Answer now on a snoozed ring: the session begins silent. */
+    const val ANSWER_NOW = "answer now"
 
     @Volatile
     var instance: AlarmService? = null
@@ -65,6 +69,7 @@ class AlarmService : Service() {
     fun dismissWithoutService(ctx: Context) {
       AlarmStore.finish(ctx)
       AlarmScheduler.cancelWatchdog(ctx)
+      AlarmScheduler.cancelSnooze(ctx)
       AlarmActivityListener.applyLockFlags(false)
       AlarmStore.log(ctx, "dismissed with no service running")
     }
@@ -152,13 +157,17 @@ class AlarmService : Service() {
       if (!AlarmActivityListener.visible && setting("directLaunch") == 1) tryLaunch(reason)
       return START_STICKY
     }
-    val fresh = reason == REASON_SCHEDULED
-    if (!fresh) {
+    val how = when (reason) {
+      REASON_SCHEDULED, REASON_SNOOZE_ENDED -> RingPolicy.Start.FRESH
+      ANSWER_NOW -> RingPolicy.Start.ANSWER_NOW
+      else -> RingPolicy.Start.TAKEOVER
+    }
+    if (how == RingPolicy.Start.TAKEOVER) {
       // A new service taking over a ring: after a kill, a swipe-away that took the process, or a reboot.
       AlarmStore.event(this, "serviceRestarted")
       log("service took over ring $active ($reason)")
     }
-    beginRinging(active, fresh, reason)
+    beginRinging(active, how, reason)
     return START_STICKY
   }
 
@@ -202,24 +211,25 @@ class AlarmService : Service() {
     }
   }
 
-  private fun beginRinging(id: String, fresh: Boolean, reason: String) {
+  private fun beginRinging(id: String, how: RingPolicy.Start, reason: String) {
     val pm = getSystemService(PowerManager::class.java)
     val km = getSystemService(KeyguardManager::class.java)
     val nm = getSystemService(NotificationManager::class.java)
     val fsi = if (Build.VERSION.SDK_INT >= 34) nm.canUseFullScreenIntent() else true
     log(
-      "RING ($reason) fresh=$fresh screenOn=${pm.isInteractive} locked=${km.isKeyguardLocked} " +
+      "RING ($reason) start=$how screenOn=${pm.isInteractive} locked=${km.isKeyguardLocked} " +
         "fullScreenIntentAllowed=$fsi dndFilter=${nm.currentInterruptionFilter} " +
         "ringerMode=${getSystemService(AudioManager::class.java).ringerMode}",
     )
     AlarmActivityListener.applyLockFlags(true)
-    // A restarted service rings at full: the user taps Start again, keeping the progress.
-    AlarmStore.setPhase(this, null, "ringing")
+    // A restarted service rings at full: the user taps Start again, keeping the progress. Answer now
+    // keeps the `session` phase native already set.
+    if (how != RingPolicy.Start.ANSWER_NOW) AlarmStore.setPhase(this, null, "ringing")
     ringId = id
     rendered = null
     val now = SystemClock.elapsedRealtime()
     policy = RingPolicy(setting("leaveSeconds") * 1000L, setting("idleSeconds") * 1000L).apply {
-      start(now, fresh)
+      start(now, how)
       if (AlarmActivityListener.visible) screenShown(now)
     }
     render()
@@ -409,6 +419,17 @@ class AlarmService : Service() {
 
   fun dismiss() {
     AlarmStore.finish(this)
+    AlarmScheduler.cancelSnooze(this)
+    stopRinging()
+  }
+
+  // Snoozed: the ring stays stored with its snooze alarm armed; nothing sounds until it fires.
+  fun snooze() {
+    log("snoozed until ${AlarmStore.ring(this)?.optLong("snoozedUntil")}")
+    stopRinging()
+  }
+
+  private fun stopRinging() {
     AlarmScheduler.cancelWatchdog(this)
     AlarmActivityListener.applyLockFlags(false)
     getSystemService(NotificationManager::class.java).cancel(WAY_BACK_ID)

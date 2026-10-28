@@ -9,16 +9,16 @@ class RingPolicyTest {
   private fun policy() = RingPolicy(leaveMs = 10_000, idleMs = 20_000)
 
   @Test fun aNewRingRampsAndARestartedOneRingsAtFull() {
-    val fresh = policy().apply { start(0, fresh = true) }
+    val fresh = policy().apply { start(0, RingPolicy.Start.FRESH) }
     assertEquals(Sound.RAMP, fresh.sound)
-    val restarted = policy().apply { start(0, fresh = false) }
+    val restarted = policy().apply { start(0, RingPolicy.Start.TAKEOVER) }
     assertEquals(Sound.FULL, restarted.sound)
     assertFalse(restarted.inSession)
     assertNull(restarted.nextDeadline())
   }
 
   @Test fun startSilencesUntilNoAnswerComesForTheIdleTime() {
-    val p = policy().apply { start(0, fresh = true); screenShown(0); sessionStarted(1_000) }
+    val p = policy().apply { start(0, RingPolicy.Start.FRESH); screenShown(0); sessionStarted(1_000) }
     assertEquals(Sound.SILENT, p.sound)
     assertEquals(emptyList<Fired>(), p.advance(20_999))
     assertEquals(Sound.SILENT, p.sound)
@@ -28,7 +28,7 @@ class RingPolicyTest {
   }
 
   @Test fun anAnswerQuietsTheRingAndRestartsTheIdleTime() {
-    val p = policy().apply { start(0, fresh = true); screenShown(0); sessionStarted(0) }
+    val p = policy().apply { start(0, RingPolicy.Start.FRESH); screenShown(0); sessionStarted(0) }
     p.activity(15_000)
     assertEquals(35_000L, p.nextDeadline())
     p.advance(35_000)
@@ -39,7 +39,7 @@ class RingPolicyTest {
   }
 
   @Test fun leavingBringsTheRingBackAtFullWithTheWayBack() {
-    val p = policy().apply { start(0, fresh = true); screenShown(0); sessionStarted(0) }
+    val p = policy().apply { start(0, RingPolicy.Start.FRESH); screenShown(0); sessionStarted(0) }
     p.screenLeft(5_000)
     assertEquals(emptyList<Fired>(), p.advance(14_999))
     assertEquals(Sound.SILENT, p.sound)
@@ -50,7 +50,7 @@ class RingPolicyTest {
   }
 
   @Test fun comingBackInTimeCancelsTheLeaveAndComingBackLaterQuietsIt() {
-    val p = policy().apply { start(0, fresh = true); screenShown(0); sessionStarted(0) }
+    val p = policy().apply { start(0, RingPolicy.Start.FRESH); screenShown(0); sessionStarted(0) }
     p.screenLeft(1_000)
     p.screenShown(9_000)
     assertEquals(29_000L, p.nextDeadline())
@@ -63,7 +63,7 @@ class RingPolicyTest {
   }
 
   @Test fun leavingBeforeStartCutsTheRampShort() {
-    val p = policy().apply { start(0, fresh = true); screenShown(0) }
+    val p = policy().apply { start(0, RingPolicy.Start.FRESH); screenShown(0) }
     p.screenLeft(2_000)
     assertEquals(listOf(Fired.LEFT), p.advance(12_000))
     assertEquals(Sound.FULL, p.sound)
@@ -72,16 +72,28 @@ class RingPolicyTest {
   }
 
   @Test fun answersOutsideASessionChangeNothing() {
-    val p = policy().apply { start(0, fresh = true) }
+    val p = policy().apply { start(0, RingPolicy.Start.FRESH) }
     p.activity(1_000)
     assertEquals(Sound.RAMP, p.sound)
     assertNull(p.nextDeadline())
   }
 
   @Test fun timersThatBothPassFireTogether() {
-    val p = policy().apply { start(0, fresh = true); screenShown(0); sessionStarted(0) }
+    val p = policy().apply { start(0, RingPolicy.Start.FRESH); screenShown(0); sessionStarted(0) }
     p.screenLeft(15_000)
     assertEquals(listOf(Fired.IDLE, Fired.LEFT), p.advance(60_000))
     assertNull(p.nextDeadline())
+  }
+
+  @Test fun answerNowStartsASilentSessionThatIdleOrLeavingBringsBack() {
+    val p = policy().apply { start(0, RingPolicy.Start.ANSWER_NOW) }
+    assertTrue(p.inSession)
+    assertEquals(Sound.SILENT, p.sound)
+    assertEquals(listOf(Fired.IDLE), p.advance(20_000))
+    assertEquals(Sound.FULL, p.sound)
+    p.activity(21_000)
+    p.screenLeft(22_000)
+    assertEquals(listOf(Fired.LEFT), p.advance(32_000))
+    assertTrue(p.wayBack)
   }
 }

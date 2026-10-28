@@ -37,7 +37,7 @@ describe("alarm sound", () => {
 });
 
 describe("a new alarm", () => {
-  it("rings weekdays at 7:00 with a bundled sound, vibration, a 30 s ramp and three cards", () => {
+  it("rings weekdays at 7:00 with a bundled sound, vibration, a 30 s ramp, three cards and snooze", () => {
     expect(newAlarm("alarm-1")).toEqual({
       id: "alarm-1",
       label: "",
@@ -48,6 +48,9 @@ describe("a new alarm", () => {
       sound: { kind: "bundled", id: "dawn" },
       deckId: null,
       need: 3,
+      snooze: true,
+      snoozeMinutes: 9,
+      snoozeCap: 2,
     });
   });
 });

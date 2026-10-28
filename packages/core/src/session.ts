@@ -21,19 +21,37 @@ interface RingEvent {
   ringId: string | null;
 }
 
+/** Cards each snooze adds to the ring's N: the snooze cost. */
+export const SNOOZE_COST = 2;
+
 /**
  * A ring needs the largest N among its alarm and the alarms folded into it: those the journal
- * records as `absorbed` by this ring. An absorbed alarm deleted since then no longer counts.
+ * records as `absorbed` by this ring. An absorbed alarm deleted since then no longer counts. Each
+ * snooze so far adds the snooze cost.
  */
 export function ringNeed(
-  ring: { id: string; alarm: Alarm },
+  ring: { id: string; alarm: Alarm; snoozes?: number },
   journal: readonly RingEvent[],
   alarms: readonly Alarm[],
 ) {
   const folded = new Set(
     journal.filter((e) => e.kind === "absorbed" && e.ringId === ring.id).map((e) => e.alarmId),
   );
-  return Math.max(ring.alarm.need, ...alarms.filter((a) => folded.has(a.id)).map((a) => a.need));
+  const need = Math.max(
+    ring.alarm.need,
+    ...alarms.filter((a) => folded.has(a.id)).map((a) => a.need),
+  );
+  return need + (ring.snoozes ?? 0) * SNOOZE_COST;
+}
+
+/**
+ * The snooze a ring offers after `snoozes` snoozes: its length, the cards it adds, and the snoozes
+ * left counting this one. Null when the alarm doesn't allow snooze or the ring reached the cap.
+ */
+export function snoozeOffer(alarm: Alarm, snoozes: number) {
+  const left = alarm.snoozeCap - snoozes;
+  if (!alarm.snooze || left <= 0) return null;
+  return { minutes: alarm.snoozeMinutes, cost: SNOOZE_COST, left };
 }
 
 /** The deck and its subdecks, which Anki names `Parent::Child`. */

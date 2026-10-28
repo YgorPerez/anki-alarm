@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react-nativ
 import { expect, test } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Effect } from "effect";
-import { newAlarm } from "@app/core";
+import { newAlarm, type Alarm, type Collection } from "@app/core";
 import { fakeSyncApi } from "@app/contracts/testing";
 import { localData } from "./database.ts";
 import { AlarmScreen } from "./AlarmScreen.tsx";
@@ -16,26 +16,30 @@ async function revealAndGrade(grade: string) {
   await fireEvent.press(await screen.findByRole("button", { name: grade }));
 }
 
-test("Start silences the ring, cards count toward N and N right dismisses it", async () => {
-  const api = await fakeSyncApi({});
+/** A ring of an alarm on a new deck `name` with `fronts`, delivered by the memory native. */
+async function ringing(
+  name: string,
+  fronts: readonly string[],
+  alarm: Partial<Alarm>,
+  more: (c: Collection) => void = () => {},
+) {
   const state = await Effect.runPromise(
     localData((data) =>
       data.changeCollection((c) => {
-        const deck = c.createDeck("Acordar");
-        c.addBasicNote(deck.id, "casa", "house");
-        const sub = c.createDeck("Acordar::Bichos");
-        c.addBasicNote(sub.id, "gato", "cat");
-        const other = c.createDeck("Outro");
-        c.addBasicNote(other.id, "fora", "out");
+        const deck = c.createDeck(name);
+        for (const word of fronts) c.addBasicNote(deck.id, word, "back");
+        more(c);
       }),
     ),
   );
-  const deckId = state.decks.find((d) => d.fields.name.value === "Acordar")!.id;
+  const deckId = state.decks.find((d) => d.fields.name.value === name)!.id;
   const ring: Ring = {
-    id: "ring-1",
-    alarm: { ...newAlarm("alarm-1"), label: "Trabalho", deckId, need: 2 },
+    id: `ring-${name}`,
+    alarm: { ...newAlarm("alarm-1"), label: "Trabalho", deckId, ...alarm },
     startedAt: Date.now(),
     phase: "ringing",
+    snoozes: 0,
+    snoozedUntil: null,
   };
   const native = memoryAlarmService();
   native.deliver(
@@ -49,28 +53,42 @@ test("Start silences the ring, cards count toward N and N right dismisses it", a
     },
     ring,
   );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, networkMode: "always" } },
+  });
   let dismissed = 0;
+  const show = (active: Ring) => (
+    <QueryClientProvider client={client}>
+      <AlarmScreen
+        ring={active}
+        locale="pt-BR"
+        layer={native.layer}
+        gradeDelayMs={50}
+        onDismissed={() => dismissed++}
+      />
+    </QueryClientProvider>
+  );
+  const view = await render(show(ring));
+  return {
+    native,
+    dismissed: () => dismissed,
+    /** What App does when native reports a change: the screen gets native's ring. */
+    rerender: () => view.rerender(show(native.ring()!)),
+  };
+}
+
+test("Start silences the ring, cards count toward N and N right dismisses it", async () => {
+  const api = await fakeSyncApi({});
   try {
-    await render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" } } })
-        }
-      >
-        <AlarmScreen
-          ring={ring}
-          locale="pt-BR"
-          layer={native.layer}
-          gradeDelayMs={50}
-          onDismissed={() => dismissed++}
-        />
-      </QueryClientProvider>,
-    );
+    const { native, dismissed } = await ringing("Acordar", ["casa"], { need: 2 }, (c) => {
+      c.addBasicNote(c.createDeck("Acordar::Bichos").id, "gato", "cat");
+      c.addBasicNote(c.createDeck("Outro").id, "fora", "out");
+    });
     screen.getByText("Trabalho");
     expect(screen.queryByLabelText("Frente")).toBeNull();
     await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
     await screen.findByLabelText("Frente");
-    expect(native.signals()).toContain("sessionStarted:ring-1");
+    expect(native.signals()).toContain("sessionStarted:ring-Acordar");
     screen.getByText("0 de 2 certos · faltam 2");
 
     const first = front();
@@ -86,15 +104,15 @@ test("Start silences the ring, cards count toward N and N right dismisses it", a
     screen.getByText("Voltou");
 
     await revealAndGrade("Fácil");
-    await waitFor(() => expect(dismissed).toBe(1));
+    await waitFor(() => expect(dismissed()).toBe(1));
     expect(native.ring()).toBeNull();
-    expect(native.signals()).toContain("dismiss:ring-1");
-    expect(native.signals().filter((s) => s === "activity:ring-1").length).toBeGreaterThan(0);
+    expect(native.signals()).toContain("dismiss:ring-Acordar");
+    expect(native.signals().filter((s) => s === "activity:ring-Acordar").length).toBeGreaterThan(0);
     const log = await Effect.runPromise(localData((data) => data.reviewLog));
     expect(log.map((e) => e.kind === "review" && [e.grade, e.origin, e.ringId])).toEqual([
-      [1, "alarm", "ring-1"],
-      [3, "alarm", "ring-1"],
-      [4, "alarm", "ring-1"],
+      [1, "alarm", "ring-Acordar"],
+      [3, "alarm", "ring-Acordar"],
+      [4, "alarm", "ring-Acordar"],
     ]);
     expect(api.calls.metadata).toBe(0);
   } finally {
@@ -155,4 +173,42 @@ test("an alarm folded into the ring raises its N and keeps the ring's deck", asy
   } finally {
     await api.dispose();
   }
+});
+
+test("a snooze silences the ring, adds its cost to N, and isn't offered at the cap", async () => {
+  const { native, rerender } = await ringing("Adiar", ["sol", "lua"], {
+    need: 1,
+    snoozeMinutes: 9,
+    snoozeCap: 1,
+  });
+  await fireEvent.press(screen.getByRole("button", { name: "Adiar 9 min · +2 cartões" }));
+  expect(native.signals()).toContain("snooze:ring-Adiar:9");
+  await screen.findByText("Adiado.");
+  await screen.findByText(/^Vai tocar de novo às .+ com 3 cartões\.$/);
+  screen.getByText("Sem mais adiamentos.");
+
+  // Native's snooze alarm fires: the same ring rings again.
+  native.endSnooze();
+  await rerender();
+  await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+  await screen.findByText("0 de 3 certos · faltam 3");
+  expect(screen.queryByRole("button", { name: /^Adiar/ })).toBeNull();
+});
+
+test("a session can snooze, and Answer now ends the snooze early", async () => {
+  const { native } = await ringing("Mais tarde", ["chuva", "vento"], { need: 2, snoozeCap: 2 });
+  await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+  await screen.findByText("0 de 2 certos · faltam 2");
+  await fireEvent.press(screen.getByRole("button", { name: "Adiar 9 min · +2 cartões" }));
+  await screen.findByText("Adiado.");
+  await screen.findByText(/com 4 cartões\.$/);
+  screen.getByText("Mais 1 adiamento possível.");
+
+  await fireEvent.press(screen.getByRole("button", { name: "Responder agora" }));
+  await screen.findByText("0 de 4 certos · faltam 4");
+  expect(native.ring()).toMatchObject({ phase: "session", snoozes: 1, snoozedUntil: null });
+  expect(native.signals().at(-1)).toBe("sessionStarted:ring-Mais tarde");
+  screen.getByLabelText("Frente");
+  // One snooze left.
+  screen.getByRole("button", { name: "Adiar 9 min · +2 cartões" });
 });

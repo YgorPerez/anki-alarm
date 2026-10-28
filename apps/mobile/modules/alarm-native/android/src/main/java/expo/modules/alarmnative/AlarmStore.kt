@@ -21,7 +21,8 @@ object AlarmStore {
   }
   fun alarms(ctx: Context): JSONArray = JSONArray(prefs(ctx).getString("alarms", "[]"))
   fun ring(ctx: Context): JSONObject? = prefs(ctx).getString("ring", null)?.let { JSONObject(it) }
-  fun isRinging(ctx: Context) = ring(ctx) != null
+  /** A ring is active and not snoozed: the service should be sounding it or running its session. */
+  fun isRinging(ctx: Context) = ring(ctx)?.let { it.optString("phase") != "snoozed" } ?: false
   fun log(ctx: Context, message: String) { android.util.Log.i("AlarmNative", message) }
   fun setting(ctx: Context, key: String): Int = when(key) {
     "rampSeconds" -> ring(ctx)?.getJSONObject("alarm")?.optInt(key, 30) ?: 30
@@ -48,7 +49,8 @@ object AlarmStore {
     AlarmNativeModule.emit()
   }
   @Synchronized fun fire(ctx: Context, alarm: JSONObject) {
-    if (isRinging(ctx)) { event(ctx, "absorbed", alarm.getString("id")); return }
+    // A ring lasts through its snoozes, so an alarm due while snoozed is folded in too.
+    if (ring(ctx) != null) { event(ctx, "absorbed", alarm.getString("id")); return }
     val ring = JSONObject().put("id", uuid7()).put("alarm", alarm).put("startedAt", System.currentTimeMillis()).put("phase", "ringing")
     event(ctx, "ringStarted", newRing = ring)
     AlarmService.start(ctx, AlarmService.REASON_SCHEDULED)
@@ -61,8 +63,29 @@ object AlarmStore {
       check(prefs(ctx).edit().putString("ring", active.put("phase", phase).toString()).commit())
     return true
   }
+  /**
+   * Snoozes the active ring until `until` and counts the snooze. A stale ring id or a ring already
+   * snoozed changes nothing. Returns whether it snoozed.
+   */
+  @Synchronized fun snooze(ctx: Context, ringId: String, until: Long): Boolean {
+    val active = ring(ctx) ?: return false
+    if (active.getString("id") != ringId || active.optString("phase") == "snoozed") return false
+    active.put("phase", "snoozed").put("snoozes", active.optInt("snoozes", 0) + 1).put("snoozedUntil", until)
+    event(ctx, "snoozed", newRing = active)
+    return true
+  }
+  /** Ends the snooze into `phase`: `ringing` when its time comes, `session` for Answer now. */
+  @Synchronized fun endSnooze(ctx: Context, phase: String, ringId: String? = null): Boolean {
+    val active = ring(ctx) ?: return false
+    if (active.optString("phase") != "snoozed" || (ringId != null && active.getString("id") != ringId)) return false
+    active.put("phase", phase).remove("snoozedUntil")
+    event(ctx, "snoozeEnded", newRing = active)
+    return true
+  }
+  /** Answer now on a snoozed ring: its session starts silent, before the snooze ends. */
+  fun answerNow(ctx: Context, ringId: String) = endSnooze(ctx, "session", ringId)
   @Synchronized fun finish(ctx: Context) {
-    if (!isRinging(ctx)) return
+    if (ring(ctx) == null) return
     event(ctx, "dismissed", clearRing = true)
   }
   @Synchronized fun ack(ctx: Context, ids: List<String>) {

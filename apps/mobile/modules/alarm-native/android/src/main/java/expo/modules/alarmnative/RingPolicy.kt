@@ -9,6 +9,12 @@ package expo.modules.alarmnative
 class RingPolicy(private val leaveMs: Long, private val idleMs: Long) {
   enum class Sound { RAMP, FULL, SILENT }
   enum class Fired { IDLE, LEFT }
+  /**
+   * How a ring starts: [FRESH] when it comes due or its snooze ends (ramps up), [TAKEOVER] when a new
+   * service picks up a stored ring after a kill or reboot (full, out of session), [ANSWER_NOW] when
+   * the user ends a snooze early (straight into a silent session).
+   */
+  enum class Start { FRESH, TAKEOVER, ANSWER_NOW }
 
   var sound = Sound.FULL
     private set
@@ -20,13 +26,13 @@ class RingPolicy(private val leaveMs: Long, private val idleMs: Long) {
   private var leftAt: Long? = null
   private var idleFrom: Long? = null
 
-  /** A fresh ring ramps up; a ring taken over after a kill or reboot rings at full, out of session. */
-  fun start(now: Long, fresh: Boolean) {
-    sound = if (fresh) Sound.RAMP else Sound.FULL
+  fun start(now: Long, how: Start) {
+    sound = if (how == Start.FRESH) Sound.RAMP else Sound.FULL
     inSession = false
     wayBack = false
     leftAt = null
     idleFrom = null
+    if (how == Start.ANSWER_NOW) sessionStarted(now)
   }
 
   fun screenShown(now: Long) {

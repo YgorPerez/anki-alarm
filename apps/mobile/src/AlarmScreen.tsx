@@ -1,5 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { alarmSession, ringNeed, SESSION_RULES, type Grade, type Locale } from "@app/core";
+import {
+  alarmSession,
+  ringNeed,
+  SESSION_RULES,
+  snoozeOffer,
+  type Alarm,
+  type Grade,
+  type Locale,
+} from "@app/core";
+import type { AlarmEvent } from "@app/client-data";
 import { Effect, type Layer } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { BackHandler, Pressable, Text, View } from "react-native";
@@ -45,67 +54,197 @@ export function AlarmScreen({
   const insets = useSafeAreaInsets();
   const clock = useClock();
   const alarm = useAlarmSession(ring, layer, onDismissed, gradeDelayMs);
-  const { session, started, busy } = alarm;
+  const { session, current, offer } = alarm;
+  const stage = stageOf(current, alarm.started, session);
+  const inSession = stage === "card" || stage === "noCards";
   return (
     <View
       className="flex-1 gap-4 bg-background px-6"
       style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
     >
       <Text className="text-clock text-foreground" style={bold}>
-        {new Date(clock).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}
+        {clockTime(current.snoozedUntil ?? clock, locale)}
       </Text>
-      <Text className="text-body text-muted-foreground">{ring.alarm.label}</Text>
-      {started && session && <Progress session={session} locale={locale} />}
+      <Text className="text-body text-muted-foreground">{current.alarm.label}</Text>
+      {inSession && session && <Progress session={session} locale={locale} />}
       {alarm.error && (
         <Text accessibilityRole="alert" className="text-body text-destructive">
           {t("alarmError")}
         </Text>
       )}
-      {!started && (
-        <>
-          <View className="flex-1" />
-          <PillButton primary label={t("start")} busy={busy} onPress={alarm.start} />
-        </>
-      )}
-      {started && session?.next && (
-        <>
-          {session.next.again && (
-            <View className="self-start rounded-pill bg-attention-tint px-3 py-1">
-              <Text className="text-label text-attention">{t("cameBack")}</Text>
-            </View>
-          )}
-          <CardSide
-            key={`${session.next.card.id}-${alarm.revealed}`}
-            label={t(alarm.revealed ? "answer" : "front")}
-            dark
-            input={{
-              note: session.next.note,
-              type: session.next.noteType,
-              ordinal: session.next.card.fields.ordinal.value,
-              side: alarm.revealed ? "back" : "front",
-              dark: true,
-              deckName: session.next.deckName,
-            }}
-          />
-          <AnswerControls
-            revealed={alarm.revealed}
-            gradesShown={alarm.gradesShown}
-            busy={busy}
-            locale={locale}
-            onReveal={alarm.reveal}
-            onAnswer={alarm.answer}
-          />
-        </>
-      )}
-      {started && session && !session.next && !session.done && (
-        <>
-          <Text className="flex-1 text-question text-foreground" style={bold}>
-            {t("noCards")}
-          </Text>
-          <PillButton label={t("dismiss")} busy={busy} onPress={alarm.dismiss} />
-        </>
+      <StageBody stage={stage} alarm={alarm} locale={locale} />
+      {offer && (inSession || stage === "start") && (
+        <SnoozeLink offer={offer} busy={alarm.busy} locale={locale} onPress={alarm.snooze} />
       )}
     </View>
+  );
+}
+
+const clockTime = (at: number, locale: Locale) =>
+  new Date(at).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+
+type Stage = "snoozed" | "start" | "card" | "noCards" | "done";
+function stageOf(ring: Ring, started: boolean, session: Session | undefined): Stage {
+  if (ring.phase === "snoozed" && ring.snoozedUntil !== null) return "snoozed";
+  if (!started) return "start";
+  if (!session || session.done) return "done";
+  return session.next ? "card" : "noCards";
+}
+
+/** What sits between the header and the snooze link at each stage of the ring. */
+function StageBody({
+  stage,
+  alarm,
+  locale,
+}: {
+  stage: Stage;
+  alarm: ReturnType<typeof useAlarmSession>;
+  locale: Locale;
+}) {
+  const t = copy(locale);
+  const { session, current, busy } = alarm;
+  if (stage === "snoozed")
+    return (
+      <>
+        <Snoozed
+          until={clockTime(current.snoozedUntil ?? 0, locale)}
+          need={session?.need}
+          left={alarm.offer?.left ?? 0}
+          locale={locale}
+        />
+        <PillButton label={t("answerNow")} busy={busy} onPress={alarm.start} />
+      </>
+    );
+  if (stage === "start")
+    return (
+      <>
+        <View className="flex-1" />
+        <PillButton primary label={t("start")} busy={busy} onPress={alarm.start} />
+      </>
+    );
+  if (stage === "card" && session?.next)
+    return <SessionCard next={session.next} alarm={alarm} locale={locale} />;
+  if (stage === "noCards")
+    return (
+      <>
+        <Text className="flex-1 text-question text-foreground" style={bold}>
+          {t("noCards")}
+        </Text>
+        <PillButton label={t("dismiss")} busy={busy} onPress={alarm.dismiss} />
+      </>
+    );
+  return null;
+}
+
+/** The session's card, the reveal and the grades. */
+function SessionCard({
+  next,
+  alarm,
+  locale,
+}: {
+  next: NonNullable<Session["next"]>;
+  alarm: ReturnType<typeof useAlarmSession>;
+  locale: Locale;
+}) {
+  const t = copy(locale);
+  return (
+    <>
+      {next.again && (
+        <View className="self-start rounded-pill bg-attention-tint px-3 py-1">
+          <Text className="text-label text-attention">{t("cameBack")}</Text>
+        </View>
+      )}
+      <CardSide
+        key={`${next.card.id}-${alarm.revealed}`}
+        label={t(alarm.revealed ? "answer" : "front")}
+        dark
+        input={{
+          note: next.note,
+          type: next.noteType,
+          ordinal: next.card.fields.ordinal.value,
+          side: alarm.revealed ? "back" : "front",
+          dark: true,
+          deckName: next.deckName,
+        }}
+      />
+      <AnswerControls
+        revealed={alarm.revealed}
+        gradesShown={alarm.gradesShown}
+        busy={alarm.busy}
+        locale={locale}
+        onReveal={alarm.reveal}
+        onAnswer={alarm.answer}
+      />
+    </>
+  );
+}
+
+/** A snoozed ring: when it rings again, with how many cards, and the snoozes left. */
+function Snoozed({
+  until,
+  need,
+  left,
+  locale,
+}: {
+  until: string;
+  need: number | undefined;
+  left: number;
+  locale: Locale;
+}) {
+  const t = copy(locale);
+  const snoozesLeft =
+    left === 0
+      ? t("noSnoozesLeft")
+      : left === 1
+        ? t("snoozesLeftOne")
+        : t("snoozesLeft", { count: String(left) });
+  return (
+    <View className="flex-1 justify-center gap-3">
+      <Text className="text-question text-foreground" style={bold}>
+        {t("snoozed")}
+      </Text>
+      {need !== undefined && (
+        <Text className="text-body text-attention">
+          {t("snoozedUntil", { time: until, count: String(need) })}
+        </Text>
+      )}
+      <Text className="text-body text-muted-foreground">{snoozesLeft}</Text>
+    </View>
+  );
+}
+
+/** Snooze stands alone: a text link under the bottom controls, its cost in the attention color. */
+function SnoozeLink({
+  offer,
+  busy,
+  locale,
+  onPress,
+}: {
+  offer: NonNullable<ReturnType<typeof snoozeOffer>>;
+  busy: boolean;
+  locale: Locale;
+  onPress: () => Promise<void>;
+}) {
+  const t = copy(locale);
+  const length = t("snoozeFor", { minutes: String(offer.minutes) });
+  const cost = t("snoozeCost", { count: String(offer.cost) });
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${length} · ${cost}`}
+      disabled={busy}
+      onPress={() => {
+        void onPress();
+      }}
+      className="min-h-12 items-center justify-center"
+    >
+      <Text className="text-label text-muted-foreground underline">
+        {length} ·{" "}
+        <Text className="text-attention" style={bold}>
+          {cost}
+        </Text>
+      </Text>
+    </Pressable>
   );
 }
 
@@ -178,13 +317,18 @@ function useAlarmSession(
   const [gradesFor, setGradesFor] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  // The ring as a signal just left it, until the caller passes native's next one.
+  const [local, setLocal] = useState<{ from: Ring; ring: Ring }>();
+  const current = local?.from === ring ? local.ring : ring;
+  const offer = snoozeOffer(current.alarm, current.snoozes);
   const lock = useRef(false);
   // When the current card appeared, on the monotonic clock: the answer's time taken.
   const shownAt = useRef(0);
-  const signal = (send: (service: AlarmService["Service"]) => Effect.Effect<void, Error>) =>
+  const signal = <A,>(send: (service: AlarmService["Service"]) => Effect.Effect<A, Error>) =>
     Effect.runPromise(Effect.flatMap(AlarmService, send).pipe(Effect.provide(layer)));
   const query = useQuery({
-    queryKey: ["alarmSession", ring.id],
+    // Each snooze raises N.
+    queryKey: ["alarmSession", ring.id, current.snoozes],
     networkMode: "always",
     queryFn: async () => {
       const { collection, log, alarms, events } = await Effect.runPromise(
@@ -201,7 +345,7 @@ function useAlarmSession(
         collection,
         log,
         deckId: ring.alarm.deckId,
-        need: ringNeed(ring, events, alarms),
+        need: ringNeed(current, events, alarms),
         ringId: ring.id,
         now: Date.now(),
       });
@@ -238,15 +382,27 @@ function useAlarmSession(
     session,
     started,
     busy,
+    current,
+    offer,
     error: error || query.isError,
     revealed,
     gradesShown: Boolean(cardId && gradesFor === cardId),
+    // Start, or Answer now on a snoozed ring.
     start: () =>
       guarded(async () => {
         await signal((service) => service.sessionStarted(ring.id));
+        setLocal({ from: ring, ring: { ...current, phase: "session", snoozedUntil: null } });
         setStarted(true);
         shownAt.current = performance.now();
         if (session?.done) await finish();
+      }),
+    snooze: () =>
+      guarded(async () => {
+        if (!offer) return;
+        const next = await signal((service) => service.snooze(ring.id, offer.minutes));
+        if (next) setLocal({ from: ring, ring: next });
+        setStarted(false);
+        setRevealedId(undefined);
       }),
     reveal: () => {
       if (!cardId) return;

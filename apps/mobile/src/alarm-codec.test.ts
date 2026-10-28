@@ -26,3 +26,14 @@ it("keeps the ring's deck and N through native, with defaults for older alarms",
   const { deckId: _deck, need: _need, ...legacy } = newAlarm("a");
   expect(ringAlarm(JSON.stringify(legacy))).toMatchObject({ deckId: null, need: 3 });
 });
+
+it("reads the ring's snoozes and snooze settings through native, with defaults for older rings", () => {
+  const alarm = JSON.stringify({ ...newAlarm("a"), snooze: false, snoozeMinutes: 5, snoozeCap: 3 });
+  const snoozed = decodeRing(
+    `{"id":"r","alarm":${alarm},"startedAt":1,"phase":"snoozed","snoozes":2,"snoozedUntil":900}`,
+  )!;
+  expect(snoozed).toMatchObject({ phase: "snoozed", snoozes: 2, snoozedUntil: 900 });
+  expect(snoozed.alarm).toMatchObject({ snooze: false, snoozeMinutes: 5, snoozeCap: 3 });
+  const older = `{"id":"r","alarm":${stored(null)},"startedAt":1,"phase":"ringing"}`;
+  expect(decodeRing(older)).toMatchObject({ snoozes: 0, snoozedUntil: null });
+});
