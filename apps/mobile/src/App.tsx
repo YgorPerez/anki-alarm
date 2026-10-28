@@ -286,6 +286,32 @@ function AlarmRow({
     </View>
   );
 }
+/**
+ * The editor's time and date as a rule that rings again, or null. Outside the component: React
+ * Compiler doesn't compile a `throw` inside `try`.
+ */
+function parseRule(time: string, date: string, days: readonly number[]): Alarm["rule"] | null {
+  try {
+    if (
+      !/^\d{2}:\d{2}$/.test(time) ||
+      (date &&
+        (!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+          new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date))
+    )
+      return null;
+    const [hour, minute] = time.split(":").map(Number);
+    const rule = {
+      hour: hour!,
+      minute: minute!,
+      ...(date ? { onceDate: date } : { repeatDays: days }),
+    };
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    // nextRing throws on an hour or minute out of range.
+    return nextRing(rule, currentTime(), zone) === null ? null : rule;
+  } catch {
+    return null;
+  }
+}
 function AlarmEditor({
   alarm,
   locale,
@@ -362,29 +388,9 @@ function AlarmEditor({
         accessibilityRole="button"
         className="rounded-pill bg-primary p-4"
         onPress={() => {
-          try {
-            if (
-              !/^\d{2}:\d{2}$/.test(time) ||
-              (date &&
-                (!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
-                  new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date))
-            )
-              throw new Error("Invalid date");
-            const [hour, minute] = time.split(":").map(Number);
-            const rule = {
-              hour: hour!,
-              minute: minute!,
-              ...(date ? { onceDate: date } : { repeatDays: days }),
-            };
-            if (
-              nextRing(rule, currentTime(), Intl.DateTimeFormat().resolvedOptions().timeZone) ===
-              null
-            )
-              throw new Error("No next ring");
-            onSave({ ...options, label, rule });
-          } catch {
-            setError(t("invalid"));
-          }
+          const rule = parseRule(time, date, days);
+          if (rule) onSave({ ...options, label, rule });
+          else setError(t("invalid"));
         }}
       >
         <Text className="text-body text-primary-foreground">{t("save")}</Text>

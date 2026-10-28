@@ -1,0 +1,7 @@
+{
+  // Pure package, no build, like Core. Effect's HTTP types use the fetch globals (`Request`,
+  // `URL`), which the Worker, the web and React Native all have.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "types": [], "lib": ["ES2022", "DOM"] },
+  "include": ["src/**/*.ts"]
+}

@@ -5,7 +5,13 @@ const { withUniwindConfig } = require("uniwind/metro");
 const config = getDefaultConfig(__dirname);
 
 // uniwind reads the Tailwind classes, and the design tokens global.css imports, from here.
-module.exports = withUniwindConfig(config, {
+const themed = withUniwindConfig(config, {
   cssEntryFile: "./global.css",
   dtsFile: "./uniwind-types.d.ts",
+});
+
+const { withStorybook } = require("@storybook/react-native/withStorybook");
+module.exports = withStorybook(themed, {
+  enabled: process.env.STORYBOOK_ENABLED === "true",
+  configPath: ".rnstorybook",
 });

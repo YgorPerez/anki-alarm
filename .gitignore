@@ -25,6 +25,8 @@ apps/*/.dev.vars
 /release-metadata.json
 /anki-alarm.apk
 
+apps/mobile/.rnstorybook/storybook.requires.ts
+apps/web/storybook-static/
 # Playwright
 apps/web/test-results/
 apps/web/playwright-report/

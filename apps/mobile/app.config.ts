@@ -31,6 +31,7 @@ const config: ExpoConfig = {
     requestHeaders: { "expo-channel-name": "production" },
   },
   extra: { eas: { projectId } },
+  experiments: { reactCompiler: true },
   plugins: [
     "expo-dev-client",
     "expo-sqlite",

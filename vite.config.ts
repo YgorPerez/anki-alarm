@@ -10,6 +10,8 @@ const IGNORED = [
   "**/coverage/**",
   "apps/mobile/android/**",
   "apps/mobile/.expo/**",
+  "apps/mobile/.rnstorybook/storybook.requires.ts",
+  "apps/web/storybook-static/**",
   "apps/mobile/uniwind-types.d.ts",
   "apps/web/.output/**",
   "apps/web/.tanstack/**",
@@ -23,9 +25,15 @@ const IGNORED = [
 
 export default defineConfig({
   test: {
-    // Not the web yet: its Vite config runs SSR in workerd, which Vitest can't load. Its first
-    // test brings a test config without the Cloudflare plugin. The phone has no Vite config.
-    projects: ["packages/*", "apps/sync", "apps/mobile/vitest.config.ts", "scripts"],
+    // The apps' test configs: the web's Vite config runs SSR in workerd, which Vitest can't load,
+    // and the phone has no Vite config.
+    projects: [
+      "packages/*",
+      "apps/sync",
+      "apps/web/vitest.config.ts",
+      "apps/mobile/vitest.config.ts",
+      "scripts",
+    ],
     // A stray `.only` passes locally and must not pass CI.
     allowOnly: !process.env["CI"],
   },
