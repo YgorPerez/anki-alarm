@@ -138,6 +138,8 @@ test("an alarm folded into the ring raises its N and keeps the ring's deck", asy
     alarm: { ...newAlarm("fold-1"), label: "Cedo", deckId: deckId("Dobra"), need: 1 },
     startedAt: Date.now(),
     phase: "ringing",
+    snoozes: 0,
+    snoozedUntil: null,
   };
   const later = { ...newAlarm("fold-2"), deckId: deckId("Dobra outro"), need: 4 };
   await Effect.runPromise(

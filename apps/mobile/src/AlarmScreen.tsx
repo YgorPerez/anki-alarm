@@ -4,11 +4,9 @@ import {
   ringNeed,
   SESSION_RULES,
   snoozeOffer,
-  type Alarm,
   type Grade,
   type Locale,
 } from "@app/core";
-import type { AlarmEvent } from "@app/client-data";
 import { Effect, type Layer } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { BackHandler, Pressable, Text, View } from "react-native";

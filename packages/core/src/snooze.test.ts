@@ -2,6 +2,7 @@ import { describe, expect, test } from "vite-plus/test";
 import { MAX_SNOOZE_CAP, newAlarm, readAlarm, ringNeed, snoozeOffer } from "./index.ts";
 
 const morning = { ...newAlarm("a"), need: 3 };
+const ring = (snoozes: number) => ({ id: "ring-1", alarm: morning, snoozes });
 
 describe("snooze", () => {
   test("a new alarm allows two snoozes of 9 minutes", () => {
@@ -9,7 +10,6 @@ describe("snooze", () => {
   });
 
   test("each snooze adds two cards to the ring's N", () => {
-    const ring = (snoozes: number) => ({ id: "ring-1", alarm: morning, snoozes });
     expect(ringNeed(ring(0), [], [])).toBe(3);
     expect(ringNeed(ring(1), [], [])).toBe(5);
     expect(ringNeed(ring(2), [], [])).toBe(7);
@@ -17,8 +17,7 @@ describe("snooze", () => {
 
   test("the cost adds to the larger N of the alarms folded into the ring", () => {
     const absorbed = { kind: "absorbed", alarmId: "b", ringId: "ring-1" };
-    const ring = { id: "ring-1", alarm: morning, snoozes: 1 };
-    expect(ringNeed(ring, [absorbed], [morning, { ...newAlarm("b"), need: 6 }])).toBe(8);
+    expect(ringNeed(ring(1), [absorbed], [morning, { ...newAlarm("b"), need: 6 }])).toBe(8);
   });
 
   test("a ring is offered its alarm's snooze length and cost until the cap", () => {

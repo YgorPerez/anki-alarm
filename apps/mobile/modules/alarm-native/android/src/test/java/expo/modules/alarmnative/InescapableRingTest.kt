@@ -157,4 +157,35 @@ class InescapableRingTest {
     // The folded alarm re-arms for its next occurrence.
     assertEquals(at("07:05:00") + 86_400_000, AlarmStore.prefs(ctx).getLong("due.late", 0))
   }
+
+  @Test fun aSnoozeStopsTheServiceAndItsEndRampsTheSameRingAgain() {
+    val service = inSession()
+    assertTrue(AlarmScheduler.snooze(ctx, "ring-1", 9))
+    service.snooze()
+    controller!!.destroy()
+    controller = null
+    AlarmScheduler.endSnooze(ctx)
+    val again = start(shadowOf(ctx as Application).nextStartedService.getStringExtra("reason"))
+    assertTrue(again.level < 0.1f)
+    assertEquals("ringing", AlarmStore.ring(ctx)!!.getString("phase"))
+    assertEquals(listOf("ringStarted", "snoozed", "snoozeEnded"), journal().map { it.getString("kind") })
+    assertEquals(setOf("ring-1"), journal().map { it.getString("ringId") }.toSet())
+  }
+
+  @Test fun answerNowStartsTheSessionSilentAndIdleBringsTheSoundBack() {
+    val service = inSession()
+    AlarmScheduler.snooze(ctx, "ring-1", 9)
+    service.snooze()
+    controller!!.destroy()
+    controller = null
+    assertTrue(AlarmStore.answerNow(ctx, "ring-1"))
+    val again = start(AlarmService.ANSWER_NOW)
+    assertEquals(0f, again.level, 0f)
+    assertEquals("session", AlarmStore.ring(ctx)!!.getString("phase"))
+    assertFalse(journal().any { it.getString("kind") == "serviceRestarted" })
+    idle(setting("idleSeconds").toLong())
+    assertEquals(1f, again.level, 0f)
+  }
+
+  private fun setting(key: String) = AlarmStore.setting(ctx, key)
 }
