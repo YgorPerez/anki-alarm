@@ -14,7 +14,7 @@
   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
   <application>
-    <activity android:name=".LockedAlarmActivity" android:exported="false" android:directBootAware="true" android:showWhenLocked="true" android:turnScreenOn="true" />
+    <activity android:name=".LockedAlarmActivity" android:theme="@android:style/Theme.Material.NoActionBar" android:exported="false" android:directBootAware="true" android:showWhenLocked="true" android:turnScreenOn="true" />
     <!-- Our own alarm and watchdog broadcasts. Not exported. -->
     <receiver android:name=".AlarmReceiver" android:exported="false" android:directBootAware="true" />
 

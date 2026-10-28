@@ -13,6 +13,8 @@ export const androidAlarmService = Layer.succeed(AlarmService, {
   capabilities: { canHoldDismissal: true, canTakeOverScreen: true },
   setAlarms: (alarms, policy) =>
     attempt(() => native.setAlarms(JSON.stringify(alarms), JSON.stringify(policy))),
+  setAppearance: (colors, locale) =>
+    attempt(() => native.setAppearance(JSON.stringify(colors), locale)),
   list: attempt(() => decodeAlarms(native.list())),
   getRing: attempt(() => decodeRing(native.getRing() ?? "null")),
   drainJournal: attempt(() => decodeEvents(native.drainJournal())),

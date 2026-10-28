@@ -1,7 +1,7 @@
 import { ReliabilityScreen } from "./ReliabilityScreen.tsx";
 import { reliabilityCopy } from "./reliability-copy.ts";
 import { UpdateOffer } from "./UpdateOffer.tsx";
-import { nextRing, type Alarm, type Locale } from "@app/core";
+import { nextRing, themeFor, type Alarm, type Locale } from "@app/core";
 import {
   AtkinsonHyperlegible_400Regular,
   AtkinsonHyperlegible_700Bold,
@@ -29,7 +29,7 @@ import { androidAlarmService, native } from "./alarm-android.ts";
 import { localData } from "./database.ts";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ThemeSettings } from "./ThemeSettings.tsx";
-import { initializeTheme } from "./theme.ts";
+import { initializeTheme, useThemeChoice } from "./theme.ts";
 import { ScopedTheme } from "uniwind";
 import { queryClient } from "./query.ts";
 import { useUI } from "./ui.ts";
@@ -89,6 +89,22 @@ function Home() {
   const [permissions, setPermissions] = useState(() => native.getPermissions());
   const t = copy(locale);
   const insets = useSafeAreaInsets();
+  const theme = useThemeChoice();
+  useEffect(() => {
+    const dark = themeFor(theme, "dark");
+    void run(
+      Effect.flatMap(AlarmService, (service) =>
+        service.setAppearance(
+          {
+            background: dark.background,
+            foreground: dark.foreground,
+            primary: dark["primary-ink"],
+          },
+          locale,
+        ),
+      ),
+    ).catch(() => setError(copy(locale)("alarmError")));
+  }, [locale, theme]);
   useEffect(() => {
     const refresh = () => {
       setPermissions(native.getPermissions());

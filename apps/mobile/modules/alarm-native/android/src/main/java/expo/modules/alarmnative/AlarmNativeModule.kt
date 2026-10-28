@@ -21,6 +21,7 @@ class AlarmNativeModule : Module() {
     OnCreate { current = this@AlarmNativeModule; AlarmService.ensureChannel(context) }
     OnDestroy { current = null }
     Function("setAlarms") { alarms: String, policy: String -> AlarmScheduler.setAlarms(context, JSONArray(alarms), JSONObject(policy)) }
+    Function("setAppearance") { colors: String, locale: String -> AlarmStore.setAppearance(context, JSONObject(colors), locale) }
     Function("list") { AlarmStore.alarms(context).toString() }
     Function("getRing") { AlarmStore.ring(context)?.toString() }
     Function("drainJournal") { AlarmStore.prefs(context).getString("journal", "[]") }

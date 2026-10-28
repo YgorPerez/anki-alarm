@@ -9,6 +9,11 @@ export interface Ring {
 }
 import type { AlarmEvent } from "@app/client-data";
 export type { AlarmEvent } from "@app/client-data";
+interface AlarmAppearance {
+  background: string;
+  foreground: string;
+  primary: string;
+}
 interface AlarmPort {
   getPermissions: Effect.Effect<AlarmPermissions, Error>;
   request: (kind: ReliabilityKind | "appInfo") => Effect.Effect<boolean, Error>;
@@ -16,6 +21,7 @@ interface AlarmPort {
   completeOnboarding: Effect.Effect<boolean, Error>;
   capabilities: { canHoldDismissal: boolean; canTakeOverScreen: boolean };
   setAlarms: (alarms: readonly Alarm[], policy: typeof RING_POLICY) => Effect.Effect<void, Error>;
+  setAppearance: (colors: AlarmAppearance, locale: string) => Effect.Effect<void, Error>;
   list: Effect.Effect<readonly Alarm[], Error>;
   getRing: Effect.Effect<Ring | null, Error>;
   drainJournal: Effect.Effect<readonly AlarmEvent[], Error>;
@@ -101,6 +107,7 @@ export function memoryAlarmService() {
       Effect.sync(() => {
         alarms = [...list];
       }),
+    setAppearance: () => Effect.void,
     list: Effect.sync(() => alarms),
     getRing: Effect.sync(() => ring),
     drainJournal: Effect.sync(() => [...events]),

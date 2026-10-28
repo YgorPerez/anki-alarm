@@ -4,6 +4,7 @@ import { requireNativeModule } from "expo";
 interface NativeAlarm {
   createId: () => string;
   setAlarms: (alarms: string, policy: string) => void;
+  setAppearance: (colors: string, locale: string) => void;
   list: () => string;
   getRing: () => string | null;
   drainJournal: () => string;
