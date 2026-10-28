@@ -7,6 +7,7 @@ import { migrationStatements } from "./migrations.ts";
 import { Context, Effect, Layer } from "effect";
 import {
   updateThemeSettings,
+  parseAlarmSound,
   type Settings,
   type ThemeChoice,
   type Collection,
@@ -106,7 +107,10 @@ async function open(driver: SQLiteConnection): Promise<Data> {
           .select()
           .from(alarms)
           .orderBy(sql`rowid`)
-      ).map((row) => row.data),
+      ).map((row) => {
+        row.data.sound = parseAlarmSound(row.data.sound);
+        return row.data;
+      }),
     ),
     saveAlarm: (alarm) =>
       serial(() =>

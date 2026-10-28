@@ -83,7 +83,7 @@ test("public services persist local changes and outbox together across reopen", 
           rule: { hour: 7, minute: 0, repeatDays: [1] },
           vibrate: true,
           rampSeconds: 30,
-          sound: null,
+          sound: { kind: "file" as const, uri: "content://media/7", title: "rooster.mp3" },
         };
         yield* data.saveAlarm(alarm);
         expect(yield* data.alarms).toEqual([alarm]);
@@ -100,6 +100,51 @@ test("public services persist local changes and outbox together across reopen", 
         expect((yield* data.pendingChanges).some((c) => c.kind === "alarms")).toBe(true);
       }),
     );
+  } finally {
+    for (const db of databases.values()) db.close();
+  }
+});
+
+test("reads legacy alarm sounds through the public service after reopening", async () => {
+  const databases = new Map<string, DatabaseSync>();
+  const connect = (name: string): ExecuteSql => {
+    let db = databases.get(name);
+    if (!db) {
+      db = new DatabaseSync(":memory:");
+      databases.set(name, db);
+    }
+    return async (query, params, method) => {
+      const statement = db.prepare(query);
+      if (method === "run") {
+        statement.run(...params);
+        return { rows: [] };
+      }
+      statement.setReturnArrays(true);
+      return { rows: statement.all(...params) };
+    };
+  };
+  const layer = () =>
+    clientDataLayer({ connect, now: () => 1000, random: () => new Uint8Array(16) });
+  const read = () =>
+    Effect.runPromise(
+      Effect.flatMap(ClientData, (data) => data.alarms).pipe(Effect.provide(layer())),
+    );
+  try {
+    await read();
+    const old = {
+      id: "old",
+      label: "Morning",
+      enabled: true,
+      rule: { hour: 7, minute: 0 },
+      sound: null,
+      vibrate: true,
+      rampSeconds: 30,
+    };
+    databases
+      .get("anki-alarm.db")!
+      .prepare("INSERT INTO alarms (id, data) VALUES (?, ?)")
+      .run(old.id, JSON.stringify(old));
+    expect((await read())[0]?.sound).toEqual({ kind: "default" });
   } finally {
     for (const db of databases.values()) db.close();
   }

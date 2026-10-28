@@ -37,7 +37,6 @@ const decodeStoredRing = Schema.decodeUnknownSync(Schema.fromJsonString(ring));
 export const decodeAlarm = (json: string) => withSound(decodeStored(json));
 export const decodeAlarms = (json: string) => decodeStoredList(json).map(withSound);
 export const decodeEvents = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(event)));
-export const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(event));
 export const decodeRing = (json: string) => {
   const active = decodeStoredRing(json);
   return active && { ...active, alarm: withSound(active.alarm) };
