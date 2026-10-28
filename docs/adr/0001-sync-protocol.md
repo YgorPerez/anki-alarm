@@ -28,12 +28,13 @@ depend on any clock and can't skip a write that commits late. One sync is push, 
 
 ## Conflicts
 
-- Each note field, and each property of decks, deck options, note types and alarms, carries its own
+- Each note field, and each property of decks, presets, note types and alarms, carries its own
   HLC (wall ms, counter, device id). The newer HLC wins, and the device id breaks ties.
 - The Worker resolves on push with the same Core merge function the clients use, stores the winner
   with a new sequence number, and pull returns merged rows. The server is the single source of truth.
-- Reviews never conflict. Undo appends a **void** that points at the review, and replay skips voided
-  reviews. Nothing in the log is ever edited or removed.
+- Review log entries (reviews, snapshots, resets, set due dates, voids; see ADR 0003) never conflict.
+  Undo appends a **void** that points at an earlier entry, and replay skips voided entries. Nothing in
+  the log is ever edited or removed.
 
 ## Deletes
 
