@@ -20,8 +20,16 @@ export {
   parseRecord,
   validOption,
 } from "./collection.ts";
-export { ankiDroidAccess, linkableAnkiDroidDecks } from "./ankidroid.ts";
+export {
+  ankiDroidAccess,
+  ankiDroidRoots,
+  linkableAnkiDroidDecks,
+  syncBackPlan,
+  syncBackQueue,
+} from "./ankidroid.ts";
 export type {
+  SyncBackAnswer,
+  SyncBackPlan,
   AnkiDroidAccess,
   AnkiDroidCard,
   AnkiDroidDeck,
@@ -30,6 +38,7 @@ export type {
   AnkiDroidSource,
 } from "./ankidroid.ts";
 export type {
+  AnkiDroidLink,
   PresetOptions,
   StoredCollection,
   Hlc,

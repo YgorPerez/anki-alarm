@@ -1,4 +1,6 @@
 import { State } from "ts-fsrs";
+import type { CollectionState } from "./collection.ts";
+import { importId } from "./ids.ts";
 import type { LogEntry } from "./study.ts";
 
 /**
@@ -160,4 +162,168 @@ export function ankiDroidSnapshot(
       state,
     },
   };
+}
+
+/** One review to send to AnkiDroid as an answer. AnkiDroid finds the card by note id and ord. */
+export interface SyncBackAnswer {
+  entryId: string;
+  cardId: string;
+  deckId: string;
+  /** AnkiDroid's note id. */
+  noteId: number;
+  ord: number;
+  /** AnkiDroid's `answer_ease`: the grade, 1 Again to 4 Easy. */
+  ease: number;
+  timeTakenMs: number;
+}
+const voidedIn = (log: readonly LogEntry[]) =>
+  new Set(log.flatMap((e) => (e.kind === "void" ? [e.targetId] : [])));
+/** Decks this phone linked: only it pulls from AnkiDroid and syncs back (ADR 0001). */
+const ownedDecks = (state: CollectionState, deviceId: string) =>
+  state.decks.filter((d) => d.anki && d.fields.linkedBy?.value === deviceId);
+
+/**
+ * The reviews sync back still has to send, in answer-time order: every review of a card in a deck
+ * this phone linked, from any origin but import (those came from Anki), not voided and not in
+ * `sent`. Cards made in the app have no AnkiDroid ids and stay in the app.
+ */
+export function syncBackQueue(
+  state: CollectionState,
+  log: readonly LogEntry[],
+  deviceId: string,
+  sent: ReadonlySet<string>,
+): SyncBackAnswer[] {
+  const decks = new Set(ownedDecks(state, deviceId).map((d) => d.id));
+  const notes = new Map(state.notes.map((n) => [n.id, n]));
+  const cards = new Map(
+    state.cards.flatMap((c) => {
+      const noteId = notes.get(c.fields.noteId.value)?.anki?.id;
+      return c.anki && noteId !== undefined && decks.has(c.fields.deckId.value)
+        ? [[c.id, { card: c, noteId }] as const]
+        : [];
+    }),
+  );
+  const voided = voidedIn(log);
+  return (
+    log
+      .flatMap((entry) => {
+        const linked = cards.get(entry.cardId);
+        if (entry.kind !== "review" || entry.origin === "import" || !linked) return [];
+        if (voided.has(entry.id) || sent.has(entry.id)) return [];
+        return [{ entry, ...linked }];
+      })
+      // oxlint-disable-next-line unicorn/no-array-sort -- ES2022/Hermes target; sorts a fresh copy.
+      .sort((a, b) => a.entry.at - b.entry.at || a.entry.id.localeCompare(b.entry.id))
+      .map(({ entry, card, noteId }) => ({
+        entryId: entry.id,
+        cardId: card.id,
+        deckId: card.fields.deckId.value,
+        noteId,
+        ord: card.fields.ordinal.value,
+        ease: entry.grade,
+        timeTakenMs: Math.round(entry.durationMs),
+      }))
+  );
+}
+
+/**
+ * AnkiDroid's `reps` the last time this phone saw the card: what it stored after linking, pulling
+ * or a synced-back answer, else the latest snapshot's, else 0.
+ */
+export function seenReps(
+  log: readonly LogEntry[],
+  cardId: string,
+  seen: ReadonlyMap<string, number>,
+): number {
+  const stored = seen.get(cardId);
+  if (stored !== undefined) return stored;
+  const voided = voidedIn(log);
+  return Math.max(
+    0,
+    ...log.flatMap((e) =>
+      e.kind === "snapshot" && e.cardId === cardId && !voided.has(e.id) ? [e.state.reps] : [],
+    ),
+  );
+}
+
+/** A snapshot entry for a linked card, keyed by AnkiDroid's card id and reps (ADR 0001). */
+export function snapshotEntry(
+  ad: AnkiDroidCard,
+  cardId: string,
+  learningSteps: readonly number[],
+  now: number,
+): LogEntry | null {
+  const snapshot = ankiDroidSnapshot(ad, learningSteps, now);
+  return (
+    snapshot && {
+      kind: "snapshot",
+      id: importId("snapshot", `${ad.id}:${ad.reps}`),
+      cardId,
+      ...snapshot,
+    }
+  );
+}
+
+export interface SyncBackPlan {
+  /** Cards AnkiDroid reviewed since we last saw them, to append before any answer goes. */
+  snapshots: LogEntry[];
+  send: SyncBackAnswer[];
+  /** Cards suspended or buried in AnkiDroid: answering would put them back in its queue. */
+  held: SyncBackAnswer[];
+  /** Cards AnkiDroid no longer has. */
+  gone: SyncBackAnswer[];
+}
+/**
+ * What to do with the queue given AnkiDroid's cards as they are now. A card AnkiDroid reviewed
+ * since we last saw it gets a snapshot first, so that review isn't lost under our answers.
+ */
+export function syncBackPlan(
+  state: CollectionState,
+  log: readonly LogEntry[],
+  queue: readonly SyncBackAnswer[],
+  cards: readonly AnkiDroidCard[],
+  seen: ReadonlyMap<string, number>,
+  now: number,
+): SyncBackPlan {
+  const there = new Map(cards.map((c) => [`${c.noteId}:${c.ord}`, c]));
+  const plan: SyncBackPlan = { snapshots: [], send: [], held: [], gone: [] };
+  const checked = new Set<string>();
+  for (const answer of queue) {
+    const ad = there.get(`${answer.noteId}:${answer.ord}`);
+    if (!ad) plan.gone.push(answer);
+    else if (ad.queue < 0) plan.held.push(answer);
+    else {
+      plan.send.push(answer);
+      if (checked.has(answer.cardId)) continue;
+      checked.add(answer.cardId);
+      if (ad.reps <= seenReps(log, answer.cardId, seen)) continue;
+      const steps = learningStepsOf(state, answer.deckId);
+      const snapshot = snapshotEntry(ad, answer.cardId, steps, now);
+      if (snapshot) plan.snapshots.push(snapshot);
+    }
+  }
+  return plan;
+}
+const learningStepsOf = (state: CollectionState, deckId: string) => {
+  const deck = state.decks.find((d) => d.id === deckId);
+  const preset = state.presets.find((p) => p.id === deck?.fields.presetId.value);
+  return preset?.fields.learningSteps.value ?? [];
+};
+
+/**
+ * The AnkiDroid decks a phone reads for its linked decks: each linked deck whose parent isn't
+ * linked too, since reading a deck brings its subdecks.
+ */
+export function ankiDroidRoots(
+  state: CollectionState,
+  deviceId: string,
+): { deckId: string; ankiId: number }[] {
+  const owned = ownedDecks(state, deviceId);
+  const names = new Set(owned.map((d) => d.fields.name.value));
+  return owned
+    .filter((d) => {
+      const parts = d.fields.name.value.split("::");
+      return !parts.slice(1).some((_, i) => names.has(parts.slice(0, i + 1).join("::")));
+    })
+    .flatMap((d) => (d.anki ? [{ deckId: d.id, ankiId: d.anki.id }] : []));
 }

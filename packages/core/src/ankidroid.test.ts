@@ -7,7 +7,11 @@ import {
   linkableAnkiDroidDecks,
   replayCard,
   studyQueue,
+  syncBackPlan,
+  syncBackQueue,
+  ankiDroidRoots,
   type AnkiDroidSource,
+  type LogEntry,
 } from "./index.ts";
 
 const now = Date.UTC(2026, 9, 28, 12);
@@ -236,4 +240,168 @@ test("Basic records stored before imported note types load in the current shape"
     { name: "Card 1", front: "{{Front}}", back: "{{Back}}" },
   ]);
   expect(state.noteTypes[0]!.fields.kind.value).toBe("standard");
+});
+
+const review = (
+  id: string,
+  reviewed: string,
+  at: number,
+  over: Partial<{ grade: 1 | 2 | 3 | 4; origin: "phone" | "web" | "alarm" | "import" }> = {},
+): LogEntry => ({
+  kind: "review",
+  id,
+  cardId: reviewed,
+  at,
+  grade: over.grade ?? 3,
+  durationMs: 4200,
+  origin: over.origin ?? "phone",
+});
+const linked = () => {
+  const c = new Collection(environment());
+  const { snapshots } = c.linkAnkiDroid(source());
+  const state = c.snapshot();
+  const [fresh, reviewed] = state.cards;
+  return { c, state, snapshots, fresh: fresh!, reviewed: reviewed! };
+};
+
+test("sync back sends this phone's reviews of linked cards from any origin, in answer-time order", () => {
+  const { c, state, snapshots, fresh, reviewed } = linked();
+  const own = c.createDeck("Mine");
+  c.addBasicNote(own.id, "casa", "house");
+  const mine = c.snapshot().cards.find((x) => x.fields.deckId.value === own.id)!;
+  const log: LogEntry[] = [
+    ...snapshots,
+    review("r3", reviewed.id, now + 3000, { origin: "alarm", grade: 1 }),
+    review("r1", fresh.id, now + 1000, { origin: "web", grade: 4 }),
+    review("r2", reviewed.id, now + 2000),
+    review("imported", reviewed.id, now - 9000, { origin: "import" }),
+    review("undone", fresh.id, now + 2500),
+    { kind: "void", id: "v", cardId: fresh.id, at: now + 2600, targetId: "undone" },
+    review("own", mine.id, now + 4000),
+    review("sent", fresh.id, now + 500),
+  ];
+  const queue = syncBackQueue(c.snapshot(), log, "phone-a", new Set(["sent"]));
+  const answer = (entryId: string, x: typeof fresh, ord: number, ease: number) => ({
+    entryId,
+    cardId: x.id,
+    deckId: x.fields.deckId.value,
+    noteId: 501,
+    ord,
+    ease,
+    timeTakenMs: 4200,
+  });
+  expect(queue).toEqual([
+    answer("r1", fresh, 0, 4),
+    answer("r2", reviewed, 1, 3),
+    answer("r3", reviewed, 1, 1),
+  ]);
+  // Another phone owns the deck after it links it; this one stops sending.
+  const other = new Collection(environment("phone-b"), state);
+  other.linkAnkiDroid(source());
+  expect(syncBackQueue(other.snapshot(), log, "phone-a", new Set())).toEqual([]);
+});
+
+test("sync back holds answers for cards suspended or buried in AnkiDroid and drops deleted cards", () => {
+  const { state, snapshots, fresh, reviewed } = linked();
+  const log = [
+    ...snapshots,
+    review("a", fresh.id, now + 1000),
+    review("b", reviewed.id, now + 2000),
+  ];
+  const queue = syncBackQueue(state, log, "phone-a", new Set());
+  const [ankiFresh, ankiReviewed] = source().cards;
+  const buried = syncBackPlan(
+    state,
+    log,
+    queue,
+    [{ ...ankiFresh!, queue: -3 }, ankiReviewed!],
+    new Map(),
+    now,
+  );
+  expect(buried.send.map((a) => a.entryId)).toEqual(["b"]);
+  expect(buried.held.map((a) => a.entryId)).toEqual(["a"]);
+  expect(buried.snapshots).toEqual([]);
+  const deleted = syncBackPlan(state, log, queue, [ankiReviewed!], new Map(), now);
+  expect(deleted.gone.map((a) => a.entryId)).toEqual(["a"]);
+  expect(deleted.send.map((a) => a.entryId)).toEqual(["b"]);
+});
+
+test("a card AnkiDroid reviewed since we last saw it is snapshotted before our answers go", () => {
+  const { state, snapshots, reviewed } = linked();
+  const log = [...snapshots, review("ours", reviewed.id, now + 60_000)];
+  const queue = syncBackQueue(state, log, "phone-a", new Set());
+  // AnkiDroid reviewed it once more an hour ago (reps 4 -> 5).
+  const there = {
+    ...source().cards[1]!,
+    reps: 5,
+    interval: 30,
+    stability: 31,
+    lastReviewSecs: now / 1000 - 3600,
+  };
+  const plan = syncBackPlan(state, log, queue, [there], new Map(), now);
+  expect(plan.snapshots).toMatchObject([
+    {
+      kind: "snapshot",
+      cardId: reviewed.id,
+      at: now - 3_600_000,
+      state: { reps: 5, stability: 31 },
+    },
+  ]);
+  expect(plan.send.map((a) => a.entryId)).toEqual(["ours"]);
+  // Our own answer, read back as reps 5 and stored as seen, is not AnkiDroid's review.
+  const again = syncBackPlan(state, log, queue, [there], new Map([[reviewed.id, 5]]), now);
+  expect(again.snapshots).toEqual([]);
+});
+
+test("pull brings new notes and edited fields, and snapshots only cards AnkiDroid reviewed since", () => {
+  const { c, snapshots, fresh, reviewed } = linked();
+  const later = source();
+  later.notes[0]!.mod = now / 1000 + 60;
+  later.notes[0]!.fields = "食べる\u001fto eat";
+  later.notes.push({
+    id: 502,
+    guid: "def",
+    noteTypeId: 1600000000000,
+    mod: 1_760_000_000,
+    tags: "",
+    fields: "飲む\u001fdrink",
+  });
+  later.cards.push(card({ id: 9003, noteId: 502 }), card({ id: 9004, noteId: 502, ord: 1 }));
+  // Our synced-back answer raised reps to 5; AnkiDroid suspended the new card.
+  later.cards[1] = { ...later.cards[1]!, reps: 5 };
+  later.cards[0] = { ...later.cards[0]!, queue: -1 };
+  const pulled = new Collection({ ...environment(), now: () => now + 120_000 }, c.snapshot());
+  const result = pulled.linkAnkiDroid(later, snapshots, new Map([[reviewed.id, 5]]));
+  expect(result.snapshots).toEqual([]);
+  expect(result.added).toBe(1);
+  expect(result.edited).toBe(1);
+  expect(result.claimed).toEqual([]);
+  const state = pulled.snapshot();
+  expect(state.notes.map((n) => n.values[1]!.value)).toEqual(["to eat", "drink"]);
+  expect(state.cards).toHaveLength(4);
+  expect(state.cards.find((x) => x.id === fresh.id)!.fields.suspended.value).toBe(true);
+  expect(new Map(result.seen).get(reviewed.id)).toBe(5);
+
+  // Reviewed once more in AnkiDroid: reps 6 is newer than what we saw.
+  later.cards[1] = { ...later.cards[1], reps: 6, lastReviewSecs: now / 1000 + 100 };
+  const next = pulled.linkAnkiDroid(later, snapshots, new Map([[reviewed.id, 5]]));
+  expect(next.snapshots).toMatchObject([
+    { cardId: reviewed.id, at: now + 100_000, state: { reps: 6 } },
+  ]);
+});
+
+test("linking reports the decks this phone took over, so their earlier reviews aren't sent", () => {
+  const { state } = linked();
+  expect(new Collection(environment()).linkAnkiDroid(source()).claimed).toHaveLength(2);
+  const other = new Collection(environment("phone-b"), state);
+  expect(other.linkAnkiDroid(source()).claimed).toEqual(state.decks.map((d) => d.id));
+  expect(new Collection(environment(), state).linkAnkiDroid(source()).claimed).toEqual([]);
+});
+
+test("a phone's linked decks group into the AnkiDroid decks it reads", () => {
+  const { state } = linked();
+  expect(ankiDroidRoots(state, "phone-a")).toEqual([
+    { deckId: importId("deck", 1700000000001), ankiId: 1700000000001 },
+  ]);
+  expect(ankiDroidRoots(state, "phone-b")).toEqual([]);
 });
