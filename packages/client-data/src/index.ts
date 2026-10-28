@@ -17,6 +17,7 @@ import {
   type Collection,
   type CollectionState,
   type Alarm,
+  type AnkiPackage,
 } from "@app/core";
 
 export interface AlarmEvent {
@@ -34,8 +35,19 @@ export interface PendingChange {
   recordId: string;
   body: unknown;
 }
+export interface ImportSummary {
+  notes: number;
+  cards: number;
+  /** Review log entries this import added. */
+  entries: number;
+}
 interface Data {
   collection: Effect.Effect<CollectionState, Error>;
+  /**
+   * Merges an Anki package into the collection and appends its review log in one transaction.
+   * Store the package's media files first. Importing the same package again adds no entries.
+   */
+  importAnki: (source: AnkiPackage) => Effect.Effect<ImportSummary, Error>;
   reviewLog: Effect.Effect<LogEntry[], Error>;
   answerCard: (cardId: string, grade: Grade, durationMs: number) => Effect.Effect<LogEntry, Error>;
   changeCollection: (
@@ -139,6 +151,30 @@ async function open(driver: SQLiteConnection): Promise<Data> {
         }),
       ),
     collection: serial(store.read),
+    importAnki: (source) =>
+      serial(async () => {
+        let entries = 0;
+        const { result } = await store.run(
+          (collection) => collection.importAnki(source),
+          async ({ log }) => {
+            const known = new Set(
+              (await collectionDb.select({ id: reviewLog.id }).from(reviewLog)).map((r) => r.id),
+            );
+            const added = log.filter((entry) => !known.has(entry.id));
+            entries = added.length;
+            for (let i = 0; i < added.length; i += 200) {
+              const batch = added.slice(i, i + 200);
+              await collectionDb
+                .insert(reviewLog)
+                .values(batch.map((e) => ({ id: e.id, body: e })));
+              await collectionDb
+                .insert(outbox)
+                .values(batch.map((e) => ({ kind: "reviewLog", recordId: e.id, body: e })));
+            }
+          },
+        );
+        return { notes: result.notes, cards: result.cards, entries };
+      }),
     changeCollection: (command) => serial(() => store.change(command)),
     alarms: serial(async () =>
       (

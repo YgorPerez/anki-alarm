@@ -51,7 +51,7 @@ test("SQLite reload retains decks, edited notes, cards and permanent tombstones"
     sqlite = new DatabaseSync(filename);
     const reopened = await openCollectionStore(execute, env);
     expect(await reopened.read()).toEqual(state);
-    expect((await reopened.read()).notes[0]!.fields.back.value).toBe("home");
+    expect((await reopened.read()).notes[0]!.values[1]!.value).toBe("home");
     await reopened.change((c) => c.deleteDeck(state.decks[0]!.id));
     const deleted = await reopened.read();
     expect(deleted.cards).toEqual([]);
