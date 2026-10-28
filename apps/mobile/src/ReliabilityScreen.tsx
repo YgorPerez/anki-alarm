@@ -3,9 +3,11 @@ import {
   type AlarmPermissions,
   type Locale,
   type ReliabilityKind,
+  type ReliabilityStep,
 } from "@app/core";
 import { Effect } from "effect";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ListRenderItemInfo } from "react-native";
 import { BackHandler, Pressable, FlatList, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AlarmService } from "./alarms.ts";
@@ -60,6 +62,7 @@ export function ReliabilityScreen({
   onExit: () => void;
   switchLanguage: () => void;
 }) {
+  const list = useRef<FlatList<ReliabilityRowProps>>(null);
   const [index, setIndex] = useState(0);
   const [confirmed, setConfirmed] = useState<ReadonlySet<ReliabilityKind>>(new Set());
   const [error, setError] = useState(false);
@@ -68,7 +71,10 @@ export function ReliabilityScreen({
   const steps = reliabilitySteps(permissions);
   const back = useCallback(() => {
     if (!onboarding) onExit();
-    else setIndex((i) => Math.max(0, i - 1));
+    else {
+      list.current?.scrollToOffset({ offset: 0, animated: false });
+      setIndex((i) => Math.max(0, i - 1));
+    }
     return true;
   }, [onboarding, onExit]);
   useEffect(() => {
@@ -91,6 +97,7 @@ export function ReliabilityScreen({
   }
   function next() {
     if (index < steps.length - 1) {
+      list.current?.scrollToOffset({ offset: 0, animated: false });
       setIndex(index + 1);
       return;
     }
@@ -107,9 +114,23 @@ export function ReliabilityScreen({
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
       <FlatList
+        ref={list}
         contentContainerStyle={{ padding: 24, gap: 20 }}
-        data={onboarding ? steps.slice(index, index + 1) : steps}
-        keyExtractor={(step) => step.kind}
+        data={(onboarding ? steps.slice(index, index + 1) : steps).map((step) => ({
+          step,
+          locale,
+          onboarding,
+          index,
+          total: steps.length,
+          confirmed: confirmed.has(step.kind),
+          open,
+          next,
+          confirm: () => {
+            setConfirmed(new Set([...confirmed, step.kind]));
+            if (onboarding) next();
+          },
+        }))}
+        keyExtractor={(row) => row.step.kind}
         ListHeaderComponent={
           <View className="gap-5">
             <Text style={bold} accessibilityRole="header" className="text-title text-foreground">
@@ -130,64 +151,7 @@ export function ReliabilityScreen({
             <Button label={copy(locale)("switchLanguage")} onPress={switchLanguage} />
           </View>
         }
-        renderItem={({ item: step }) => (
-          <View key={step.kind} className="gap-4 border-b border-border pb-6">
-            {onboarding && (
-              <Text style={regular} className="text-label text-muted-foreground">
-                {index + 1} / {steps.length}
-              </Text>
-            )}
-            <Text style={bold} accessibilityRole="header" className="text-question text-foreground">
-              {t(step.kind)}
-            </Text>
-            <Text style={regular} className="text-body text-foreground">
-              {t(`${step.kind}Hint`)}
-            </Text>
-            <Text
-              accessibilityLiveRegion="polite"
-              style={regular}
-              className={
-                step.state === "granted" ? "text-body text-primary" : "text-body text-attention"
-              }
-            >
-              {t(step.state)}
-            </Text>
-            {step.restrictedSettings && (
-              <>
-                <Text style={regular} className="text-body text-attention">
-                  {t("restricted")}
-                </Text>
-                <Button label={t("appInfo")} onPress={() => open("appInfo")} />
-              </>
-            )}
-            {step.kind !== "recents" && (
-              <Button label={t("open")} onPress={() => open(step.kind)} />
-            )}
-            {step.state === "unknown" && (
-              <>
-                {confirmed.has(step.kind) && (
-                  <Text style={regular} className="text-body text-muted-foreground">
-                    {t("confirmed")}
-                  </Text>
-                )}
-                <Button
-                  label={t("manual")}
-                  onPress={() => {
-                    setConfirmed(new Set([...confirmed, step.kind]));
-                    if (onboarding) next();
-                  }}
-                />
-                <Button
-                  label={t("missing")}
-                  onPress={() => {
-                    if (onboarding) next();
-                    else open("appInfo");
-                  }}
-                />
-              </>
-            )}
-          </View>
-        )}
+        renderItem={renderReliabilityRow}
         ListFooterComponent={
           <View className="gap-5">
             {error && (
@@ -220,6 +184,87 @@ export function ReliabilityScreen({
           </View>
         }
       />
+    </View>
+  );
+}
+
+interface ReliabilityRowProps {
+  step: ReliabilityStep;
+  locale: Locale;
+  onboarding: boolean;
+  index: number;
+  total: number;
+  confirmed: boolean;
+  open: (kind: ReliabilityKind | "appInfo") => void;
+  next: () => void;
+  confirm: () => void;
+}
+function renderReliabilityRow({ item }: ListRenderItemInfo<ReliabilityRowProps>) {
+  return <ReliabilityRow {...item} />;
+}
+function ReliabilityRow({
+  step,
+  locale,
+  onboarding,
+  index,
+  total,
+  confirmed,
+  open,
+  next,
+  confirm,
+}: ReliabilityRowProps) {
+  const t = reliabilityCopy(locale);
+  return (
+    <View className="gap-4 border-b border-border pb-6">
+      {onboarding && (
+        <Text style={regular} className="text-label text-muted-foreground">
+          {index + 1} / {total}
+        </Text>
+      )}
+      <Text style={bold} accessibilityRole="header" className="text-question text-foreground">
+        {t(step.kind)}
+      </Text>
+      <Text style={regular} className="text-body text-foreground">
+        {t(`${step.kind}Hint`)}
+      </Text>
+      <Text
+        accessibilityLiveRegion="polite"
+        style={regular}
+        className={step.state === "granted" ? "text-body text-primary" : "text-body text-attention"}
+      >
+        {t(step.state)}
+      </Text>
+      {step.restrictedSettings && (
+        <>
+          <Text style={regular} className="text-body text-attention">
+            {t("restricted")}
+          </Text>
+          <Button label={t("appInfo")} onPress={() => open("appInfo")} />
+        </>
+      )}
+      {step.kind !== "recents" && <Button label={t("open")} onPress={() => open(step.kind)} />}
+      {step.state === "unknown" && (
+        <>
+          {confirmed && (
+            <Text style={regular} className="text-body text-muted-foreground">
+              {t("confirmed")}
+            </Text>
+          )}
+          <Button
+            label={t("manual")}
+            onPress={() => {
+              confirm();
+            }}
+          />
+          <Button
+            label={t("missing")}
+            onPress={() => {
+              if (onboarding) next();
+              else open("appInfo");
+            }}
+          />
+        </>
+      )}
     </View>
   );
 }

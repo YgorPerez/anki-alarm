@@ -37,3 +37,22 @@ The APK still needs the locked/unlocked, silent/DND, reboot with PIN, time/zone 
 kill/restart and OEM scenarios documented in `docs/research/oem-background-limits.md`. Denying
 notifications, exact alarms, full-screen intent or overlay can prevent delivery or screen takeover;
 the alarm list exposes links to missing permissions. Force-stop removes alarms until app launch.
+
+## Reliability setup (#44)
+
+`getPermissions()` now returns Core's `AlarmPermissions`, with `granted`, `denied` or `unknown`
+values rather than booleans. It includes the manufacturer, SDK, install source and standby bucket.
+`backgroundRestricted: granted` means Android allows background activity. MIUI lock-screen and
+background-window app-ops are best-effort reads; inaccessible APIs return `unknown`. Autostart,
+PowerKeeper, Samsung sleep lists and Recents locking require manual checks.
+
+`request(kind)` returns whether a runtime prompt or settings page was opened. OEM activities may
+change; failed launches fall back to App info. Notification requests use the runtime prompt once,
+then notification settings for denied access or a disabled channel. Overlay setup re-reads the
+permission before opening Settings. Downloaded/local installs on Android 15+ get restricted-settings
+instructions only while overlay access is missing.
+
+`isOnboardingComplete()` and `completeOnboarding()` use local SharedPreferences, independently of
+alarm storage and sync. Finishing does not claim all permissions were granted. Manual confirmations
+last only for the current checklist visit; reopening Settings starts a fresh check. App resume
+re-reads permissions, and an active ring takes priority over onboarding and Settings.
