@@ -12,6 +12,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "react-native-webview": standIn("webview.ts"),
+      "react-native-svg": standIn("svg.ts"),
       "react-native": standIn("react-native.ts"),
       "react-native-safe-area-context": standIn("safe-area-context.ts"),
       "expo-sqlite": standIn("expo-sqlite.ts"),
@@ -22,5 +23,8 @@ export default defineConfig({
     name: "mobile",
     include: ["src/**/*.test.{ts,tsx}"],
     setupFiles: ["./test/setup.ts"],
+    // TanStack Charts goes through Vite so its react-native and react-native-svg imports reach
+    // the stand-ins.
+    server: { deps: { inline: [/@tanstack\/charts/] } },
   },
 });

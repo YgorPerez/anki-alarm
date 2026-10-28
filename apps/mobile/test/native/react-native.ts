@@ -48,3 +48,5 @@ export const BackHandler = {
 };
 
 export const useColorScheme = () => "light";
+
+export const useWindowDimensions = () => ({ width: 400, height: 800, scale: 2, fontScale: 1 });
