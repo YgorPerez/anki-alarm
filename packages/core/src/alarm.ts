@@ -13,8 +13,48 @@ export interface Alarm {
   rule: AlarmRule;
   vibrate: boolean;
   rampSeconds: number;
-  sound: string | null;
+  sound: AlarmSound;
 }
+
+/** The sounds shipped in the app. Native plays each from `res/raw/alarm_<id>`. */
+export const BUNDLED_SOUNDS = ["dawn", "chimes", "classic"] as const;
+export type BundledSound = (typeof BUNDLED_SOUNDS)[number];
+
+/**
+ * What rings. `default` is the phone's alarm sound. A ringtone (from the system picker) or a file
+ * is a URI on this phone; native copies it before the ring, so another phone falls back.
+ */
+export type AlarmSound =
+  | { kind: "default" }
+  | { kind: "bundled"; id: BundledSound }
+  | { kind: "ringtone" | "file"; uri: string; title: string };
+
+const isBundled = (id: unknown): id is BundledSound => BUNDLED_SOUNDS.some((sound) => sound === id);
+
+/** Reads a stored or synced sound. Anything it doesn't recognize is the phone's alarm sound. */
+export function parseAlarmSound(value: unknown): AlarmSound {
+  const fields: Partial<Record<string, unknown>> =
+    typeof value === "object" && value !== null ? value : {};
+  const { kind, id, uri, title } = fields;
+  if (kind === "bundled" && isBundled(id)) return { kind, id };
+  if ((kind === "ringtone" || kind === "file") && typeof uri === "string" && uri) {
+    return { kind, uri, title: typeof title === "string" ? title : "" };
+  }
+  return { kind: "default" };
+}
+
+/** Volume ramp times offered in the editor, in seconds. 0 rings at full volume at once. */
+export const RAMP_CHOICES = [0, 15, 30, 60, 120, 300] as const;
+
+export const newAlarm = (id: string): Alarm => ({
+  id,
+  label: "",
+  enabled: true,
+  rule: { hour: 7, minute: 0, repeatDays: [1, 2, 3, 4, 5] },
+  vibrate: true,
+  rampSeconds: 30,
+  sound: { kind: "bundled", id: "dawn" },
+});
 
 export const RING_POLICY = { leaveSeconds: 10, idleSeconds: 20, awakeCheckSeconds: 60 };
 

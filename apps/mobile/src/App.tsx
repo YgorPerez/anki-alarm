@@ -1,5 +1,5 @@
 import { UpdateOffer } from "./UpdateOffer.tsx";
-import { nextRing, type Alarm, type Locale } from "@app/core";
+import { newAlarm, nextRing, type Alarm, type Locale } from "@app/core";
 import {
   AtkinsonHyperlegible_400Regular,
   AtkinsonHyperlegible_700Bold,
@@ -162,17 +162,7 @@ function Home() {
                 <Pressable
                   accessibilityRole="button"
                   className="rounded-pill bg-primary p-4"
-                  onPress={() =>
-                    setEditing({
-                      id: native.createId(),
-                      label: "",
-                      enabled: true,
-                      rule: { hour: 7, minute: 0, repeatDays: [1, 2, 3, 4, 5] },
-                      vibrate: true,
-                      rampSeconds: 30,
-                      sound: null,
-                    })
-                  }
+                  onPress={() => setEditing(newAlarm(native.createId()))}
                 >
                   <Text className="text-body text-primary-foreground">{t("add")}</Text>
                 </Pressable>
