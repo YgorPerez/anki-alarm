@@ -31,6 +31,18 @@ function deckIds(collection: CollectionState, deckId: string) {
   );
 }
 
+const voidedIds = (log: readonly LogEntry[]) =>
+  new Set(log.filter((e) => e.kind === "void").map((e) => e.targetId));
+
+/** The answers that carry this ring (or awake check) id and weren't undone, oldest first. */
+const answersFor = (log: readonly LogEntry[], ringId: string, voided: ReadonlySet<string>) =>
+  log
+    .filter(
+      (e): e is LogEntry & { kind: "review" } =>
+        e.kind === "review" && e.origin === "alarm" && e.ringId === ringId && !voided.has(e.id),
+    )
+    .sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
+
 export interface AlarmSessionInput {
   collection: CollectionState;
   log: readonly LogEntry[];
@@ -45,13 +57,8 @@ export interface AlarmSessionInput {
  * progress survives a restart. Daily limits don't apply: the session always gets its cards.
  */
 export function alarmSession({ collection, log, deckId, need, ringId, now }: AlarmSessionInput) {
-  const voided = new Set(log.filter((e) => e.kind === "void").map((e) => e.targetId));
-  const answers = log
-    .filter(
-      (e): e is LogEntry & { kind: "review" } =>
-        e.kind === "review" && e.origin === "alarm" && e.ringId === ringId && !voided.has(e.id),
-    )
-    .sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
+  const voided = voidedIds(log);
+  const answers = answersFor(log, ringId, voided);
   const right = answers.filter((a) => isRight(a.grade)).length;
   const done = right >= need;
   const decks = deckId ? deckIds(collection, deckId) : new Set<string>();
@@ -112,4 +119,24 @@ export function alarmSession({ collection, log, deckId, need, ringId, now }: Ala
     done,
     next: pick && note && noteType ? { ...pick, note, noteType, deckName } : null,
   };
+}
+
+export interface AwakeCheckInput {
+  collection: CollectionState;
+  log: readonly LogEntry[];
+  deckId: string | null;
+  /** Native's id for the check. Its answer carries it as `ringId`, so a restart sees it passed. */
+  checkId: string;
+  now: number;
+}
+
+/**
+ * The awake check's one card, picked as a session's first card would be. Any grade passes it:
+ * the answer only has to prove someone is awake.
+ */
+export function awakeCheckSession({ collection, log, deckId, checkId, now }: AwakeCheckInput) {
+  const passed = answersFor(log, checkId, voidedIds(log)).length > 0;
+  if (passed) return { passed, next: null };
+  const { next } = alarmSession({ collection, log, deckId, need: 1, ringId: checkId, now });
+  return { passed, next };
 }

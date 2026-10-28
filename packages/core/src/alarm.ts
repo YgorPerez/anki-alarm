@@ -20,6 +20,10 @@ export interface Alarm {
   deckId: string | null;
   /** N: the cards to rate Good or Easy before the alarm dismisses. */
   need: number;
+  /** One card a while after dismissal; no answer in time rings the alarm again. */
+  awakeCheck: boolean;
+  /** Minutes from dismissal to the awake check's prompt. */
+  awakeCheckMinutes: number;
 }
 
 /** The sounds shipped in the app. Native plays each from `res/raw/alarm_<id>`. */
@@ -62,26 +66,51 @@ export const newAlarm = (id: string): Alarm => ({
   sound: { kind: "bundled", id: "dawn" },
   deckId: null,
   need: 3,
+  awakeCheck: false,
+  awakeCheckMinutes: 5,
 });
 
 /** The largest N the editor offers. */
 export const MAX_NEED = 50;
 
-type StoredAlarm = Omit<Alarm, "sound" | "deckId" | "need"> & {
-  sound?: unknown;
-  deckId?: unknown;
-  need?: unknown;
-};
+/** Awake check delays offered in the editor, in minutes. */
+export const AWAKE_CHECK_DELAYS = [1, 3, 5, 10, 15, 30] as const;
+const MAX_AWAKE_CHECK_MINUTES = 60;
+
+/** Seconds from dismissal to the awake check, or null when the alarm has none. */
+export const awakeCheckAfter = (alarm: Alarm) =>
+  alarm.awakeCheck ? alarm.awakeCheckMinutes * 60 : null;
+
+/** An integer clamped to `min..max`; anything else is `fallback`. */
+const whole = (value: unknown, min: number, max: number, fallback: number) =>
+  typeof value === "number" && Number.isInteger(value)
+    ? Math.min(max, Math.max(min, value))
+    : fallback;
+
+type Filled = "sound" | "deckId" | "need" | "awakeCheck" | "awakeCheckMinutes";
+type StoredAlarm = Omit<Alarm, Filled> & Partial<Record<Filled, unknown>>;
 /** Reads a stored, synced or native alarm, filling in what older versions didn't save. */
-export function readAlarm({ sound, deckId, need, ...alarm }: StoredAlarm): Alarm {
+export function readAlarm({
+  sound,
+  deckId,
+  need,
+  awakeCheck,
+  awakeCheckMinutes,
+  ...alarm
+}: StoredAlarm): Alarm {
+  const defaults = newAlarm(alarm.id);
   return {
     ...alarm,
     sound: parseAlarmSound(sound),
     deckId: typeof deckId === "string" && deckId ? deckId : null,
-    need:
-      typeof need === "number" && Number.isInteger(need)
-        ? Math.min(MAX_NEED, Math.max(1, need))
-        : newAlarm(alarm.id).need,
+    need: whole(need, 1, MAX_NEED, defaults.need),
+    awakeCheck: awakeCheck === true,
+    awakeCheckMinutes: whole(
+      awakeCheckMinutes,
+      1,
+      MAX_AWAKE_CHECK_MINUTES,
+      defaults.awakeCheckMinutes,
+    ),
   };
 }
 
@@ -129,6 +158,8 @@ export function alarmFromRecord(record: AlarmRecord): Alarm {
     sound: record.fields.sound?.value,
     deckId: record.fields.deckId?.value,
     need: record.fields.need?.value,
+    awakeCheck: record.fields.awakeCheck?.value,
+    awakeCheckMinutes: record.fields.awakeCheckMinutes?.value,
   });
 }
 
