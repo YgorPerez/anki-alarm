@@ -27,8 +27,15 @@ export type {
   CollectionEnvironment,
 } from "./collection.ts";
 
-export { nextRing, RING_POLICY } from "./alarm.ts";
-export type { Alarm, AlarmRule } from "./alarm.ts";
+export {
+  nextRing,
+  newAlarm,
+  RING_POLICY,
+  RAMP_CHOICES,
+  BUNDLED_SOUNDS,
+  parseAlarmSound,
+} from "./alarm.ts";
+export type { Alarm, AlarmRule, AlarmSound, BundledSound } from "./alarm.ts";
 
 export { releaseVersion } from "./release.ts";
 export { newerApk, SYNC_PROTOCOL } from "./release.ts";

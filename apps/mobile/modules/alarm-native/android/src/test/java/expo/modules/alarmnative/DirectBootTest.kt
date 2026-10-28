@@ -22,7 +22,7 @@ class DirectBootTest {
   @org.junit.After fun restoreZone() { java.util.TimeZone.setDefault(originalZone) }
   private val ctx: Context get() = RuntimeEnvironment.getApplication()
   private fun alarm(sound: String? = null) = JSONObject().put("id", "morning").put("enabled", true)
-    .put("label", "Português").put("sound", sound ?: JSONObject.NULL)
+    .put("label", "Português").put("sound", sound?.let { JSONObject().put("kind", "file").put("uri", it) } ?: JSONObject.NULL)
     .put("rule", JSONObject().put("hour", 7).put("minute", 0).put("repeatDays", JSONArray("[1,2,3,4,5,6,7]")))
 
   @Before fun reset() {
@@ -35,7 +35,7 @@ class DirectBootTest {
     AlarmScheduler.setAlarms(ctx, JSONArray().put(alarm("file:///no-longer-readable.ogg")), JSONObject())
     assertEquals(1, AlarmStore.alarms(ctx).length())
     assertTrue(AlarmStore.prefs(ctx).getLong("due.morning", 0) > 0)
-    assertTrue(AlarmStore.alarms(ctx).getJSONObject(0).isNull("sound"))
+    assertFalse(AlarmStore.alarms(ctx).getJSONObject(0).has("soundFile"))
   }
   @Test fun lockedScreenUsesMirroredAppearanceAndLocale() {
     AlarmStore.event(ctx, "ringStarted", newRing = JSONObject().put("id", "same-ring")
@@ -82,12 +82,29 @@ class DirectBootTest {
     val source = java.io.File(ctx.cacheDir, "sound.ogg").apply { writeText("sample sound") }
     val alarms = JSONArray().put(alarm(android.net.Uri.fromFile(source).toString()))
     AlarmScheduler.setAlarms(ctx, alarms, JSONObject())
-    val saved = java.io.File(android.net.Uri.parse(AlarmStore.alarms(ctx).getJSONObject(0).getString("sound")).path!!)
+    val saved = java.io.File(android.net.Uri.parse(AlarmStore.alarms(ctx).getJSONObject(0).getString("soundFile")).path!!)
     assertEquals(ctx.createDeviceProtectedStorageContext().filesDir, saved.parentFile)
     source.delete()
     // Reconciliation still carries the original URI from SQLite.
     AlarmScheduler.setAlarms(ctx, JSONArray().put(alarm(android.net.Uri.fromFile(source).toString())), JSONObject())
     assertEquals("sample sound", saved.readText())
+  }
+
+  @Test fun bundledSoundsAreFrozenAndRingWithPerAlarmOptions() {
+    for (id in listOf("dawn", "chimes", "classic")) {
+      val choice = alarm().put("sound", JSONObject().put("kind", "bundled").put("id", id))
+        .put("vibrate", false).put("rampSeconds", 120)
+      AlarmScheduler.setAlarms(ctx, JSONArray().put(choice), JSONObject())
+      val saved = AlarmStore.alarms(ctx).getJSONObject(0)
+      val file = java.io.File(android.net.Uri.parse(saved.getString("soundFile")).path!!)
+      assertEquals(ctx.createDeviceProtectedStorageContext().filesDir, file.parentFile)
+      assertTrue(file.length() > 44)
+      AlarmStore.fire(ctx, saved)
+      assertEquals(android.net.Uri.fromFile(file), AlarmStore.sound(ctx))
+      assertEquals(0, AlarmStore.setting(ctx, "vibrate"))
+      assertEquals(120, AlarmStore.setting(ctx, "rampSeconds"))
+      AlarmStore.finish(ctx)
+    }
   }
 
   private fun scheduleOnce() {

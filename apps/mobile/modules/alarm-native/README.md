@@ -72,7 +72,7 @@ To verify on a PIN-protected emulator (in addition to the JVM regression tests):
 
 1. Install the built APK, open the app and grant notification/full-screen/overlay permissions.
 2. Set a PIN in Android Settings. Save an enabled alarm for three minutes ahead. For a custom
-   sound, use a readable local URI through `setAlarms`; the shell editor has no sound picker yet.
+   sound, choose a bundled sound, system ringtone or audio file in the alarm editor.
 3. Run `adb reboot`, leave the PIN locked, and inspect `adb logcat -s AlarmNative` and
    `adb shell dumpsys alarm`. Confirm re-arming at locked boot, sound playback from the saved file,
    and the native clock, label and unlock instruction. Leaving that activity must not silence it.
@@ -84,3 +84,25 @@ To verify on a PIN-protected emulator (in addition to the JVM regression tests):
    Unlocking and subsequent boot broadcasts must not repeat either occurrence.
 
 Hardware is still needed to check audible output, vibration and OEM restrictions.
+
+## Sound and vibration (#45)
+
+Core stores a tagged sound choice (`default`, `bundled`, `ringtone`, `file`). Old null sounds
+normalize to `default`. The native module owns the Android picker, audio playback, previews,
+vibration and volume ramp. Bundled WAVs are generated tones with no external recordings.
+
+The editor offers Dawn, Chimes and Classic, the Android alarm ringtone picker and an audio document
+picker. File choices retain a persistable read grant when supported. Cancel leaves the choice alone.
+Previews stop after eight seconds, when the app leaves the foreground or when the editor unmounts.
+Saving an alarm freezes its selected sound in device-protected files before scheduling. An unchanged
+choice reuses its copy, including after its original file disappears. A different unreadable choice
+falls back rather than playing the previous choice. App updates refresh saved copies when possible.
+
+The service tries the frozen copy, the system alarm sound and other system tones, then generates a
+tone if none can be opened. Both MediaPlayer and the generated tone follow silence/full-volume
+session signals. The ramp runs natively in decibels; zero seconds means full volume immediately.
+
+Device checks: save and ring each source type, cancel both pickers, change vibration and ramp,
+delete the original file, reboot with a PIN without unlocking, and remove the saved copy to check
+fallback. A device with inaccessible system tones is needed to verify the final generated tone.
+Confirm Start silences both audio paths and vibration, and leaving/idle restores them at full.

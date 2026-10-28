@@ -32,31 +32,17 @@ object AlarmScheduler {
   }
   @Synchronized fun setAlarms(ctx: Context, alarms: JSONArray, policy: JSONObject, now: Long = System.currentTimeMillis()) {
     val previous = AlarmStore.alarms(ctx)
+    val sources = (0 until previous.length()).associate { previous.getJSONObject(it).let { a -> a.getString("id") to a.optString("soundSource") } }
+    val staleBefore = ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime
     val copied = JSONArray()
     for (i in 0 until alarms.length()) {
       val alarm = alarms.getJSONObject(i)
-      // Freeze user-selected sound into Direct Boot storage before scheduling it.
-      val sound = alarm.optString("sound")
-      if (sound.isNotEmpty() && sound != "null") {
-        val file = java.io.File(ctx.createDeviceProtectedStorageContext().filesDir, "alarm-${alarm.getString("id")}.audio")
-        val uri = Uri.fromFile(file).toString()
-        val copy = android.util.AtomicFile(file)
-        if (sound != uri) {
-          var output: java.io.FileOutputStream? = null
-          try {
-            ctx.contentResolver.openInputStream(Uri.parse(sound)).use { input ->
-              requireNotNull(input) { "Sound provider returned no stream" }
-              output = copy.startWrite()
-              input.copyTo(requireNotNull(output))
-              copy.finishWrite(output)
-            }
-          } catch (e: Exception) {
-            copy.failWrite(output)
-            AlarmStore.log(ctx, "Can't copy alarm sound; using saved copy or fallback: ${e.message}")
-          }
-        }
-        alarm.put("sound", if (file.exists() && file.length() > 0) uri else JSONObject.NULL)
-      }
+      // Freeze the chosen sound into Direct Boot storage before scheduling it.
+      val source = Sounds.source(ctx, alarm.optJSONObject("sound"))
+      val file = java.io.File(ctx.createDeviceProtectedStorageContext().filesDir, "alarm-${alarm.getString("id")}.audio")
+      val frozen = SoundFile.freeze(source, sources[alarm.getString("id")], file, staleBefore) { ctx.contentResolver.openInputStream(Uri.parse(it))!! }
+      if (source != null && frozen == null) AlarmStore.log(ctx, "can't copy $source: the alarm will ring the phone's alarm sound")
+      alarm.putOpt("soundSource", source).putOpt("soundFile", frozen?.let { Uri.fromFile(it).toString() })
       copied.put(alarm)
     }
     check(AlarmStore.prefs(ctx).edit().putString("alarms", copied.toString()).putString("policy", policy.toString()).commit())

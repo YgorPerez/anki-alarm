@@ -1,7 +1,8 @@
+import { AlarmSoundSettings } from "./AlarmSoundSettings.tsx";
 import { ReliabilityScreen } from "./ReliabilityScreen.tsx";
 import { reliabilityCopy } from "./reliability-copy.ts";
 import { UpdateOffer } from "./UpdateOffer.tsx";
-import { nextRing, themeFor, type Alarm, type Locale } from "@app/core";
+import { newAlarm, nextRing, themeFor, type Alarm, type Locale } from "@app/core";
 import {
   AtkinsonHyperlegible_400Regular,
   AtkinsonHyperlegible_700Bold,
@@ -226,17 +227,7 @@ function Home() {
                 <Pressable
                   accessibilityRole="button"
                   className="rounded-pill bg-primary p-4"
-                  onPress={() =>
-                    setEditing({
-                      id: native.createId(),
-                      label: "",
-                      enabled: true,
-                      rule: { hour: 7, minute: 0, repeatDays: [1, 2, 3, 4, 5] },
-                      vibrate: true,
-                      rampSeconds: 30,
-                      sound: null,
-                    })
-                  }
+                  onPress={() => setEditing(newAlarm(native.createId()))}
                 >
                   <Text className="text-body text-primary-foreground">{t("add")}</Text>
                 </Pressable>
@@ -306,6 +297,7 @@ function AlarmEditor({
   onSave: (alarm: Alarm) => void;
   onCancel: () => void;
 }) {
+  const [options, setOptions] = useState(alarm);
   const [label, setLabel] = useState(alarm.label);
   const [time, setTime] = useState(
     `${String(alarm.rule.hour).padStart(2, "0")}:${String(alarm.rule.minute).padStart(2, "0")}`,
@@ -362,6 +354,7 @@ function AlarmEditor({
         }}
         className="rounded-lg bg-surface p-4 text-body text-foreground"
       />
+      <AlarmSoundSettings alarm={options} locale={locale} onChange={setOptions} />
       <Text accessibilityRole="alert" className="text-body text-attention">
         {error}
       </Text>
@@ -388,7 +381,7 @@ function AlarmEditor({
               null
             )
               throw new Error("No next ring");
-            onSave({ ...alarm, label, rule });
+            onSave({ ...options, label, rule });
           } catch {
             setError(t("invalid"));
           }

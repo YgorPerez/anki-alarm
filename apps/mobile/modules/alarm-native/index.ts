@@ -2,6 +2,9 @@ import type { AlarmPermissions, ReliabilityKind } from "@app/core";
 import { requireNativeModule } from "expo";
 
 interface NativeAlarm {
+  pickSound: (kind: "ringtone" | "file", currentUri: string | null) => Promise<string | null>;
+  previewSound: (sound: string) => void;
+  stopPreview: () => void;
   createId: () => string;
   setAlarms: (alarms: string, policy: string) => void;
   setAppearance: (colors: string, locale: string) => void;

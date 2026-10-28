@@ -15,7 +15,7 @@ const alarm: Alarm = {
   rule: { hour: 7, minute: 30, repeatDays: [1, 2, 3, 4, 5] },
   vibrate: true,
   rampSeconds: 30,
-  sound: null,
+  sound: { kind: "default" },
 };
 it("saves alarms and replaces the native schedule with every enabled alarm", async () => {
   const native = memoryAlarmService();

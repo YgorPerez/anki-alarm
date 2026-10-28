@@ -20,6 +20,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -73,11 +74,13 @@ class AlarmService : Service() {
   private val handler = Handler(Looper.getMainLooper())
   private var player: MediaPlayer? = null
   private var tone: android.media.ToneGenerator? = null
+  private var toneVolume = -1
   private var vibrator: Vibrator? = null
   private var focus: AudioFocusRequest? = null
   private var savedAlarmVolume = -1
   private var target = 1f
-  private var rampPerTick = 1f
+  private var rampSeconds = 0
+  private var rampFrom = -1L // elapsedRealtime when the ramp began; -1 when not ramping
 
   var level = 0f
     private set
@@ -90,8 +93,8 @@ class AlarmService : Service() {
 
   private val tick = object : Runnable {
     override fun run() {
-      level = if (level < target) minOf(target, level + rampPerTick) else target
-      player?.setVolume(vol(), vol())
+      level = if (rampFrom >= 0) minOf(target, Ramp.level(SystemClock.elapsedRealtime() - rampFrom, rampSeconds)) else target
+      applyVolume()
       handler.postDelayed(this, 250)
     }
   }
@@ -200,9 +203,9 @@ class AlarmService : Service() {
         "ringerMode=${getSystemService(AudioManager::class.java).ringerMode}",
     )
     AlarmActivityListener.applyLockFlags(true)
-    if (player == null) startSound()
-    if (vibrator == null && setting("vibrate") == 1 && setting("silent") == 0) startVibration()
     if (!sessionStarted) setTarget(1f, ramp = first)
+    if (player == null && tone == null) startSound()
+    if (vibrator == null && setting("vibrate") == 1 && setting("silent") == 0) startVibration()
     handler.removeCallbacks(tick)
     handler.post(tick)
     handler.removeCallbacks(watchdogRefresh)
@@ -216,11 +219,10 @@ class AlarmService : Service() {
 
   private fun setTarget(t: Float, ramp: Boolean) {
     target = t
-    val seconds = maxOf(1, setting("rampSeconds"))
-    rampPerTick = 1f / (seconds * 4)
-    if (!ramp || t < level) level = t
-    if (ramp && level == 0f) level = 0.05f
-    player?.setVolume(vol(), vol())
+    rampSeconds = setting("rampSeconds")
+    rampFrom = if (ramp) SystemClock.elapsedRealtime() else -1L
+    level = if (ramp) minOf(t, Ramp.level(0, rampSeconds)) else t
+    applyVolume()
   }
 
   private fun startSound() {
@@ -270,12 +272,24 @@ class AlarmService : Service() {
     }
     // Last resort, e.g. before the first unlock if the media provider can't serve ringtones.
     try {
-      tone = android.media.ToneGenerator(AudioManager.STREAM_ALARM, if (setting("silent") == 1) 0 else 100)
-      tone!!.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, -1)
+      toneVolume = (vol() * 100).toInt()
+      tone = android.media.ToneGenerator(AudioManager.STREAM_ALARM, toneVolume)
+      if (toneVolume > 0) tone!!.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, -1)
       log("playing ToneGenerator fallback")
     } catch (e: Exception) {
       log("NO SOUND: every ringtone URI and the tone fallback failed: ${e.message}")
     }
+  }
+
+  private fun applyVolume() {
+    player?.setVolume(vol(), vol())
+    if (tone == null) return
+    val volume = (vol() * 100).toInt()
+    if (volume == toneVolume) return
+    tone?.release()
+    toneVolume = volume
+    tone = android.media.ToneGenerator(AudioManager.STREAM_ALARM, volume)
+    if (volume > 0) tone?.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, -1)
   }
 
   private fun startVibration() {
