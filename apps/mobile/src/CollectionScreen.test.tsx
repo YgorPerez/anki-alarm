@@ -4,6 +4,7 @@ import { describe, expect, test } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { CollectionScreen } from "./CollectionScreen.tsx";
+import { memoryAnkiDroid } from "./ankidroid.ts";
 
 describe("CollectionScreen", () => {
   test("creates a deck and lists it", async () => {
@@ -11,7 +12,12 @@ describe("CollectionScreen", () => {
       <QueryClientProvider
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
-        <CollectionScreen locale="pt-BR" onExit={() => {}} onTheme={() => {}} />
+        <CollectionScreen
+          locale="pt-BR"
+          onExit={() => {}}
+          onTheme={() => {}}
+          ankiDroid={memoryAnkiDroid({ installed: null })}
+        />
       </QueryClientProvider>,
     );
 

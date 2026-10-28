@@ -16,6 +16,7 @@ export default defineConfig({
       "react-native-safe-area-context": standIn("safe-area-context.ts"),
       "expo-sqlite": standIn("expo-sqlite.ts"),
       "expo-crypto": standIn("expo-crypto.ts"),
+      "expo-file-system": standIn("expo-file-system.ts"),
     },
   },
   test: {

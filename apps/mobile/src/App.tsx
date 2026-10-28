@@ -9,6 +9,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/atkinson-hyperlegible";
 import { CollectionScreen } from "./CollectionScreen.tsx";
+import { androidAnkiDroid } from "./ankidroid-android.ts";
 import { Effect } from "effect";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
@@ -193,6 +194,7 @@ function Home() {
         locale={locale}
         onExit={() => setShowDecks(false)}
         onTheme={() => setShowTheme(true)}
+        ankiDroid={androidAnkiDroid}
       />
     );
 

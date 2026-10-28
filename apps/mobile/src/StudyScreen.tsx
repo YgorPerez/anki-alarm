@@ -7,6 +7,7 @@ import { WebView } from "react-native-webview";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { localData } from "./database.ts";
 import { copy } from "./copy.ts";
+import { mediaBaseUrl } from "./media.ts";
 
 export function StudyScreen({
   deckId,
@@ -20,10 +21,10 @@ export function StudyScreen({
   const t = copy(locale);
   const insets = useSafeAreaInsets();
   const dark = useColorScheme() === "dark";
-  const { query, cardId, note, type, busy, error, revealed, reveal, answer } = useStudySession(
-    deckId,
-    onExit,
-  );
+  const { query, cardId, ordinal, note, type, busy, error, revealed, reveal, answer } =
+    useStudySession(deckId, onExit);
+  const deckName =
+    query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value ?? "";
   return (
     <View
       className="flex-1 gap-4 bg-background px-6"
@@ -42,7 +43,7 @@ export function StudyScreen({
         className="text-title text-foreground"
         style={{ fontFamily: "AtkinsonHyperlegible_700Bold" }}
       >
-        {query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value ?? t("study")}
+        {deckName || t("study")}
       </Text>
       {(error || query.isError) && (
         <Text accessibilityRole="alert" className="text-body text-destructive">
@@ -65,10 +66,17 @@ export function StudyScreen({
             key={`${cardId}-${revealed}-${dark}`}
             accessibilityLabel={t(revealed ? "answer" : "front")}
             style={{ flex: 1, backgroundColor: dark ? "#000" : "#fff" }}
-            source={{ html: renderCard(note, type, revealed ? "back" : "front", dark) }}
+            source={{
+              html: renderCard(note, type, ordinal, revealed ? "back" : "front", dark, deckName),
+              // Media referenced by file name loads from the phone's media folder.
+              baseUrl: mediaBaseUrl(),
+            }}
             javaScriptEnabled={false}
-            originWhitelist={["about:*"]}
-            onShouldStartLoadWithRequest={(request) => request.url === "about:blank"}
+            allowFileAccess
+            originWhitelist={["about:*", "file://*"]}
+            onShouldStartLoadWithRequest={(request) =>
+              request.url === "about:blank" || request.url === mediaBaseUrl()
+            }
           />
           <AnswerControls
             revealed={revealed}
@@ -197,6 +205,7 @@ function useStudySession(deckId: string, onExit: () => void) {
   return {
     query,
     cardId,
+    ordinal: item?.card.fields.ordinal.value ?? 0,
     note,
     type,
     busy,
