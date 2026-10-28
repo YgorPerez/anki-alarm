@@ -10,7 +10,7 @@ and the web's portable Storybook stories. Story play functions contain the inter
 the Vitest test calls each composed story's `run()`. No browser server is needed for these tests.
 Use Playwright for layout and journeys that need the real browser.
 
-The phone's test uses an in-memory SQLite database behind expo-sqlite's async interface and a
+The web's transport stand-in and the phone's test use an in-memory SQLite database behind expo-sqlite's async interface and a
 fresh QueryClient. Native host stand-ins are in `apps/mobile/test/native`; they do not prove native
 layout or platform behavior. Wait for the displayed result with `findByRole`, never a sleep.
 
@@ -31,8 +31,7 @@ screens use local data and do not make sync requests; extend scenarios when sync
 
 `vp run quality` collects oxlint, Fallow dead-code and duplicate instances, and React Doctor.
 `scripts/tooling/baseline.json` records each tool's per-file allowance. An omitted file has zero
-allowance. The initial baseline has zero oxlint/Fallow findings and one React Doctor finding in
-shadcn's generated button, which exports its variants alongside the component.
+allowance. The baseline has zero findings for all three tools.
 
 Set `QUALITY_BASE` to a Git ref to reject every increased allowance relative to that ref. CI uses
 the PR base commit or the previous push commit. The first introduction of the baseline establishes

@@ -3,7 +3,7 @@ import { createRootRoute, HeadContent, Outlet, ScriptOnce, Scripts } from "@tans
 import { useEffect, type ReactNode } from "react";
 
 import { copy } from "#/copy.ts";
-import { followTheme, THEME_SCRIPT } from "#/theme.ts";
+import { followTheme, THEME_SCRIPT, useStorageState, useStorageError } from "#/theme.ts";
 
 import css from "../styles.css?url";
 
@@ -34,6 +34,12 @@ function RootComponent() {
 function RootDocument({ children }: { children: ReactNode }) {
   const { lang = "pt-BR" } = Route.useSearch();
   useEffect(followTheme, []);
+  useEffect(() => {
+    if (import.meta.env.PROD && "serviceWorker" in navigator)
+      void navigator.serviceWorker.register("/sw.js").catch(console.error);
+  }, []);
+  const storage = useStorageState();
+  const writeError = useStorageError();
   return (
     <html lang={lang}>
       <head>
@@ -41,7 +47,18 @@ function RootDocument({ children }: { children: ReactNode }) {
         <ScriptOnce>{THEME_SCRIPT}</ScriptOnce>
       </head>
       <body>
-        {children}
+        {(storage.error || writeError) && (
+          <p role="alert" className="p-6 text-body text-destructive">
+            {copy(lang)("storageError")}
+          </p>
+        )}
+        {!storage.data && !storage.error ? (
+          <p role="status" className="p-6 text-body">
+            {copy(lang)("storageLoading")}
+          </p>
+        ) : (
+          children
+        )}
         <Scripts />
       </body>
     </html>

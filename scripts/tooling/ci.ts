@@ -43,6 +43,10 @@ if (process.argv.includes("--plan")) {
   ]);
   if (paths.includes("apps/web")) run(["run", "--filter", "@app/web", "build"]);
   if (paths.includes("apps/web")) run(["run", "--filter", "@app/web", "build-storybook"]);
+  if (paths.includes("apps/web")) {
+    run(["exec", "--filter", "@app/web", "playwright", "install", "--with-deps", "chromium"]);
+    run(["run", "--filter", "@app/web", "test:e2e"]);
+  }
   if (paths.includes("apps/mobile"))
     run([
       "exec",
