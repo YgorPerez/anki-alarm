@@ -15,11 +15,13 @@
 
   <application>
     <!-- Our own alarm and watchdog broadcasts. Not exported. -->
-    <receiver android:name=".AlarmReceiver" android:exported="false" />
+    <receiver android:name=".AlarmReceiver" android:exported="false" android:directBootAware="true" />
 
     <!-- System broadcasts that clear or shift alarms. -->
-    <receiver android:name=".BootReceiver" android:exported="true">
+    <!-- directBootAware + LOCKED_BOOT_COMPLETED: re-arm before the first unlock after a reboot. -->
+    <receiver android:name=".BootReceiver" android:exported="true" android:directBootAware="true">
       <intent-filter>
+        <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
         <action android:name="android.intent.action.BOOT_COMPLETED" />
         <action android:name="android.intent.action.QUICKBOOT_POWERON" />
         <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
@@ -32,6 +34,7 @@
     <service
       android:name=".AlarmService"
       android:exported="false"
+      android:directBootAware="true"
       android:foregroundServiceType="systemExempted|mediaPlayback" />
   </application>
 </manifest>

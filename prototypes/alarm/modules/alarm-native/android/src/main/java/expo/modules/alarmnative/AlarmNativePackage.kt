@@ -29,6 +29,8 @@ object AlarmActivityListener : ReactActivityLifecycleListener {
     val ringing = AlarmStore.isRinging(activity)
     AlarmStore.log(activity, "activity created, alarmExtra=${activity.intent?.getBooleanExtra("alarm", false)} ringing=$ringing")
     applyLockFlags(ringing)
+    // A force-stop kills the service but leaves the ringing flag: opening the app resumes the ring.
+    if (ringing && AlarmService.instance == null) AlarmService.start(activity, "app opened while ringing")
     if (callbacksRegistered) return
     callbacksRegistered = true
     activity.application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {

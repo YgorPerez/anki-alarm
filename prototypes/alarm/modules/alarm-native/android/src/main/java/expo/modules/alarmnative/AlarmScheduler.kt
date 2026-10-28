@@ -68,8 +68,13 @@ object AlarmScheduler {
         AlarmStore.log(ctx, "MISSED #${a.id}, was due ${clock.format(Date(a.at))} ($why)")
       }
     }
-    if (AlarmStore.isRinging(ctx) && AlarmService.instance == null) {
-      AlarmService.start(ctx, "session was ringing before $why")
+    if (AlarmStore.isRinging(ctx)) {
+      if (AlarmService.instance == null) {
+        AlarmService.start(ctx, "session was ringing before $why")
+      } else if (why == "BOOT_COMPLETED") {
+        // Rang before the first unlock, when the alarm screen can't open; open it now.
+        AlarmService.start(ctx, "unlocked while ringing")
+      }
     }
   }
 

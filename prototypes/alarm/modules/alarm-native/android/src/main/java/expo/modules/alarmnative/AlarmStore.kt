@@ -31,7 +31,10 @@ object AlarmStore {
 
   private val time = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
 
-  private fun prefs(ctx: Context) = ctx.getSharedPreferences("alarm_prototype", Context.MODE_PRIVATE)
+  // Device-protected storage: readable before the first unlock after a reboot (Direct Boot),
+  // so a locked phone can re-arm and ring.
+  private fun prefs(ctx: Context) =
+    ctx.createDeviceProtectedStorageContext().getSharedPreferences("alarm_prototype", Context.MODE_PRIVATE)
 
   @Synchronized
   fun log(ctx: Context, msg: String) {

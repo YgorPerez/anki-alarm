@@ -67,6 +67,7 @@ class AlarmService : Service() {
 
   private val handler = Handler(Looper.getMainLooper())
   private var player: MediaPlayer? = null
+  private var tone: android.media.ToneGenerator? = null
   private var vibrator: Vibrator? = null
   private var focus: AudioFocusRequest? = null
   private var savedAlarmVolume = -1
@@ -255,7 +256,14 @@ class AlarmService : Service() {
         log("can't play $uri: ${e.javaClass.simpleName}: ${e.message}")
       }
     }
-    log("NO SOUND: every ringtone URI failed")
+    // Last resort, e.g. before the first unlock if the media provider can't serve ringtones.
+    try {
+      tone = android.media.ToneGenerator(AudioManager.STREAM_ALARM, 100)
+      tone!!.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, -1)
+      log("playing ToneGenerator fallback")
+    } catch (e: Exception) {
+      log("NO SOUND: every ringtone URI and the tone fallback failed: ${e.message}")
+    }
   }
 
   private fun startVibration() {
@@ -353,6 +361,8 @@ class AlarmService : Service() {
       release()
     }
     player = null
+    tone?.release()
+    tone = null
     vibrator?.cancel()
     vibrator = null
     val audio = getSystemService(AudioManager::class.java)
