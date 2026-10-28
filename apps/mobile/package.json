@@ -19,6 +19,7 @@
     "@app/core": "workspace:*",
     "@app/design-tokens": "workspace:*",
     "@expo-google-fonts/atkinson-hyperlegible": "^0.4.1",
+    "@tanstack/react-form": "^1.33.5",
     "@tanstack/react-query": "^5.105.0",
     "effect": "^4.0.6",
     "expo": "~58.0.20",
