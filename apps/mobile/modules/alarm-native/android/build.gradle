@@ -20,9 +20,11 @@ dependencies {
 
 dependencies {
   testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.robolectric:robolectric:4.16.1'
   testImplementation 'org.json:json:20250517'
 }
 android.testOptions.unitTests.all {
+  systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
   systemProperty 'alarm.fixtures', file('../../../../../packages/core/fixtures/next-ring.json').absolutePath
 }
 
@@ -32,3 +34,5 @@ android.compileOptions {
 dependencies {
   coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
 }
+
+android.testOptions.unitTests.includeAndroidResources = true

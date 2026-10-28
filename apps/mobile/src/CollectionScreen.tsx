@@ -18,7 +18,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { copy } from "./copy.ts";
-import { collectionStore } from "./database.ts";
+import { localData } from "./database.ts";
+import { Effect } from "effect";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 type Form = { kind: "deck" | "note"; id?: string; first: string; second: string };
 const regular = { fontFamily: "AtkinsonHyperlegible_400Regular" };
@@ -91,8 +93,21 @@ function Field({
     </View>
   );
 }
-export function CollectionScreen({ locale, onExit }: { locale: Locale; onExit: () => void }) {
-  const [state, setState] = useState<CollectionState>();
+export function CollectionScreen({
+  locale,
+  onExit,
+  onTheme,
+}: {
+  locale: Locale;
+  onExit: () => void;
+  onTheme: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["collection"],
+    queryFn: () => Effect.runPromise(localData((data) => data.collection)),
+  });
+  const state = query.data;
   const [deckId, setDeckId] = useState<string>();
   const [form, setForm] = useState<Form>();
   const [busy, setBusy] = useState(false);
@@ -100,13 +115,9 @@ export function CollectionScreen({ locale, onExit }: { locale: Locale; onExit: (
   const [error, setError] = useState(false);
   const t = copy(locale);
   const insets = useSafeAreaInsets();
-  const load = useCallback(() => {
-    void collectionStore()
-      .then((store) => store.read())
-      .then(setState)
-      .catch(() => setError(true));
-  }, []);
-  useEffect(load, [load]);
+  const load = () => {
+    void query.refetch();
+  };
   const goBack = useCallback(() => {
     if (locked.current) return true;
     if (form) {
@@ -140,8 +151,8 @@ export function CollectionScreen({ locale, onExit }: { locale: Locale; onExit: (
     setBusy(true);
     setError(false);
     try {
-      const store = await collectionStore();
-      setState(await store.change(command));
+      await Effect.runPromise(localData((data) => data.changeCollection(command)));
+      await queryClient.invalidateQueries({ queryKey: ["collection"] });
       onSaved();
     } catch {
       setError(true);
@@ -194,11 +205,12 @@ export function CollectionScreen({ locale, onExit }: { locale: Locale; onExit: (
           ) : (
             <Button label={t("alarms")} disabled={busy} onPress={onExit} />
           )}
+          {!form && !deck && <Button label={t("theme")} disabled={busy} onPress={onTheme} />}
         </View>
         <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
           {screenTitle(t, form, deck)}
         </Text>
-        {error ? (
+        {error || query.isError ? (
           <Text accessibilityRole="alert" style={regular} className="text-body text-destructive">
             {t(state ? "error" : "loadError")}
           </Text>
@@ -208,7 +220,7 @@ export function CollectionScreen({ locale, onExit }: { locale: Locale; onExit: (
           form={form}
           deck={deck}
           t={t}
-          error={error}
+          error={error || query.isError}
           busy={busy}
           notes={notes}
           retry={() => {

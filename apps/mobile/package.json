@@ -12,10 +12,11 @@
     "rollback": "eas update:republish"
   },
   "dependencies": {
+    "@app/client-data": "workspace:*",
     "@app/core": "workspace:*",
     "@app/design-tokens": "workspace:*",
     "@expo-google-fonts/atkinson-hyperlegible": "^0.4.1",
-    "drizzle-orm": "^0.45.4",
+    "@tanstack/react-query": "^5.105.0",
     "effect": "^4.0.6",
     "expo": "~58.0.20",
     "expo-application": "58.1.2",
@@ -29,9 +30,12 @@
     "expo-updates": "58.0.18",
     "react": "catalog:",
     "react-native": "0.88.0",
+    "react-native-mmkv": "^4.3.2",
+    "react-native-nitro-modules": "^0.37.1",
     "react-native-safe-area-context": "~5.10.1",
     "tailwindcss": "catalog:",
-    "uniwind": "^1.13.0"
+    "uniwind": "^1.13.0",
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@expo/fingerprint": "0.21.7",

@@ -7,13 +7,13 @@ import {
   type ThemeField,
 } from "@app/core";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScopedTheme } from "uniwind";
 
 import { copy } from "./copy.ts";
 import { bold, regular } from "./fonts.ts";
-import { resetTheme, setThemeField, useThemeChoice } from "./theme.ts";
+import { queueThemeIcon, resetTheme, setThemeField, useThemeChoice } from "./theme.ts";
 
 type T = ReturnType<typeof copy>;
 
@@ -32,6 +32,11 @@ const FIELDS: ThemeField[] = [
 export function ThemeSettings({ locale, onBack }: { locale: Locale; onBack: () => void }) {
   const t = copy(locale);
   const choice = useThemeChoice();
+  const [error, setError] = useState(false);
+  const attempt = (operation: Promise<void>) => {
+    setError(false);
+    void operation.catch(() => setError(true));
+  };
   const insets = useSafeAreaInsets();
   const warnings = lookAlikes(choice).map(([a, b]) => t("lookAlike", { a: t(a), b: t(b) }));
   return (
@@ -49,19 +54,36 @@ export function ThemeSettings({ locale, onBack }: { locale: Locale; onBack: () =
           {t("theme")}
         </Text>
         {FIELDS.map((field) => (
-          <FieldRow key={field} field={field} choice={choice} t={t} />
+          <FieldRow key={field} field={field} choice={choice} t={t} attempt={attempt} />
         ))}
         <Text
           style={regular}
           accessibilityLiveRegion="polite"
           className="text-label text-attention"
         >
-          {warnings.join(" ")}
+          {error ? t("error") : warnings.join(" ")}
         </Text>
         <AlarmPreview t={t} />
+        <Text style={regular} className="text-label text-muted-foreground">
+          {t("splashSwatch")}
+        </Text>
         <Pressable
           accessibilityRole="button"
-          onPress={resetTheme}
+          className="self-start rounded-full bg-surface px-5 py-3 active:opacity-80"
+          onPress={() =>
+            Alert.alert(t("iconTitle"), t("iconWarning"), [
+              { text: t("cancel"), style: "cancel" },
+              { text: t("applyIcon"), onPress: () => attempt(queueThemeIcon()) },
+            ])
+          }
+        >
+          <Text style={bold} className="text-label text-foreground">
+            {t("applyIcon")}
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => attempt(resetTheme())}
           className="self-start rounded-full bg-surface px-5 py-3 active:opacity-80"
         >
           <Text style={bold} className="text-label text-foreground">
@@ -73,13 +95,23 @@ export function ThemeSettings({ locale, onBack }: { locale: Locale; onBack: () =
   );
 }
 
-function FieldRow({ field, choice, t }: { field: ThemeField; choice: ThemeChoice; t: T }) {
+function FieldRow({
+  field,
+  choice,
+  t,
+  attempt,
+}: {
+  field: ThemeField;
+  choice: ThemeChoice;
+  t: T;
+  attempt: (operation: Promise<void>) => void;
+}) {
   const value = choice[field];
   const [text, setText] = useState("");
   const onChangeText = (next: string) => {
     setText(next);
     const hex = toHex(next);
-    if (hex) setThemeField(field, hex);
+    if (hex) attempt(setThemeField(field, hex));
   };
   return (
     <View accessibilityRole="radiogroup" accessibilityLabel={t(field)} className="gap-3">
@@ -93,7 +125,7 @@ function FieldRow({ field, choice, t }: { field: ThemeField; choice: ThemeChoice
             accessibilityRole="radio"
             accessibilityState={{ checked: value === swatch }}
             accessibilityLabel={swatch === "primary" ? t("sameAsPrimary") : swatch}
-            onPress={() => setThemeField(field, swatch)}
+            onPress={() => attempt(setThemeField(field, swatch))}
             className={
               value === swatch
                 ? "size-11 rounded-full border-4 border-foreground"

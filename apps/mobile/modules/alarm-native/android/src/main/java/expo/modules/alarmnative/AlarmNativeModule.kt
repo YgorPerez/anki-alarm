@@ -1,14 +1,8 @@
 package expo.modules.alarmnative
 
 import android.app.Activity
-import android.app.AlarmManager
-import android.app.NotificationManager
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.os.Build
-import android.os.PowerManager
-import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.functions.Queues
@@ -47,6 +41,7 @@ class AlarmNativeModule : Module() {
     Function("previewSound") { sound: String -> Sounds.preview(context, JSONObject(sound)) }
     Function("stopPreview") { Sounds.stopPreview() }
     Function("setAlarms") { alarms: String, policy: String -> AlarmScheduler.setAlarms(context, JSONArray(alarms), JSONObject(policy)) }
+    Function("setAppearance") { colors: String, locale: String -> AlarmStore.setAppearance(context, JSONObject(colors), locale) }
     Function("list") { AlarmStore.alarms(context).toString() }
     Function("getRing") { AlarmStore.ring(context)?.toString() }
     Function("drainJournal") { AlarmStore.prefs(context).getString("journal", "[]") }
@@ -60,26 +55,21 @@ class AlarmNativeModule : Module() {
         }
       }
     }
-    Function("getPermissions") {
-      mapOf("notifications" to context.getSystemService(NotificationManager::class.java).areNotificationsEnabled(),
-        "exactAlarm" to (Build.VERSION.SDK_INT < 31 || context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()),
-        "fullScreenIntent" to (Build.VERSION.SDK_INT < 34 || context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()),
-        "overlay" to Settings.canDrawOverlays(context),
-        "battery" to context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName))
-    }
+    Function("getPermissions") { AlarmReliability.permissions(context) }
+    Function("isOnboardingComplete") { context.getSharedPreferences("onboarding", Context.MODE_PRIVATE).getBoolean("complete", false) }
+    Function("completeOnboarding") { context.getSharedPreferences("onboarding", Context.MODE_PRIVATE).edit().putBoolean("complete", true).commit() }
     Function("request") { kind: String ->
-      if (kind == "notifications" && Build.VERSION.SDK_INT >= 33) {
-        appContext.currentActivity?.let { ActivityCompat.requestPermissions(it, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 7) }
-      } else {
-        val action = when {
-          kind == "exactAlarm" && Build.VERSION.SDK_INT >= 31 -> Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM
-          kind == "fullScreenIntent" && Build.VERSION.SDK_INT >= 34 -> Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT
-          kind == "overlay" -> Settings.ACTION_MANAGE_OVERLAY_PERMISSION
-          kind == "battery" -> Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-          else -> Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-        }
-        context.startActivity(Intent(action, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-      }
+      if (kind == "notifications" && Build.VERSION.SDK_INT >= 33 &&
+          context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        val activity = appContext.currentActivity
+        if (activity != null && !context.getSharedPreferences("onboarding", Context.MODE_PRIVATE).getBoolean("notificationsAsked", false)) {
+          context.getSharedPreferences("onboarding", Context.MODE_PRIVATE).edit().putBoolean("notificationsAsked", true).apply()
+          android.os.Handler(android.os.Looper.getMainLooper()).post {
+            ActivityCompat.requestPermissions(activity, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 7)
+          }
+          true
+        } else AlarmReliability.open(context, kind)
+      } else AlarmReliability.open(context, kind)
     }
   }
 }

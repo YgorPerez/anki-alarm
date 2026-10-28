@@ -13,7 +13,7 @@ checks/requests and a change notification. Native state and journal live in devi
 SharedPreferences. Ring creation and dismissal commit state and their event in one write. Alarm
 IDs and ring/event IDs are UUIDv7. The temporary dismiss button is the replacement point for #41.
 
-Later alarm tickets add session signals, snooze, awake checks, read aloud and theme mirroring from
+Later alarm tickets add session signals, snooze, awake checks and read aloud from
 ADR 0005. Native does not count answers. The overlap event identifies the absorbed alarm; #41 must
 use its N without replacing the active ring's deck.
 
@@ -37,3 +37,50 @@ The APK still needs the locked/unlocked, silent/DND, reboot with PIN, time/zone 
 kill/restart and OEM scenarios documented in `docs/research/oem-background-limits.md`. Denying
 notifications, exact alarms, full-screen intent or overlay can prevent delivery or screen takeover;
 the alarm list exposes links to missing permissions. Force-stop removes alarms until app launch.
+
+## Reliability setup (#44)
+
+`getPermissions()` now returns Core's `AlarmPermissions`, with `granted`, `denied` or `unknown`
+values rather than booleans. It includes the manufacturer, SDK, install source and standby bucket.
+`backgroundRestricted: granted` means Android allows background activity. MIUI lock-screen and
+background-window app-ops are best-effort reads; inaccessible APIs return `unknown`. Autostart,
+PowerKeeper, Samsung sleep lists and Recents locking require manual checks.
+
+`request(kind)` returns whether a runtime prompt or settings page was opened. OEM activities may
+change; failed launches fall back to App info. Notification requests use the runtime prompt once,
+then notification settings for denied access or a disabled channel. Overlay setup re-reads the
+permission before opening Settings. Downloaded/local installs on Android 15+ get restricted-settings
+instructions only while overlay access is missing.
+
+`isOnboardingComplete()` and `completeOnboarding()` use local SharedPreferences, independently of
+alarm storage and sync. Finishing does not claim all permissions were granted. Manual confirmations
+last only for the current checklist visit; reopening Settings starts a fresh check. App resume
+re-reads permissions, and an active ring takes priority over onboarding and Settings.
+
+## Direct Boot (#43)
+
+`setAppearance({ background, foreground, primary }, locale)` on the Effect service mirrors hex
+colors and `pt-BR`/`en` into device-protected storage. Home sends the chosen dark background,
+foreground and primary ink whenever the theme or locale changes. The native activity bundles Atkinson
+Hyperlegible and Android strings, uses a live clock, and offers no silence or snooze action.
+
+Custom sounds are copied atomically before scheduling. If the provider permission expires, keep
+the last complete copy; without a copy the service tries the system alarm URI and ToneGenerator.
+No network or credential-protected file is needed to ring.
+
+To verify on a PIN-protected emulator (in addition to the JVM regression tests):
+
+1. Install the built APK, open the app and grant notification/full-screen/overlay permissions.
+2. Set a PIN in Android Settings. Save an enabled alarm for three minutes ahead. For a custom
+   sound, use a readable local URI through `setAlarms`; the shell editor has no sound picker yet.
+3. Run `adb reboot`, leave the PIN locked, and inspect `adb logcat -s AlarmNative` and
+   `adb shell dumpsys alarm`. Confirm re-arming at locked boot, sound playback from the saved file,
+   and the native clock, label and unlock instruction. Leaving that activity must not silence it.
+4. Unlock with the PIN. Confirm the RN alarm screen opens and still has the same native `getRing()`
+   ID. Unlocking must not append another `ringStarted` or `dismissed` event.
+5. Reboot mid-ring. Confirm the ring resumes before unlock with the same ID.
+6. Schedule once alarms, power off across their due time, then boot at 30 minutes late and again
+   over 30 minutes late. The first rings; the latter appends one `missed` event without ringing.
+   Unlocking and subsequent boot broadcasts must not repeat either occurrence.
+
+Hardware is still needed to check audible output, vibration and OEM restrictions.

@@ -5,6 +5,8 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -66,6 +68,9 @@ class AlarmService : Service() {
     }
   }
 
+  private val unlocked = object : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) { onUnlocked() }
+  }
   private val handler = Handler(Looper.getMainLooper())
   private var player: MediaPlayer? = null
   private var tone: android.media.ToneGenerator? = null
@@ -116,6 +121,8 @@ class AlarmService : Service() {
     super.onCreate()
     instance = this
     ensureChannel(this)
+    ContextCompat.registerReceiver(this, unlocked, IntentFilter(Intent.ACTION_USER_UNLOCKED),
+      ContextCompat.RECEIVER_NOT_EXPORTED)
     log("service created")
   }
 
@@ -300,6 +307,13 @@ class AlarmService : Service() {
     handler.postDelayed({ log("1.5s after launch ($why): alarm screen visible=${AlarmActivityListener.visible}") }, 1500)
   }
 
+  fun onUnlocked() {
+    // Retarget the notification, keeping the ring, audio and volume policy intact.
+    if (!AlarmStore.isRinging(this) || !getSystemService(android.os.UserManager::class.java).isUserUnlocked) return
+    getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, ringingNotification())
+    if (!AlarmActivityListener.visible) tryLaunch("user unlocked")
+  }
+
   private fun postWayBack() {
     val n = NotificationCompat.Builder(this, CHANNEL_ID)
       .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
@@ -398,6 +412,7 @@ class AlarmService : Service() {
     log("service destroyed, ringing=${AlarmStore.isRinging(this)}")
     stopEverything()
     instance = null
+    unregisterReceiver(unlocked)
     super.onDestroy()
   }
 }

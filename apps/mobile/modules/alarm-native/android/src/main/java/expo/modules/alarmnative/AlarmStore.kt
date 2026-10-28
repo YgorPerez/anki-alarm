@@ -9,6 +9,16 @@ import java.util.UUID
 
 object AlarmStore {
   fun prefs(ctx: Context) = ctx.createDeviceProtectedStorageContext().getSharedPreferences("alarms", Context.MODE_PRIVATE)
+  fun setAppearance(ctx: Context, colors: JSONObject, locale: String) {
+    val safe = JSONObject()
+    for (key in listOf("background", "foreground", "primary")) {
+      val color = colors.getString(key)
+      require(Regex("#[0-9a-fA-F]{6}").matches(color)) { "Invalid $key color" }
+      safe.put(key, color)
+    }
+    check(prefs(ctx).edit().putString("colors", safe.toString())
+      .putString("locale", if (locale == "en") "en" else "pt-BR").commit())
+  }
   fun alarms(ctx: Context): JSONArray = JSONArray(prefs(ctx).getString("alarms", "[]"))
   fun ring(ctx: Context): JSONObject? = prefs(ctx).getString("ring", null)?.let { JSONObject(it) }
   fun isRinging(ctx: Context) = ring(ctx) != null

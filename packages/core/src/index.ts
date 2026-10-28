@@ -2,6 +2,7 @@ export { translator } from "./locale.ts";
 export type { Locale, Messages } from "./locale.ts";
 export {
   contrast,
+  nativeAppearance,
   FACTORY_THEME,
   lookAlikes,
   parseThemeChoice,
@@ -39,3 +40,13 @@ export type { Alarm, AlarmRule, AlarmSound, BundledSound } from "./alarm.ts";
 export { releaseVersion } from "./release.ts";
 export { newerApk, SYNC_PROTOCOL } from "./release.ts";
 export { releaseArtifact } from "./release.ts";
+export { updateThemeSettings } from "./settings.ts";
+export type { Settings } from "./settings.ts";
+
+export { reliabilitySteps } from "./reliability.ts";
+export type {
+  AlarmPermissions,
+  PermissionState,
+  ReliabilityKind,
+  ReliabilityStep,
+} from "./reliability.ts";

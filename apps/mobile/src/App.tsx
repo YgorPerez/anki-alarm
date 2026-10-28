@@ -1,5 +1,7 @@
+import { ReliabilityScreen } from "./ReliabilityScreen.tsx";
+import { reliabilityCopy } from "./reliability-copy.ts";
 import { UpdateOffer } from "./UpdateOffer.tsx";
-import { newAlarm, nextRing, type Alarm, type Locale } from "@app/core";
+import { newAlarm, nextRing, themeFor, type Alarm, type Locale } from "@app/core";
 import {
   AtkinsonHyperlegible_400Regular,
   AtkinsonHyperlegible_700Bold,
@@ -22,11 +24,22 @@ import {
 } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { copy } from "./copy.ts";
-import { ThemeSettings } from "./ThemeSettings.tsx";
-import { ScopedTheme } from "uniwind";
 import { AlarmService, alarmController, type Ring } from "./alarms.ts";
 import { androidAlarmService, native } from "./alarm-android.ts";
-import { sqliteAlarmRepository } from "./alarm-storage.ts";
+import { localData } from "./database.ts";
+import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ThemeSettings } from "./ThemeSettings.tsx";
+import { initializeTheme, useThemeChoice } from "./theme.ts";
+import { ScopedTheme } from "uniwind";
+import { queryClient } from "./query.ts";
+import { useUI } from "./ui.ts";
+const repository = {
+  list: localData((data) => data.alarms),
+  save: (alarm: Alarm) => localData((data) => data.saveAlarm(alarm)),
+  ingest: (events: readonly import("./alarms.ts").AlarmEvent[]) =>
+    localData((data) => data.ingestEvents(events)),
+  events: localData((data) => data.events),
+};
 
 export function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -34,10 +47,12 @@ export function App() {
     AtkinsonHyperlegible_700Bold,
   });
   return (
-    <SafeAreaProvider>
-      {fontsLoaded || fontError ? <Home /> : <View className="flex-1 bg-background" />}
-      <StatusBar style="auto" />
-    </SafeAreaProvider>
+    <QueryClientProvider client={queryClient}>
+      <SafeAreaProvider>
+        {fontsLoaded || fontError ? <Home /> : <View className="flex-1 bg-background" />}
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    </QueryClientProvider>
   );
 }
 const run = <A,>(effect: Effect.Effect<A, Error, AlarmService>) =>
@@ -45,20 +60,55 @@ const run = <A,>(effect: Effect.Effect<A, Error, AlarmService>) =>
 
 const currentTime = () => Date.now();
 function Home() {
+  const [onboarding, setOnboarding] = useState(() => !native.isOnboardingComplete());
+  const [showSettings, setShowSettings] = useState(false);
   const [showDecks, setShowDecks] = useState(false);
-  const [themeOpen, setThemeOpen] = useState(false);
-  const [controller] = useState(() => alarmController(sqliteAlarmRepository()));
-  const [locale, setLocale] = useState<Locale>("pt-BR");
-  const [alarms, setAlarms] = useState(() => controller.list());
+  const [controller] = useState(() => alarmController(repository));
+  const client = useQueryClient();
+  const [showTheme, setShowTheme] = useState(false);
+  const alarmsQuery = useQuery({
+    queryKey: ["alarms"],
+    queryFn: () => Effect.runPromise(controller.list),
+  });
+  const alarms = alarmsQuery.data ?? [];
+  const { locale, setLocale } = useUI();
   const [ring, setRing] = useState<Ring | null>(null);
   const [editing, setEditing] = useState<Alarm | null>(null);
   const [error, setError] = useState("");
+  useEffect(() => {
+    void initializeTheme().catch(() => setError(copy(locale)("error")));
+  }, [locale]);
+  useEffect(() => {
+    if (!showTheme || ring) return undefined;
+    const back = BackHandler.addEventListener("hardwareBackPress", () => {
+      setShowTheme(false);
+      return true;
+    });
+    return () => back.remove();
+  }, [showTheme, ring]);
   const [permissions, setPermissions] = useState(() => native.getPermissions());
   const t = copy(locale);
   const insets = useSafeAreaInsets();
+  const theme = useThemeChoice();
+  useEffect(() => {
+    const dark = themeFor(theme, "dark");
+    void run(
+      Effect.flatMap(AlarmService, (service) =>
+        service.setAppearance(
+          {
+            background: dark.background,
+            foreground: dark.foreground,
+            primary: dark["primary-ink"],
+          },
+          locale,
+        ),
+      ),
+    ).catch(() => setError(copy(locale)("alarmError")));
+  }, [locale, theme]);
   useEffect(() => {
     const refresh = () => {
       setPermissions(native.getPermissions());
+      void client.invalidateQueries({ queryKey: ["alarms"] });
       void Effect.runPromise(controller.resume.pipe(Effect.provide(androidAlarmService)))
         .then(setRing)
         .catch(() => setError(copy(locale)("alarmError")));
@@ -72,26 +122,18 @@ function Home() {
       subscription.remove();
       appState.remove();
     };
-  }, [controller, locale]);
-  useEffect(() => {
-    if (!themeOpen || ring) return undefined;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      setThemeOpen(false);
-      return true;
-    });
-    return () => subscription.remove();
-  }, [themeOpen, ring]);
+  }, [controller, locale, client]);
   const save = useCallback(
     (alarm: Alarm) => {
       void run(controller.save(alarm))
         .then(() => {
-          setAlarms(controller.list());
+          void client.invalidateQueries({ queryKey: ["alarms"] });
           setEditing(null);
           setError("");
         })
         .catch(() => setError(copy(locale)("alarmError")));
     },
-    [controller, locale],
+    [controller, locale, client],
   );
   const renderAlarm = useCallback(
     ({ item }: ListRenderItemInfo<Alarm>) => (
@@ -129,8 +171,30 @@ function Home() {
         </View>
       </ScopedTheme>
     );
-  if (themeOpen) return <ThemeSettings locale={locale} onBack={() => setThemeOpen(false)} />;
-  if (showDecks) return <CollectionScreen locale={locale} onExit={() => setShowDecks(false)} />;
+  if (onboarding || showSettings)
+    return (
+      <ReliabilityScreen
+        permissions={permissions}
+        onboarding={onboarding}
+        locale={locale}
+        refresh={() => setPermissions(native.getPermissions())}
+        onExit={() => {
+          setOnboarding(false);
+          setShowSettings(false);
+        }}
+        switchLanguage={() => setLocale(locale === "en" ? "pt-BR" : "en")}
+      />
+    );
+  if (showTheme) return <ThemeSettings locale={locale} onBack={() => setShowTheme(false)} />;
+  if (showDecks)
+    return (
+      <CollectionScreen
+        locale={locale}
+        onExit={() => setShowDecks(false)}
+        onTheme={() => setShowTheme(true)}
+      />
+    );
+
   return (
     <View
       className="flex-1 bg-background"
@@ -147,7 +211,7 @@ function Home() {
             <Pressable accessibilityRole="button" onPress={() => setShowDecks(true)}>
               <Text className="text-body text-primary">{t("title")}</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" onPress={() => setThemeOpen(true)}>
+            <Pressable accessibilityRole="button" onPress={() => setShowTheme(true)}>
               <Text className="text-body text-primary-ink">{t("theme")}</Text>
             </Pressable>
             {editing ? (
@@ -174,21 +238,15 @@ function Home() {
           <View className="gap-4">
             <UpdateOffer locale={locale} />
             <Text accessibilityRole="alert" className="text-body text-attention">
-              {error}
+              {error || (alarmsQuery.isError ? t("alarmError") : "")}
             </Text>
-            <Text className="text-body text-foreground">{t("permission")}</Text>
-            {(["notifications", "exactAlarm", "fullScreenIntent", "overlay", "battery"] as const)
-              .filter((kind) => !permissions[kind])
-              .map((kind) => (
-                <Pressable
-                  key={kind}
-                  accessibilityRole="button"
-                  onPress={() => native.request(kind)}
-                >
-                  <Text className="text-body text-primary">{t(kind)}</Text>
-                </Pressable>
-              ))}
-            <Text className="text-label text-muted-foreground">{t("forceStop")}</Text>
+            <Pressable
+              accessibilityRole="button"
+              className="min-h-12 justify-center"
+              onPress={() => setShowSettings(true)}
+            >
+              <Text className="text-body text-primary">{reliabilityCopy(locale)("settings")}</Text>
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               onPress={() => setLocale(locale === "en" ? "pt-BR" : "en")}

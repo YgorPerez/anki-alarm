@@ -1,47 +1,10 @@
 /* oxlint-disable eslint/no-await-in-loop -- SQLite transaction writes must stop in order on failure. */
-import {
-  Collection,
-  uuid7,
-  type CollectionEnvironment,
-  type CollectionState,
-  type Deck,
-  type Note,
-  type Card,
-  type NoteType,
-  type Preset,
-  type Tombstone,
-} from "@app/core";
+import { Collection, uuid7, type CollectionEnvironment, type CollectionState } from "@app/core";
 import { migrationStatements } from "./migrations.ts";
 import { sql } from "drizzle-orm";
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 
-// JSON bodies preserve each field's independent HLC. Ids remain indexed SQLite keys.
-const decks = sqliteTable("decks", {
-  id: text().primaryKey(),
-  body: text({ mode: "json" }).$type<Deck>().notNull(),
-});
-const notes = sqliteTable("notes", {
-  id: text().primaryKey(),
-  body: text({ mode: "json" }).$type<Note>().notNull(),
-});
-const cards = sqliteTable("cards", {
-  id: text().primaryKey(),
-  body: text({ mode: "json" }).$type<Card>().notNull(),
-});
-const noteTypes = sqliteTable("noteTypes", {
-  id: text().primaryKey(),
-  body: text({ mode: "json" }).$type<NoteType>().notNull(),
-});
-const presets = sqliteTable("presets", {
-  id: text().primaryKey(),
-  body: text({ mode: "json" }).$type<Preset>().notNull(),
-});
-const tombstones = sqliteTable("tombstones", {
-  id: text().primaryKey(),
-  body: text({ mode: "json" }).$type<Tombstone>().notNull(),
-});
-const metadata = sqliteTable("metadata", { id: text().primaryKey(), value: text().notNull() });
+import { decks, notes, cards, noteTypes, presets, tombstones, metadata } from "./schema.ts";
 const tables = ["decks", "notes", "cards", "noteTypes", "presets", "tombstones"] as const;
 
 /** SQL transport shared by expo-sqlite on device and real SQLite in integration tests. */
@@ -50,7 +13,6 @@ export type ExecuteSql = (
   params: (string | number | null)[],
   method: "run" | "all" | "get" | "values",
 ) => Promise<{ rows: unknown[] }>;
-export type CollectionStore = Awaited<ReturnType<typeof openCollectionStore>>;
 export async function openCollectionStore(
   execute: ExecuteSql,
   env: Omit<CollectionEnvironment, "deviceId">,
@@ -89,7 +51,8 @@ export async function openCollectionStore(
     const operation = queue.then(async () => {
       await db.run(sql`BEGIN IMMEDIATE`);
       try {
-        const collection = new Collection(environment, await read());
+        const before = await read();
+        const collection = new Collection(environment, before);
         command(collection);
         const state = collection.snapshot();
         // Replace the local snapshot atomically. Tombstones are retained in every snapshot.
@@ -104,6 +67,17 @@ export async function openCollectionStore(
             );
           }
         }
+        for (const name of tables) {
+          for (const record of state[name]) {
+            if (
+              JSON.stringify(before[name].find((r) => r.id === record.id)) !==
+              JSON.stringify(record)
+            )
+              await db.run(
+                sql`INSERT INTO outbox (kind, record_id, body) VALUES (${name}, ${record.id}, ${JSON.stringify(record)})`,
+              );
+          }
+        }
         await db.run(sql`COMMIT`);
         return state;
       } catch (error) {
@@ -114,5 +88,5 @@ export async function openCollectionStore(
     queue = operation.catch(() => {});
     return operation;
   };
-  return { read, change };
+  return { read, change, deviceId: device.value };
 }
