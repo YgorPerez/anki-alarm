@@ -24,6 +24,8 @@ beforeAll(async () => {
   env = {
     ...proxy.env,
     BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret-0123",
+    BETTER_AUTH_URL: "http://localhost:8787",
+    TRUSTED_ORIGINS: "http://localhost:3000",
     GOOGLE_CLIENT_ID: "web-client.apps.googleusercontent.com",
     GOOGLE_CLIENT_SECRET: "unused",
   };

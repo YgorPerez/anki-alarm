@@ -83,11 +83,53 @@ alarm session and awake check screens. Those screens and Settings do not exist i
 verify their transitions when those tickets land. Do not replace the native installed version with
 an OTA's JS version when deciding whether to offer an APK.
 
-`SYNC_PROTOCOL` is exported by Core and imported by the Worker. Sync requests under `/sync` must send
-`X-Sync-Protocol`. The Worker returns 426 with `update_required` for mismatches. `/health` reports the
-running protocol. When the sync client lands, it must send this header, pause sync on 426, download
-an available OTA without reloading, and offer the APK as fallback. Alarms and local study keep working.
+`SYNC_PROTOCOL` is exported by Core and imported by the Worker. Every sync request under `/sync`
+carries it in `X-Sync-Protocol` (the contract's `makeSyncClient` adds it). The Worker answers a
+mismatch with 426 and `{ "_tag": "UpdateRequired", "syncProtocol": n }`, which the client decodes as
+`UpdateRequired`; metadata reports the Worker's protocol too. The phone then pauses sync, downloads an
+available OTA without reloading, and Home keeps offering the APK. Alarms and local study keep working.
 Bump Core's constant in the PR that changes the sync contract.
+
+## Sync and sign-in
+
+The sync Worker (`apps/sync`) runs better-auth on D1 with Google as the only provider
+(docs/adr/0007-better-auth.md). Nothing below exists yet; the human creates it once.
+
+1. **D1.** `pnpm --filter @app/sync exec wrangler d1 create app-sync`, then put the printed id in
+   `apps/sync/wrangler.toml` (`database_id`, now a placeholder). The release workflow applies
+   `apps/sync/migrations` with `wrangler d1 migrations apply app-sync --remote` before each deploy;
+   the API token needs D1 edit permission.
+2. **Google Cloud.** In one project's OAuth consent screen, create:
+   - a **Web application** client. Its id is the audience of every ID token, the phone's included.
+     Add the redirect URI `https://<sync host>/api/auth/callback/google` (the web's redirect sign-in).
+   - an **Android** client for package `dev.ygorperez.ankialarm` with the SHA-1 of the release
+     signing key (`keytool -list -v -keystore release.keystore`), plus one for the debug keystore
+     to sign in from a development build. The Android clients need no secret and no file in the app.
+3. **Worker secrets**, each with `pnpm --filter @app/sync exec wrangler secret put <NAME>`:
+
+   | Secret                 | Value                                                                     |
+   | ---------------------- | ------------------------------------------------------------------------- |
+   | `BETTER_AUTH_SECRET`   | `openssl rand -base64 32`. Rotating it signs every session out.           |
+   | `BETTER_AUTH_URL`      | The Worker's public origin, e.g. `https://sync.example.com`.              |
+   | `GOOGLE_CLIENT_ID`     | The web client's id.                                                      |
+   | `GOOGLE_CLIENT_SECRET` | The web client's secret.                                                  |
+   | `TRUSTED_ORIGINS`      | The web app's origin(s), comma-separated. The phone's scheme is built in. |
+
+4. **GitHub environment variables** (`production`), inlined into the phone's bundle at build time;
+   set the same two in the EAS **production** environment so `eas update` bundles them too:
+
+   | Variable                           | Value                                      |
+   | ---------------------------------- | ------------------------------------------ |
+   | `EXPO_PUBLIC_SYNC_URL`             | The Worker's public origin.                |
+   | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | The web client's id (not the Android one). |
+
+A build without the two variables runs fully offline and says sync is unavailable. For local work,
+put the five Worker values in `apps/sync/.dev.vars` (untracked), run
+`wrangler d1 migrations apply app-sync --local` and `wrangler dev`, and start the phone with the two
+`EXPO_PUBLIC_*` variables pointing at it. The Worker tests need none of this: they run on a local D1.
+
+Adding Google Sign-In, SecureStore, expo-network, expo-linking, expo-constants and expo-web-browser
+changed native code: the next release builds an APK, and a development client must be rebuilt.
 
 ## Undoing a bad OTA
 

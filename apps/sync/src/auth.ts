@@ -10,7 +10,7 @@ import { schema } from "./schema.ts";
 
 export interface Env {
   DB: D1Database;
-  /** `wrangler secret put BETTER_AUTH_SECRET`: 32+ random bytes, base64. */
+  /** 32+ random bytes, base64. Every value here is a Worker secret (docs/release.md). */
   BETTER_AUTH_SECRET: string;
   /** The Worker's public origin, e.g. `https://sync.example.com`. */
   BETTER_AUTH_URL: string;

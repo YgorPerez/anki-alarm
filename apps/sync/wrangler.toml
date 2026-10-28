@@ -5,11 +5,9 @@ main = "src/worker.ts"
 compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
 
-[vars]
-# The Worker's public origin. Override per deployment.
-BETTER_AUTH_URL = "http://localhost:8787"
-# The web app's origin, allowed to sign in. Comma-separated.
-TRUSTED_ORIGINS = "http://localhost:3000"
+# BETTER_AUTH_URL, TRUSTED_ORIGINS, BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET
+# are Worker secrets (`wrangler secret put`), so a deploy never overwrites them. Locally they go in
+# an untracked `.dev.vars`.
 
 [[d1_databases]]
 binding = "DB"

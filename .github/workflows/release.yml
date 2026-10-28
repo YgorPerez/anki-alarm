@@ -23,6 +23,9 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       EXPO_PUBLIC_EAS_PROJECT_ID: ${{ vars.EXPO_PUBLIC_EAS_PROJECT_ID }}
+      # Inlined into the phone's bundle: the sync Worker and the Google web OAuth client.
+      EXPO_PUBLIC_SYNC_URL: ${{ vars.EXPO_PUBLIC_SYNC_URL }}
+      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
       RELEASE_TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v5
@@ -38,12 +41,16 @@ jobs:
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           test -n "$EXPO_TOKEN"
           test -n "$EXPO_PUBLIC_EAS_PROJECT_ID"
+          test -n "$EXPO_PUBLIC_SYNC_URL"
+          test -n "$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "Release already exists; do not publish the same tag twice" >&2
             exit 1
           fi
       - run: vp check
       - run: vp test run
+      - name: Migrate the sync database
+        run: vp exec --filter @app/sync wrangler d1 migrations apply app-sync --remote
       - name: Deploy sync Worker
         run: vp run --filter @app/sync deploy
       - name: Deploy web
