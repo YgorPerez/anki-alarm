@@ -31,6 +31,7 @@ async function device(name: string, clock = { now: 1_000 }) {
         clientDataLayer({
           connect,
           now: () => clock.now,
+          ...(name === "web" ? { origin: "web" as const } : {}),
           random: () => new Uint8Array(16).fill(n++).map((b, i) => (i === 15 ? name.length : b)),
         }),
       ),
@@ -180,9 +181,12 @@ test("reviews from both devices append, and the outbox empties after a push", as
   await sync(phone, web, phone);
 
   for (const side of [phone, web]) {
-    const grades = (await side.run(side.data.reviewLog)).map((e) => e.kind === "review" && e.grade);
-    expect(grades).toHaveLength(2);
-    expect(new Set(grades)).toEqual(new Set([1, 3]));
+    const reviews = (await side.run(side.data.reviewLog)).map(
+      (e) => e.kind === "review" && [e.grade, e.origin],
+    );
+    expect(reviews).toHaveLength(2);
+    // Each answer keeps the platform it was given on.
+    expect(new Set(reviews.map(String))).toEqual(new Set(["1,phone", "3,web"]));
   }
   const pushes = api.calls.push.length;
   await sync(phone);

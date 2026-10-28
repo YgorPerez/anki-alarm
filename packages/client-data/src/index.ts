@@ -11,6 +11,14 @@ import {
 import { syncEngine } from "./sync.ts";
 export { AccountMismatch, type SyncResult } from "./sync.ts";
 export { syncScheduler, type SyncScheduler, type SyncStatus } from "./scheduler.ts";
+export {
+  accountSync,
+  type Account,
+  type AccountData,
+  type AccountState,
+  type AccountSync,
+  type AccountUser,
+} from "./account.ts";
 export { type ExecuteSql } from "./collection.ts";
 import { openCollectionStore, type ExecuteSql } from "./collection.ts";
 import { migrationStatements } from "./migrations.ts";
@@ -104,6 +112,8 @@ export interface SQLiteConnection {
   connect: (database: "collection.db" | "anki-alarm.db") => ExecuteSql;
   now: () => number;
   random: () => Uint8Array;
+  /** Where this app's answers come from: the review's origin outside an alarm (default phone). */
+  origin?: "phone" | "web";
 }
 export class SQLiteDriver extends Context.Service<SQLiteDriver, SQLiteConnection>()(
   "SQLiteDriver",
@@ -236,7 +246,7 @@ async function open(driver: SQLiteConnection): Promise<Data> {
           grade,
           durationMs,
           ...(ringId === undefined
-            ? { origin: "phone" as const }
+            ? { origin: driver.origin ?? "phone" }
             : { origin: "alarm" as const, ringId }),
         };
       }),
