@@ -20,7 +20,19 @@ the phase back to `ringing` and rings at full; the user taps Start again and the
 progress, which JS reads from reviews carrying the ring id. Native does not count answers. The
 session uses the larger N of absorbed alarms and keeps the active ring's deck.
 
-Later alarm tickets add snooze, awake checks and read aloud from ADR 0005.
+Later alarm tickets add snooze and read aloud from ADR 0005.
+
+#47 adds the awake check. `dismiss(ringId, awakeCheckAfter)` takes seconds (Core's
+`awakeCheckAfter(alarm)`) or null. With seconds, the dismissal and the pending check
+(`{ id, ringId, alarm, dueAt }`) commit in one write, and `AwakeCheck.advance` arms an exact alarm
+for `dueAt`. When it fires, native journals `awakeCheckShown` (with the dismissed ring's id), sets
+`shownAt`, posts a silent full-screen notification (plus `startActivity` with overlay access) and
+arms a second exact alarm `awakeCheckSeconds` later. `awakeCheckPassed(checkId)` journals
+`awakeCheckPassed` and clears it. If the timeout fires first, native journals `awakeCheckFailed` and
+fires the alarm again as a new ring. Before the first unlock the card can't show, so a check that
+comes due then fails at once and rings. A check that comes due during another ring is dropped.
+`rearmAll` re-arms or runs a pending check after a reboot or `setAlarms`. `getAwakeCheck()` returns
+the pending check. JS shows the prompt only once `shownAt` is set.
 
 ## Verification
 

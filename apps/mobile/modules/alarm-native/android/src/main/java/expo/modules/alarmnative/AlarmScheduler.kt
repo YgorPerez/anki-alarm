@@ -20,7 +20,7 @@ object AlarmScheduler {
       .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("alarm", true)
   fun showIntent(ctx: Context): PendingIntent = PendingIntent.getActivity(ctx, 1, launchIntent(ctx), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   private fun operation(ctx: Context, id: String) = PendingIntent.getBroadcast(ctx, 0,
-    Intent(ctx, AlarmReceiver::class.java).setAction(if(id == "watchdog") ACTION_WATCHDOG else ACTION_FIRE)
+    Intent(ctx, AlarmReceiver::class.java).setAction(when (id) { "watchdog" -> ACTION_WATCHDOG; AwakeCheck.KEY -> AwakeCheck.ACTION; else -> ACTION_FIRE })
       .setData(Uri.parse("anki-alarm://schedule/$id")).putExtra("id", id), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   private fun arm(ctx: Context, id: String, at: Long) {
     am(ctx).setAlarmClock(AlarmManager.AlarmClockInfo(at, showIntent(ctx)), operation(ctx, id))
@@ -80,7 +80,11 @@ object AlarmScheduler {
       if (service == null) AlarmService.start(ctx, "restored $why")
       else if (why == "BOOT_COMPLETED") service.onUnlocked()
     }
+    // A reboot drops exact alarms: re-arm a pending awake check, or run it if it came due meanwhile.
+    AwakeCheck.advance(ctx, reshow = why.endsWith("BOOT_COMPLETED") || why == "QUICKBOOT_POWERON", now = now)
   }
   fun armWatchdog(ctx: Context, inMs: Long) = arm(ctx, "watchdog", System.currentTimeMillis() + inMs)
   fun cancelWatchdog(ctx: Context) = am(ctx).cancel(operation(ctx, "watchdog"))
+  fun armAwakeCheck(ctx: Context, at: Long) = arm(ctx, AwakeCheck.KEY, at)
+  fun cancelAwakeCheck(ctx: Context) = am(ctx).cancel(operation(ctx, AwakeCheck.KEY))
 }

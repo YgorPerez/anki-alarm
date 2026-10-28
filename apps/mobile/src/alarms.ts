@@ -7,6 +7,17 @@ export interface Ring {
   startedAt: number;
   phase: string;
 }
+/**
+ * The awake check after a dismissed ring. `shownAt` is null until its delay is over; native fails it
+ * (and rings again) `RING_POLICY.awakeCheckSeconds` after it.
+ */
+export interface AwakeCheck {
+  id: string;
+  ringId: string;
+  alarm: Alarm;
+  dueAt: number;
+  shownAt: number | null;
+}
 import type { AlarmEvent } from "@app/client-data";
 export type { AlarmEvent } from "@app/client-data";
 interface AlarmAppearance {
@@ -30,8 +41,14 @@ interface AlarmPort {
   sessionStarted: (ringId: string) => Effect.Effect<void, Error>;
   /** A tap or answer in the session: native restarts the idle timer. */
   activity: (ringId: string) => Effect.Effect<void, Error>;
-  /** N right. Idempotent, and ignores a ring that isn't the active one. */
-  dismiss: (ringId: string) => Effect.Effect<void, Error>;
+  /**
+   * N right. With `awakeCheckAfter` seconds, native schedules the awake check. Idempotent, and
+   * ignores a ring that isn't the active one.
+   */
+  dismiss: (ringId: string, awakeCheckAfter: number | null) => Effect.Effect<void, Error>;
+  getAwakeCheck: Effect.Effect<AwakeCheck | null, Error>;
+  /** The check's card was answered. Ignores a check that isn't the pending one. */
+  awakeCheckPassed: (checkId: string) => Effect.Effect<void, Error>;
 }
 export class AlarmService extends Context.Service<AlarmService, AlarmPort>()("AlarmService") {}
 
@@ -62,7 +79,7 @@ export function alarmController(repository: AlarmRepository) {
       const events = yield* service.drainJournal;
       yield* repository.ingest(events);
       yield* service.ack(events.map((event) => event.id));
-      return yield* service.getRing;
+      return { ring: yield* service.getRing, awakeCheck: yield* service.getAwakeCheck };
     }),
   };
 }
@@ -85,6 +102,7 @@ export function memoryAlarmRepository(): AlarmRepository {
 export function memoryAlarmService() {
   let alarms: readonly Alarm[] = [];
   let ring: Ring | null = null;
+  let check: AwakeCheck | null = null;
   let events: AlarmEvent[] = [];
   let complete = false;
   const signals: string[] = [];
@@ -130,10 +148,25 @@ export function memoryAlarmService() {
       Effect.sync(() => {
         signals.push(`activity:${id}`);
       }),
-    dismiss: (id) =>
+    dismiss: (id, awakeCheckAfter) =>
       Effect.sync(() => {
         signals.push(`dismiss:${id}`);
-        if (ring?.id === id) ring = null;
+        if (ring?.id !== id) return;
+        if (awakeCheckAfter !== null)
+          check = {
+            id: `check-${id}`,
+            ringId: id,
+            alarm: ring.alarm,
+            dueAt: Date.now() + awakeCheckAfter * 1000,
+            shownAt: null,
+          };
+        ring = null;
+      }),
+    getAwakeCheck: Effect.sync(() => check),
+    awakeCheckPassed: (id) =>
+      Effect.sync(() => {
+        signals.push(`awakeCheckPassed:${id}`);
+        if (check?.id === id) check = null;
       }),
   };
   return {
@@ -144,6 +177,11 @@ export function memoryAlarmService() {
     /** The signals JS sent native, in order, as `kind:ringId`. */
     signals: () => [...signals],
     ring: () => ring,
+    awakeCheck: () => check,
+    /** The check's delay ran out: native shows the prompt. */
+    showAwakeCheck: (at = Date.now()) => {
+      if (check) check = { ...check, shownAt: at };
+    },
     deliver: (event: AlarmEvent, active: Ring | null = null) => {
       events.push(event);
       ring = active;

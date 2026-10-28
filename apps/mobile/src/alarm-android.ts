@@ -1,7 +1,7 @@
 import { Effect, Layer } from "effect";
 import native from "../modules/alarm-native/index.ts";
 import { AlarmService } from "./alarms.ts";
-import { decodeAlarms, decodeRing, decodeEvents } from "./alarm-codec.ts";
+import { decodeAlarms, decodeAwakeCheck, decodeRing, decodeEvents } from "./alarm-codec.ts";
 
 const attempt = <T>(run: () => T) =>
   Effect.try({ try: run, catch: (error) => new Error(String(error)) });
@@ -21,6 +21,11 @@ export const androidAlarmService = Layer.succeed(AlarmService, {
   ack: (ids) => attempt(() => native.ack(ids)),
   sessionStarted: (id) => attempt(() => native.sessionStarted(id)),
   activity: (id) => attempt(() => native.activity(id)),
-  dismiss: (id) => attempt(() => native.dismiss(id)),
+  dismiss: (id, awakeCheckAfter) => attempt(() => native.dismiss(id, awakeCheckAfter)),
+  getAwakeCheck: attempt(() => decodeAwakeCheck(native.getAwakeCheck() ?? "null")),
+  awakeCheckPassed: (id) =>
+    attempt(() => {
+      native.awakeCheckPassed(id);
+    }),
 });
 export { native };

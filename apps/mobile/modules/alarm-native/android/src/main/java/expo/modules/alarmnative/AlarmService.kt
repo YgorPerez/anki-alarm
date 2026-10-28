@@ -32,7 +32,7 @@ import androidx.core.content.ContextCompat
 class AlarmService : Service() {
   companion object {
     const val ACTION_RING = "expo.modules.alarmnative.RING"
-    private const val CHANNEL_ID = "alarm_ringing_v1"
+    const val CHANNEL_ID = "alarm_ringing_v1"
     private const val NOTIFICATION_ID = 4242
     private const val WAY_BACK_ID = 4243
 

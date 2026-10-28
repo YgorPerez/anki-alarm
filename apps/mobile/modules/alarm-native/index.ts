@@ -14,7 +14,9 @@ interface NativeAlarm {
   ack: (ids: readonly string[]) => void;
   sessionStarted: (ringId: string) => void;
   activity: (ringId: string) => void;
-  dismiss: (ringId: string) => void;
+  dismiss: (ringId: string, awakeCheckAfter: number | null) => void;
+  getAwakeCheck: () => string | null;
+  awakeCheckPassed: (checkId: string) => boolean;
   getPermissions: () => AlarmPermissions;
   isOnboardingComplete: () => boolean;
   completeOnboarding: () => boolean;

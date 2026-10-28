@@ -26,7 +26,8 @@ object AlarmStore {
   fun setting(ctx: Context, key: String): Int = when(key) {
     "rampSeconds" -> ring(ctx)?.getJSONObject("alarm")?.optInt(key, 30) ?: 30
     "vibrate" -> if (ring(ctx)?.getJSONObject("alarm")?.optBoolean("vibrate", true) != false) 1 else 0
-    "leaveSeconds", "idleSeconds" -> JSONObject(prefs(ctx).getString("policy", "{}")).optInt(key, if(key == "leaveSeconds") 10 else 20)
+    "leaveSeconds", "idleSeconds", "awakeCheckSeconds" -> JSONObject(prefs(ctx).getString("policy", "{}"))
+      .optInt(key, when (key) { "leaveSeconds" -> 10; "idleSeconds" -> 20; else -> 60 })
     "forceMaxVolume", "directLaunch" -> 1
     else -> 0
   }
@@ -35,15 +36,21 @@ object AlarmStore {
     val random = UUID.randomUUID()
     return UUID((System.currentTimeMillis() shl 16) or 0x7000L or (random.mostSignificantBits and 0xfffL), random.leastSignificantBits).toString()
   }
-  @Synchronized fun event(ctx: Context, kind: String, alarmId: String? = null, newRing: JSONObject? = null, clearRing: Boolean = false) {
+  /**
+   * Appends a journal event, committing `also` in the same write. `ringId` names a ring that is no
+   * longer active (the awake check's).
+   */
+  @Synchronized fun event(ctx: Context, kind: String, alarmId: String? = null, newRing: JSONObject? = null, clearRing: Boolean = false,
+                          ringId: String? = null, also: (android.content.SharedPreferences.Editor) -> Unit = {}) {
     val active = newRing ?: ring(ctx)
     if (active == null && alarmId == null) return
     val events = JSONArray(prefs(ctx).getString("journal", "[]"))
     events.put(JSONObject().put("id", uuid7()).put("kind", kind).put("alarmId", alarmId ?: active?.getJSONObject("alarm")?.getString("id") ?: JSONObject.NULL)
-      .put("ringId", active?.getString("id") ?: JSONObject.NULL).put("wallTime", System.currentTimeMillis()).put("elapsedRealtime", SystemClock.elapsedRealtime()))
+      .put("ringId", ringId ?: active?.getString("id") ?: JSONObject.NULL).put("wallTime", System.currentTimeMillis()).put("elapsedRealtime", SystemClock.elapsedRealtime()))
     val edit = prefs(ctx).edit().putString("journal", events.toString())
     if (newRing != null) edit.putString("ring", newRing.toString())
     if (clearRing) edit.remove("ring")
+    also(edit)
     check(edit.commit())
     AlarmNativeModule.emit()
   }
@@ -61,9 +68,17 @@ object AlarmStore {
       check(prefs(ctx).edit().putString("ring", active.put("phase", phase).toString()).commit())
     return true
   }
-  @Synchronized fun finish(ctx: Context) {
-    if (!isRinging(ctx)) return
-    event(ctx, "dismissed", clearRing = true)
+  /**
+   * Dismisses the active ring. With `awakeCheckAfter` seconds it also stores the ring's awake check,
+   * in the same write; `AwakeCheck.advance` arms it.
+   */
+  @Synchronized fun finish(ctx: Context, awakeCheckAfter: Int? = null, now: Long = System.currentTimeMillis()) {
+    val active = ring(ctx) ?: return
+    event(ctx, "dismissed", clearRing = true) { edit ->
+      if (awakeCheckAfter != null && awakeCheckAfter > 0)
+        edit.putString(AwakeCheck.KEY, JSONObject().put("id", uuid7()).put("ringId", active.getString("id"))
+          .put("alarm", active.getJSONObject("alarm")).put("dueAt", now + awakeCheckAfter * 1000L).toString())
+    }
   }
   @Synchronized fun ack(ctx: Context, ids: List<String>) {
     val old = JSONArray(prefs(ctx).getString("journal", "[]")); val kept = JSONArray()

@@ -66,15 +66,20 @@ class AlarmNativeModule : Module() {
       if (AlarmStore.ring(context)?.getString("id") == ringId)
         android.os.Handler(android.os.Looper.getMainLooper()).post { AlarmService.instance?.onActivity() }
     }
-    Function("dismiss") { ringId: String ->
+    // N right. `awakeCheckAfter` (seconds, or null) schedules the awake check with the dismissal.
+    Function("dismiss") { ringId: String, awakeCheckAfter: Int? ->
       if (AlarmStore.ring(context)?.getString("id") == ringId) {
         // Persist dismissal synchronously before returning to JS.
-        AlarmStore.finish(context)
+        AlarmStore.finish(context, awakeCheckAfter)
+        AwakeCheck.advance(context)
         android.os.Handler(android.os.Looper.getMainLooper()).post {
           AlarmService.instance?.dismiss() ?: AlarmService.dismissWithoutService(context)
         }
       }
     }
+    Function("getAwakeCheck") { AwakeCheck.pending(context)?.toString() }
+    // The check's card was answered, any grade. Ignores a check that isn't the pending one.
+    Function("awakeCheckPassed") { checkId: String -> AwakeCheck.passed(context, checkId) }
     Function("getPermissions") { AlarmReliability.permissions(context) }
     Function("isOnboardingComplete") { context.getSharedPreferences("onboarding", Context.MODE_PRIVATE).getBoolean("complete", false) }
     Function("completeOnboarding") { context.getSharedPreferences("onboarding", Context.MODE_PRIVATE).edit().putBoolean("complete", true).commit() }

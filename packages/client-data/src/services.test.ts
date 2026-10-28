@@ -87,6 +87,8 @@ test("public services persist local changes and outbox together across reopen", 
           sound: { kind: "file" as const, uri: "content://media/7", title: "rooster.mp3" },
           deckId: "deck",
           need: 5,
+          awakeCheck: true,
+          awakeCheckMinutes: 10,
         };
         yield* data.saveAlarm(alarm);
         expect(yield* data.alarms).toEqual([alarm]);

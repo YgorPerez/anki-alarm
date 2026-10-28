@@ -1,6 +1,6 @@
 import { expect, it } from "vite-plus/test";
 import { newAlarm } from "@app/core";
-import { decodeAlarm, decodeAlarms, decodeRing } from "./alarm-codec.ts";
+import { decodeAlarm, decodeAlarms, decodeAwakeCheck, decodeRing } from "./alarm-codec.ts";
 
 const stored = (sound: unknown) => JSON.stringify({ ...newAlarm("a"), sound });
 
@@ -25,4 +25,20 @@ it("keeps the ring's deck and N through native, with defaults for older alarms",
   });
   const { deckId: _deck, need: _need, ...legacy } = newAlarm("a");
   expect(ringAlarm(JSON.stringify(legacy))).toMatchObject({ deckId: null, need: 3 });
+});
+
+it("reads native's awake check, before and after its prompt shows", () => {
+  const alarm = JSON.stringify({ ...newAlarm("a"), deckId: "deck", awakeCheck: true });
+  const pending = `{"id":"c","ringId":"r","alarm":${alarm},"dueAt":5}`;
+  expect(decodeAwakeCheck(pending)).toMatchObject({
+    id: "c",
+    ringId: "r",
+    alarm: { deckId: "deck", awakeCheck: true },
+    dueAt: 5,
+    shownAt: null,
+  });
+  expect(
+    decodeAwakeCheck(`{"id":"c","ringId":"r","alarm":${alarm},"dueAt":5,"shownAt":9}`),
+  ).toMatchObject({ shownAt: 9 });
+  expect(decodeAwakeCheck("null")).toBeNull();
 });

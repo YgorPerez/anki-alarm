@@ -199,18 +199,18 @@ describe("alarm session", () => {
   });
 });
 
-describe("awake check", () => {
-  const check = (setup: ReturnType<typeof deckWithEveryKind>, log: readonly LogEntry[]) =>
-    awakeCheckSession({
-      collection: setup.state,
-      log: [...setup.log, ...log],
-      deckId: setup.deckId,
-      checkId: "check",
-      now,
-    });
-  const inCheck = (cardId: string, grade: Grade, at: number) =>
-    review(cardId, grade, at, { origin: "alarm", ringId: "check" });
+const check = (setup: ReturnType<typeof deckWithEveryKind>, log: readonly LogEntry[]) =>
+  awakeCheckSession({
+    collection: setup.state,
+    log: [...setup.log, ...log],
+    deckId: setup.deckId,
+    checkId: "check",
+    now,
+  });
+const inCheck = (cardId: string, grade: Grade, at: number) =>
+  review(cardId, grade, at, { origin: "alarm", ringId: "check" });
 
+describe("awake check", () => {
   test("shows one card from the alarm's deck, picked as a session's first card", () => {
     const setup = deckWithEveryKind();
     expect(check(setup, [])).toMatchObject({

@@ -14,7 +14,7 @@ class AlarmNativePackage : Package {
     listOf(AlarmActivityListener)
 }
 
-// Hooks the RN activity: shows it over the lock screen while ringing, and tells the service when it
+// Hooks the RN activity: shows it over the lock screen while ringing or showing the awake check, and tells the service when it
 // becomes visible or hidden.
 object AlarmActivityListener : ReactActivityLifecycleListener {
   private var activity: WeakReference<Activity>? = null
@@ -28,7 +28,7 @@ object AlarmActivityListener : ReactActivityLifecycleListener {
     this.activity = WeakReference(activity)
     val ringing = AlarmStore.isRinging(activity)
     AlarmStore.log(activity, "activity created, alarmExtra=${activity.intent?.getBooleanExtra("alarm", false)} ringing=$ringing")
-    applyLockFlags(ringing)
+    applyLockFlags(ringing || AwakeCheck.isShown(activity))
     // A force-stop kills the service but leaves the ringing flag: opening the app resumes the ring.
     if (ringing && AlarmService.instance == null) AlarmService.start(activity, "app opened while ringing")
     if (callbacksRegistered) return
@@ -61,7 +61,7 @@ object AlarmActivityListener : ReactActivityLifecycleListener {
   }
 
   override fun onNewIntent(intent: Intent): Boolean {
-    activity?.get()?.let { applyLockFlags(AlarmStore.isRinging(it)) }
+    activity?.get()?.let { applyLockFlags(AlarmStore.isRinging(it) || AwakeCheck.isShown(it)) }
     return false
   }
 

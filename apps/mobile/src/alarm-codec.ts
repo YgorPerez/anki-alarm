@@ -18,6 +18,9 @@ const alarm = Schema.Struct({
   // Alarms saved before #41 have no deck or N; Core fills them in.
   deckId: Schema.optional(Schema.Unknown),
   need: Schema.optional(Schema.Unknown),
+  // And none before #47 has an awake check.
+  awakeCheck: Schema.optional(Schema.Unknown),
+  awakeCheckMinutes: Schema.optional(Schema.Unknown),
 });
 const event = Schema.Struct({
   id: Schema.String,
@@ -39,4 +42,18 @@ export const decodeEvents = Schema.decodeUnknownSync(Schema.fromJsonString(Schem
 export const decodeRing = (json: string) => {
   const active = decodeStoredRing(json);
   return active && { ...active, alarm: readAlarm(active.alarm) };
+};
+const awakeCheck = Schema.NullOr(
+  Schema.Struct({
+    id: Schema.String,
+    ringId: Schema.String,
+    alarm,
+    dueAt: Schema.Number,
+    shownAt: Schema.optional(Schema.Number),
+  }),
+);
+const decodeStoredAwakeCheck = Schema.decodeUnknownSync(Schema.fromJsonString(awakeCheck));
+export const decodeAwakeCheck = (json: string) => {
+  const check = decodeStoredAwakeCheck(json);
+  return check && { ...check, alarm: readAlarm(check.alarm), shownAt: check.shownAt ?? null };
 };
