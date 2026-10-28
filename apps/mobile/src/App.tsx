@@ -10,9 +10,20 @@ import { Effect } from "effect";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
 import type { ListRenderItemInfo } from "react-native";
-import { AppState, Pressable, FlatList, Switch, Text, TextInput, View } from "react-native";
+import {
+  AppState,
+  BackHandler,
+  Pressable,
+  FlatList,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { copy } from "./copy.ts";
+import { ThemeSettings } from "./ThemeSettings.tsx";
+import { ScopedTheme } from "uniwind";
 import { AlarmService, alarmController, type Ring } from "./alarms.ts";
 import { androidAlarmService, native } from "./alarm-android.ts";
 import { sqliteAlarmRepository } from "./alarm-storage.ts";
@@ -35,6 +46,7 @@ const run = <A,>(effect: Effect.Effect<A, Error, AlarmService>) =>
 const currentTime = () => Date.now();
 function Home() {
   const [showDecks, setShowDecks] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
   const [controller] = useState(() => alarmController(sqliteAlarmRepository()));
   const [locale, setLocale] = useState<Locale>("pt-BR");
   const [alarms, setAlarms] = useState(() => controller.list());
@@ -72,6 +84,14 @@ function Home() {
       appState.remove();
     };
   }, [controller, locale]);
+  useEffect(() => {
+    if (!themeOpen || ring) return undefined;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      setThemeOpen(false);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [themeOpen, ring]);
   const save = useCallback(
     (alarm: Alarm) => {
       void run(controller.save(alarm))
@@ -92,32 +112,35 @@ function Home() {
   );
   if (ring)
     return (
-      <View
-        className="flex-1 justify-center gap-6 bg-black p-6"
-        style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
-      >
-        <Text className="text-clock font-bold text-white">
-          {new Date(ring.startedAt).toLocaleTimeString(locale, {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
-        <Text className="text-question text-white">{ring.alarm.label}</Text>
-        <Pressable
-          accessibilityRole="button"
-          className="rounded-pill bg-primary p-6"
-          onPress={() => {
-            void run(Effect.flatMap(AlarmService, (service) => service.dismiss(ring.id)))
-              .then(() => run(controller.resume))
-              .then(setRing)
-              .catch(() => setError(t("alarmError")));
-          }}
+      <ScopedTheme theme="dark">
+        <View
+          className="flex-1 justify-center gap-6 bg-background p-6"
+          style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
         >
-          <Text className="text-body text-primary-foreground">{t("dismiss")}</Text>
-        </Pressable>
-        <Text className="text-body text-white">{error}</Text>
-      </View>
+          <Text className="text-clock font-bold text-foreground">
+            {new Date(ring.startedAt).toLocaleTimeString(locale, {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+          <Text className="text-question text-foreground">{ring.alarm.label}</Text>
+          <Pressable
+            accessibilityRole="button"
+            className="rounded-pill bg-primary p-6"
+            onPress={() => {
+              void run(Effect.flatMap(AlarmService, (service) => service.dismiss(ring.id)))
+                .then(() => run(controller.resume))
+                .then(setRing)
+                .catch(() => setError(t("alarmError")));
+            }}
+          >
+            <Text className="text-body text-primary-foreground">{t("dismiss")}</Text>
+          </Pressable>
+          <Text className="text-body text-foreground">{error}</Text>
+        </View>
+      </ScopedTheme>
     );
+  if (themeOpen) return <ThemeSettings locale={locale} onBack={() => setThemeOpen(false)} />;
   if (showDecks) return <CollectionScreen locale={locale} onExit={() => setShowDecks(false)} />;
   return (
     <View
@@ -134,6 +157,9 @@ function Home() {
             <Text className="text-title font-bold text-foreground">{t("alarms")}</Text>
             <Pressable accessibilityRole="button" onPress={() => setShowDecks(true)}>
               <Text className="text-body text-primary">{t("title")}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => setThemeOpen(true)}>
+              <Text className="text-body text-primary-ink">{t("theme")}</Text>
             </Pressable>
             {editing ? (
               <AlarmEditor
