@@ -18,6 +18,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -72,7 +73,8 @@ class AlarmService : Service() {
   private var focus: AudioFocusRequest? = null
   private var savedAlarmVolume = -1
   private var target = 1f
-  private var rampPerTick = 1f
+  private var rampSeconds = 0
+  private var rampFrom = -1L // elapsedRealtime when the ramp began; -1 when not ramping
 
   var level = 0f
     private set
@@ -85,7 +87,7 @@ class AlarmService : Service() {
 
   private val tick = object : Runnable {
     override fun run() {
-      level = if (level < target) minOf(target, level + rampPerTick) else target
+      level = if (rampFrom >= 0) minOf(target, Ramp.level(SystemClock.elapsedRealtime() - rampFrom, rampSeconds)) else target
       player?.setVolume(vol(), vol())
       handler.postDelayed(this, 250)
     }
@@ -209,10 +211,9 @@ class AlarmService : Service() {
 
   private fun setTarget(t: Float, ramp: Boolean) {
     target = t
-    val seconds = maxOf(1, setting("rampSeconds"))
-    rampPerTick = 1f / (seconds * 4)
-    if (!ramp || t < level) level = t
-    if (ramp && level == 0f) level = 0.05f
+    rampSeconds = setting("rampSeconds")
+    rampFrom = if (ramp) SystemClock.elapsedRealtime() else -1L
+    level = if (ramp) minOf(t, Ramp.level(0, rampSeconds)) else t
     player?.setVolume(vol(), vol())
   }
 

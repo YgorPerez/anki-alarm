@@ -1,5 +1,6 @@
 package expo.modules.alarmnative
 
+import android.app.Activity
 import android.app.AlarmManager
 import android.app.NotificationManager
 import android.content.Context
@@ -9,6 +10,8 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.ActivityCompat
+import expo.modules.kotlin.Promise
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import org.json.JSONArray
@@ -17,15 +20,32 @@ import org.json.JSONObject
 class AlarmNativeModule : Module() {
   companion object {
     private var current: AlarmNativeModule? = null
+    private const val PICK_SOUND = 4545
     fun emit() { current?.sendEvent("onChange", emptyMap<String, Any>()) }
   }
   private val context: Context get() = requireNotNull(appContext.reactContext)
+  private var picking: Pair<String, Promise>? = null
   override fun definition() = ModuleDefinition {
     Name("AlarmNative")
     Events("onChange")
     Function("createId") { AlarmStore.uuid7() }
     OnCreate { current = this@AlarmNativeModule; AlarmService.ensureChannel(context) }
-    OnDestroy { current = null }
+    OnDestroy { current = null; Sounds.stopPreview() }
+    // Resolves with the picked sound's JSON, or null when the picker is cancelled.
+    AsyncFunction("pickSound") { kind: String, currentUri: String?, promise: Promise ->
+      val activity = appContext.currentActivity ?: return@AsyncFunction promise.resolve(null)
+      picking?.second?.resolve(null)
+      picking = kind to promise
+      activity.startActivityForResult(Sounds.picker(kind, currentUri), PICK_SOUND)
+    }.runOnQueue(Queues.MAIN)
+    OnActivityResult { _, result ->
+      if (result.requestCode != PICK_SOUND) return@OnActivityResult
+      val (kind, promise) = picking ?: return@OnActivityResult
+      picking = null
+      promise.resolve(if (result.resultCode == Activity.RESULT_OK) Sounds.picked(context, kind, result.data)?.toString() else null)
+    }
+    Function("previewSound") { sound: String -> Sounds.preview(context, JSONObject(sound)) }
+    Function("stopPreview") { Sounds.stopPreview() }
     Function("setAlarms") { alarms: String, policy: String -> AlarmScheduler.setAlarms(context, JSONArray(alarms), JSONObject(policy)) }
     Function("list") { AlarmStore.alarms(context).toString() }
     Function("getRing") { AlarmStore.ring(context)?.toString() }

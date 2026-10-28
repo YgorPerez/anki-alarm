@@ -20,7 +20,7 @@ object AlarmStore {
     "forceMaxVolume", "directLaunch" -> 1
     else -> 0
   }
-  fun sound(ctx: Context): Uri? = ring(ctx)?.getJSONObject("alarm")?.optString("sound")?.takeIf { it.isNotEmpty() && it != "null" }?.let { Uri.parse(it) }
+  fun sound(ctx: Context): Uri? = ring(ctx)?.getJSONObject("alarm")?.optString("soundFile")?.takeIf { it.isNotEmpty() }?.let { Uri.parse(it) }
   fun uuid7(): String {
     val random = UUID.randomUUID()
     return UUID((System.currentTimeMillis() shl 16) or 0x7000L or (random.mostSignificantBits and 0xfffL), random.leastSignificantBits).toString()
