@@ -1,24 +1,30 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   alarmSession,
+  awakeCheckAfter,
   ringNeed,
-  SESSION_RULES,
   type Alarm,
   type Grade,
   type Locale,
 } from "@app/core";
 import type { AlarmEvent } from "@app/client-data";
 import { Effect, type Layer } from "effect";
-import { useEffect, useRef, useState } from "react";
-import { BackHandler, Pressable, Text, View } from "react-native";
+import { useRef, useState } from "react";
+import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AlarmService, type Ring } from "./alarms.ts";
+import type { AlarmService, Ring } from "./alarms.ts";
+import {
+  AlarmCard,
+  PillButton,
+  useBlockBack,
+  useClock,
+  useGuarded,
+  useReveal,
+} from "./alarm-ui.tsx";
+import { bold, GRADE_DELAY_MS, signalWith } from "./alarm-screen.ts";
 import { copy } from "./copy.ts";
 import { localData } from "./database.ts";
-import { AnswerControls, CardSide } from "./StudyScreen.tsx";
 
-const GRADE_DELAY_MS = SESSION_RULES.gradeDelaySeconds * 1000;
-const bold = { fontFamily: "AtkinsonHyperlegible_700Bold" };
 type Session = ReturnType<typeof alarmSession>;
 
 /** The ring's alarm and the alarms folded into it, from the ingested journal. */
@@ -26,17 +32,6 @@ const absorbedInto = (ring: Ring, events: readonly AlarmEvent[], alarms: readonl
   events
     .filter((e) => e.kind === "absorbed" && e.ringId === ring.id)
     .flatMap((e) => alarms.filter((a) => a.id === e.alarmId));
-
-/** Runs an operation and reports whether it succeeded. Outside the components: React Compiler
- * doesn't compile `try` with `await`. */
-async function succeeded(operation: () => Promise<void>) {
-  try {
-    await operation();
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * The alarm screen: Start begins the session, and N cards rated Good or Easy dismiss the ring.
@@ -88,22 +83,9 @@ export function AlarmScreen({
               <Text className="text-label text-attention">{t("cameBack")}</Text>
             </View>
           )}
-          <CardSide
-            key={`${session.next.card.id}-${alarm.revealed}`}
-            label={t(alarm.revealed ? "answer" : "front")}
-            dark
-            input={{
-              note: session.next.note,
-              type: session.next.noteType,
-              ordinal: session.next.card.fields.ordinal.value,
-              side: alarm.revealed ? "back" : "front",
-              dark: true,
-              deckName: session.next.deckName,
-            }}
-          />
-          <AnswerControls
-            revealed={alarm.revealed}
-            gradesShown={alarm.gradesShown}
+          <AlarmCard
+            next={session.next}
+            reveal={alarm.card}
             busy={busy}
             locale={locale}
             onReveal={alarm.reveal}
@@ -149,36 +131,6 @@ function Progress({ session, locale }: { session: Session; locale: Locale }) {
   );
 }
 
-function PillButton({
-  label,
-  busy,
-  primary = false,
-  onPress,
-}: {
-  label: string;
-  busy: boolean;
-  primary?: boolean;
-  onPress: () => Promise<void>;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={busy}
-      onPress={() => {
-        void onPress();
-      }}
-      className={`min-h-16 items-center justify-center rounded-pill ${primary ? "bg-primary" : "bg-surface"}`}
-    >
-      <Text
-        className={`text-body ${primary ? "text-primary-foreground" : "text-foreground"}`}
-        style={bold}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 /** The session's state and the signals it sends native. Progress is the log's answers for this
  * ring, so a restart resumes the count. */
 function useAlarmSession(
@@ -188,15 +140,10 @@ function useAlarmSession(
   gradeDelayMs: number,
 ) {
   const [started, setStarted] = useState(false);
-  const [revealedId, setRevealedId] = useState<string>();
-  const [gradesFor, setGradesFor] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
-  const lock = useRef(false);
+  const { busy, error, setError, guarded } = useGuarded();
   // When the current card appeared, on the monotonic clock: the answer's time taken.
   const shownAt = useRef(0);
-  const signal = (send: (service: AlarmService["Service"]) => Effect.Effect<void, Error>) =>
-    Effect.runPromise(Effect.flatMap(AlarmService, send).pipe(Effect.provide(layer)));
+  const signal = signalWith(layer);
   const query = useQuery({
     queryKey: ["alarmSession", ring.id],
     networkMode: "always",
@@ -223,29 +170,13 @@ function useAlarmSession(
   });
   const session = query.data;
   const cardId = session?.next?.card.id;
-  const revealed = Boolean(cardId && revealedId === cardId);
-  useEffect(() => {
-    // Back never leaves a ringing alarm.
-    const handler = BackHandler.addEventListener("hardwareBackPress", () => true);
-    return () => handler.remove();
-  }, []);
-  useEffect(() => {
-    if (!revealedId) return undefined;
-    const timer = setTimeout(() => setGradesFor(revealedId), gradeDelayMs);
-    return () => clearTimeout(timer);
-  }, [revealedId, gradeDelayMs]);
+  const card = useReveal(cardId, gradeDelayMs);
+  useBlockBack();
 
-  const guarded = async (operation: () => Promise<void>) => {
-    if (lock.current) return;
-    lock.current = true;
-    setBusy(true);
-    setError(false);
-    setError(!(await succeeded(operation)));
-    lock.current = false;
-    setBusy(false);
-  };
-  const finish = async () => {
-    await signal((service) => service.dismiss(ring.id));
+  /** A deck with no cards can't give the awake check a card, so that dismissal skips it. */
+  const finish = async (awakeCheck = true) => {
+    const after = awakeCheck ? awakeCheckAfter(ring.alarm) : null;
+    await signal((service) => service.dismiss(ring.id, after));
     onDismissed();
   };
   return {
@@ -253,8 +184,7 @@ function useAlarmSession(
     started,
     busy,
     error: error || query.isError,
-    revealed,
-    gradesShown: Boolean(cardId && gradesFor === cardId),
+    card,
     start: () =>
       guarded(async () => {
         await signal((service) => service.sessionStarted(ring.id));
@@ -264,31 +194,22 @@ function useAlarmSession(
       }),
     reveal: () => {
       if (!cardId) return;
-      setRevealedId(cardId);
+      card.reveal();
       void signal((service) => service.activity(ring.id)).catch(() => setError(true));
     },
     answer: (grade: Grade) =>
       guarded(async () => {
-        if (!cardId || !revealed) return;
+        if (!cardId || !card.revealed) return;
         await signal((service) => service.activity(ring.id));
         const durationMs = Math.max(0, performance.now() - shownAt.current);
         await Effect.runPromise(
           localData((data) => data.answerCard(cardId, grade, durationMs, ring.id)),
         );
-        setRevealedId(undefined);
+        card.hide();
         const { data } = await query.refetch();
         shownAt.current = performance.now();
         if (data?.done) await finish();
       }),
-    dismiss: () => guarded(finish),
+    dismiss: () => guarded(() => finish(false)),
   };
-}
-
-function useClock() {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 15_000);
-    return () => clearInterval(timer);
-  }, []);
-  return now;
 }
