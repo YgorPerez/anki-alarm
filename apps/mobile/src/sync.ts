@@ -1,7 +1,13 @@
 // Signing in turns sync on (ADR 0001, 0007). The first account on this phone merges its local data;
 // a different account than last time asks first; signing out keeps local data. While signed in,
 // sync runs on open and resume, after local writes, after each alarm session and on refresh.
-import { syncScheduler, type ClientData, type SyncResult, type SyncStatus } from "@app/client-data";
+import {
+  syncScheduler,
+  type ClientData,
+  type MediaSyncResult,
+  type SyncResult,
+  type SyncStatus,
+} from "@app/client-data";
 import type { SyncClient } from "@app/contracts";
 import { signInPlan } from "@app/core";
 import { Effect } from "effect";
@@ -26,7 +32,8 @@ export type AccountState =
   | { kind: "signedOut"; busy: boolean; failed: boolean }
   /** Signed in to another account than the one this phone synced: merge into it, or cancel. */
   | { kind: "confirm"; user: AccountUser }
-  | { kind: "signedIn"; user: AccountUser; sync: SyncStatus };
+  /** `media` is what the last sync did with media files, until the first one ends. */
+  | { kind: "signedIn"; user: AccountUser; sync: SyncStatus; media: MediaSyncResult | null };
 
 type Data = ClientData["Service"];
 type UseData = <A, E>(use: (data: Data) => Effect.Effect<A, E>) => Promise<A>;
@@ -43,6 +50,7 @@ export function createSync({ account, data }: { account: Account; data: UseData 
     run: async () => {
       const client = await account.client();
       const result = await data((d) => d.sync(client));
+      if (state.kind === "signedIn") set({ ...state, media: result.media });
       for (const listener of synced) listener(result);
     },
     onStatus: (sync) => {
@@ -57,7 +65,7 @@ export function createSync({ account, data }: { account: Account; data: UseData 
   });
   const enter = (user: AccountUser) => {
     scheduler.resume();
-    set({ kind: "signedIn", user, sync: scheduler.status() });
+    set({ kind: "signedIn", user, sync: scheduler.status(), media: null });
     scheduler.now();
   };
   /** Continues, merges or asks, as Core's `signInPlan` says. */

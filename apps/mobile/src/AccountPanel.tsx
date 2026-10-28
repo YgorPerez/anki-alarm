@@ -19,6 +19,17 @@ const syncLine = (state: Extract<AccountState, { kind: "signedIn" }>, locale: Lo
   return t("synced", { time });
 };
 
+/** Media files that didn't move, when the last sync left any. */
+const mediaLine = (state: Extract<AccountState, { kind: "signedIn" }>, locale: Locale) => {
+  const t = syncCopy(locale);
+  const { media } = state;
+  if (!media) return null;
+  if (media.storageRefused) return t("mediaRefused");
+  if (media.heldBack > 0) return t("mediaHeld");
+  if (media.missing > 0) return t("mediaMissing", { count: String(media.missing) });
+  return null;
+};
+
 function Action({
   label,
   onPress,
@@ -96,6 +107,9 @@ export function AccountPanel({ sync, locale }: { sync: Sync | null; locale: Loca
           >
             {syncLine(state, locale)}
           </Text>
+          {mediaLine(state, locale) !== null && (
+            <Text className="text-body text-attention">{mediaLine(state, locale)}</Text>
+          )}
           {state.sync.kind === "signedOut" ? (
             <Action primary label={t("signIn")} onPress={() => void sync.signIn()} />
           ) : (

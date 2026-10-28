@@ -13,7 +13,8 @@ import type { Change, PullResult } from "@app/contracts";
 import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { mediaFiles, syncAccounts, syncRecords } from "./schema.ts";
+import { storedFiles } from "./media.ts";
+import { syncAccounts, syncRecords } from "./schema.ts";
 
 /** The contract checks a change's envelope; Core's types describe its records. */
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion
@@ -41,16 +42,7 @@ export function syncStore(d1: D1Database) {
       ),
     ].filter(Boolean);
     if (hashes.length === 0) return changes;
-    const stored = new Set(
-      (
-        await db
-          .select({ sha256: mediaFiles.sha256 })
-          .from(mediaFiles)
-          .where(
-            sql`${mediaFiles.sha256} IN (SELECT value FROM json_each(${JSON.stringify(hashes)}))`,
-          )
-      ).map((row) => row.sha256),
-    );
+    const stored = await storedFiles(db, hashes);
     return changes.filter((change) => {
       if (change.kind !== "media") return true;
       const file = mediaFromRecord(change.record);

@@ -23,6 +23,12 @@ const messages = {
     failed: "Sem conexão. Suas mudanças ficam guardadas e sincronizam depois.",
     updateRequired: "Atualize o app para voltar a sincronizar. Tudo continua funcionando offline.",
     expired: "Sua sessão expirou. Entre de novo para sincronizar.",
+    mediaHeld:
+      "Algumas imagens ou áudios não foram enviados. As notas que os usam sincronizam depois.",
+    mediaMissing:
+      "Faltam {count} arquivos de mídia neste celular. Eles chegam na próxima sincronização.",
+    mediaRefused:
+      "Não há espaço neste celular para as imagens e áudios dos baralhos. Libere espaço e sincronize de novo.",
   },
   en: {
     account: "Account",
@@ -46,6 +52,10 @@ const messages = {
     failed: "No connection. Your changes are kept and sync later.",
     updateRequired: "Update the app to sync again. Everything keeps working offline.",
     expired: "Your session expired. Sign in again to sync.",
+    mediaHeld: "Some images or sounds didn't upload. The notes that use them sync later.",
+    mediaMissing: "{count} media files are missing on this phone. They arrive on the next sync.",
+    mediaRefused:
+      "There's no room on this phone for your decks' images and sounds. Free up space and sync again.",
   },
 };
 

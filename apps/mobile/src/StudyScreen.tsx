@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { localData } from "./database.ts";
 import { copy } from "./copy.ts";
 import { editingCopy } from "./editing-copy.ts";
-import { mediaBaseUrl, mediaUrl } from "./apkg.ts";
+import { mediaBaseUrl, mediaUrl } from "./media.ts";
 
 export function StudyScreen({
   deckId,
