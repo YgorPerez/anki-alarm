@@ -2,6 +2,7 @@ export { translator } from "./locale.ts";
 export type { Locale, Messages } from "./locale.ts";
 export {
   contrast,
+  nativeAppearance,
   FACTORY_THEME,
   lookAlikes,
   parseThemeChoice,
