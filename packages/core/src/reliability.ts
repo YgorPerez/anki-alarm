@@ -56,7 +56,10 @@ export function reliabilitySteps(p: AlarmPermissions): ReliabilityStep[] {
   }
   return kinds.map((kind) => ({
     kind,
-    state: (p[kind as keyof AlarmPermissions] as PermissionState | undefined) ?? "unknown",
+    state:
+      kind === "recents" || kind === "neverSleeping" || kind === "motorolaBattery"
+        ? "unknown"
+        : (p[kind] ?? "unknown"),
     restrictedSettings:
       kind === "overlay" &&
       p.overlay !== "granted" &&

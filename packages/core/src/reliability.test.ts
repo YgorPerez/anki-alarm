@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { reliabilitySteps, type AlarmPermissions } from "./index.ts";
 
 const stock: AlarmPermissions = {
@@ -50,4 +50,15 @@ it("shows brand instructions without claiming unreadable OEM settings are grante
       true,
     );
   }
+});
+it("keeps denied OEM permissions visible and preserves unknown checks", () => {
+  const steps = reliabilitySteps({
+    ...stock,
+    manufacturer: "Xiaomi",
+    lockScreen: "denied",
+    backgroundPopups: "granted",
+  });
+  expect(steps.find((s) => s.kind === "lockScreen")?.state).toBe("denied");
+  expect(steps.find((s) => s.kind === "backgroundPopups")?.state).toBe("granted");
+  expect(steps.find((s) => s.kind === "autostart")?.state).toBe("unknown");
 });
