@@ -22,25 +22,56 @@ Words in **bold** on first use are defined in `GLOSSARY.md`.
   service interface, so iOS is a new implementation and nothing above it changes. On iOS, AlarmKit
   rings over the lock screen but can't hold dismissal until the cards are done; there the alarm
   rings, opens the session, and the **awake check** catches anyone who goes back to sleep.
-- **Web**: the full study client and editor. It never rings alarms.
+- **Web**: the full study client and editor. It works offline like the phone and never rings
+  alarms.
 
 ## Repository and stack
 
 A pnpm monorepo on GitHub under `YgorPerez`, driven by Vite+ (`vp check`, `vp lint`, `vp fmt`,
 `vp test`), as in pesquisa-relacionamentos.
 
-| Path            | What                                                                                                                                                                                                                       |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/mobile`   | Expo + React Native, react-native-reusables on uniwind (Tailwind 4), expo-sqlite + drizzle, Effect for services. Local Kotlin Expo modules: `modules/alarm-native` (alarms, audio, TTS) and `modules/ankidroid`.           |
-| `apps/web`      | TanStack Start/Router/Query, shadcn on Base UI (`@base-ui/react`), Tailwind 4, `@shadcn/lint`, Storybook, Vitest, Playwright. Deployed to Cloudflare Workers.                                                              |
-| `apps/sync`     | Cloudflare Worker with D1 (data) and R2 (media), as in wave's `apps/sync`.                                                                                                                                                 |
-| `packages/core` | Every decision-heavy rule, with **zero runtime dependencies** except `ts-fsrs`: log replay, session and dismiss rules, snooze cost, card picking, daily limits, `.apkg` model, template rendering, stats, alarm time math. |
+| Path                   | What                                                                                                                                                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/mobile`          | Expo + React Native, react-native-reusables on uniwind (Tailwind 4), expo-sqlite through `packages/client-data`, Effect for services. Local Kotlin Expo modules: `modules/alarm-native` (alarms, audio, TTS) and `modules/ankidroid`. |
+| `apps/web`             | TanStack Start/Router/Query, shadcn on Base UI (`@base-ui/react`), Tailwind 4, `@shadcn/lint`. sqlite-wasm in OPFS through `packages/client-data`, Serwist for the app shell. Deployed to Cloudflare Workers.           |
+| `apps/sync`            | Cloudflare Worker with D1 (data, through drizzle) and R2 (media). Implements `packages/contracts` with Effect's `HttpApiBuilder` and mounts better-auth.                                                                  |
+| `packages/core`        | Every decision-heavy rule, with **zero runtime dependencies** except `ts-fsrs`: log replay, session and dismiss rules, snooze cost, card picking, daily limits, `.apkg` model, template rendering, stats, alarm time math. |
+| `packages/contracts`   | The sync API as an Effect HttpApi with Effect Schema: push, pull, media, metadata. The Worker implements it; both clients use the derived client. As in t3code's `packages/contracts`.                                  |
+| `packages/client-data` | What the phone and the web share below the screen: the drizzle schema and migrations, the outbox, and the push/pull engine, in Effect. The SQLite driver is injected. See `docs/adr/0006-shared-client-data.md`.         |
+| `packages/design-tokens` | CSS tokens for both apps.                                                                                                                                                                                                |
 
 `packages/core` uses erasable TypeScript only and is tested through its public API. The apps stay
-thin: they wire Core to storage, native modules and the screen.
+thin: they wire Core to storage, native modules and the screen. Effect is used everywhere outside
+Core.
 
-Shared checks across the repo: oxlint (through `vp lint`), fallow, react-doctor. The web adds
-`@shadcn/lint` and story tests.
+### Libraries
+
+- TypeScript, Vite+, React Compiler on in both apps.
+- Both apps: TanStack Query (reading local SQLite), Form, Virtual (long lists), Pacer (debounced
+  search, autosave and sync) and Charts (stats; the React Native adapter is experimental, so only
+  the drawing changes if it fails on the phone). zustand holds local UI state only, persisted (MMKV
+  on the phone); data and synced settings live in SQLite.
+- The web adds TanStack Devtools in development.
+- Sign-in: better-auth. See `docs/adr/0007-better-auth.md`.
+
+### Tests and checks
+
+- Vitest everywhere. Test behaviour, not implementation. A test waits for the condition it checks
+  and never sleeps.
+- Each screen is tested with Testing Library (jsdom on the web, React Native Testing Library on the
+  phone) against a fake sync API built from `packages/contracts` with `HttpApiBuilder`, as t3code's
+  `apps/web/test`, so its responses follow the contract.
+- Storybook on the web (with story tests) and on the phone.
+- Playwright only for journeys that need the real system: session, several accounts, offline,
+  layout. Maestro on an Android emulator for the alarm.
+- Checks: oxlint (through `vp lint`), fallow, React Doctor, and `@shadcn/lint` on the web.
+  Impeccable for visual polish.
+- Violation ceiling: a new rule lands with zero violations, or with a per-file limit in a
+  committed baseline that can only go down. CI fails when a file goes over its limit. This covers
+  oxlint, fallow and React Doctor.
+- CI on a pull request runs only the packages the diff affects and their dependents
+  (`...[origin/main]`); main and tags run everything. Maestro runs on main and tags, and on a pull
+  request only when it touches `apps/mobile` or `modules/`.
 
 ### Release
 
@@ -92,16 +123,17 @@ options. Caches of the result are fine; the log is what syncs.
 ## Sync
 
 - The phone works fully offline with no account. Signing in with Google turns sync on. The web
-  needs sign-in.
-- Sign-in follows wave: Android's Google account picker on the phone, Google sign-in on the web; the
-  Worker checks the ID token and issues its own session token.
+  needs sign-in once, then works offline like the phone: its data is a local SQLite database and it
+  queues changes in the same outbox.
+- Sign-in is better-auth on the Worker: Android's Google account picker sends its ID token on the
+  phone, Google sign-in on the web. See `docs/adr/0007-better-auth.md`.
 - Sync is push and pull of changes since a cursor: notes, note types, decks, deck options, alarms
   and reviews, against a per-user server sequence. Notes and settings merge field by field,
   last-write-wins by hybrid logical clock; the Worker resolves on push. Reviews never conflict: both
   sides append, and replay settles the card. Deletes are tombstones and beat edits.
 - Media goes to R2, keyed by content hash, so the same file is stored once. Clients upload a file
-  before the records that reference it. The phone keeps a local copy of every file its decks use,
-  so an alarm never waits on the network.
+  before the records that reference it. The phone and the web keep a local copy of every file
+  their decks use (the web in OPFS), so an alarm or an offline session never waits on the network.
 - Ids, imports, linked decks, sign-in and sign-out, and when sync runs: see
   `docs/adr/0001-sync-protocol.md`.
 
@@ -237,3 +269,4 @@ awake check passes and failures.
 - Editing note types on the phone.
 - AnkiWeb sync.
 - Play Store release.
+- Dynamic link-preview images (satori): there is no public page to preview.
