@@ -44,11 +44,17 @@ Shared checks across the repo: oxlint (through `vp lint`), fallow, react-doctor.
 
 ### Release
 
-- **APK**: CI builds a signed APK on each release and publishes it to GitHub Releases. The app
-  checks for a newer release and offers it.
-- **OTA**: JS-only changes ship through EAS Update to installed APKs on the same runtime version.
-  A native change needs a new APK.
-- **Web and Worker**: deployed to Cloudflare from CI.
+- A `vX.Y.Z` tag ships everything; merges to main don't. The Worker and web deploy to Cloudflare
+  first.
+- **OTA**: the runtime version is Expo's fingerprint. When the tag's fingerprint matches the latest
+  APK's, CI publishes an EAS Update to the `production` channel. It applies on the next cold start,
+  never during an alarm.
+- **APK**: when the fingerprint changed, CI builds a signed APK with Gradle on GitHub Actions and
+  attaches it to the GitHub release. The app offers a release's APK only when its versionCode is
+  above the installed one, and installs it in-app.
+- Sync is lockstep: a `SYNC_PROTOCOL` number in Core must match the Worker's, or sync pauses until
+  the app updates.
+- Details: `docs/adr/0002-release-policy.md`.
 
 ## Data model
 
