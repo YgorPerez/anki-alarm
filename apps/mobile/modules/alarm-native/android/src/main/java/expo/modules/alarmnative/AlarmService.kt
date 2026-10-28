@@ -350,6 +350,7 @@ class AlarmService : Service() {
     val p = policy ?: return
     if (p.sound != rendered) {
       rendered = p.sound
+      log("sound ${p.sound}")
       when (p.sound) {
         RingPolicy.Sound.RAMP -> { setTarget(1f, ramp = true); vibrate() }
         RingPolicy.Sound.FULL -> { setTarget(1f, ramp = false); vibrate() }
