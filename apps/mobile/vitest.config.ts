@@ -10,13 +10,15 @@ const standIn = (file: string) => fileURLToPath(new URL(`./test/native/${file}`,
 export default defineConfig({
   plugins: [babel({ include: /\/src\/.*\.tsx$/, plugins: ["babel-plugin-react-compiler"] })],
   resolve: {
-    alias: {
-      "react-native-webview": standIn("webview.ts"),
-      "react-native": standIn("react-native.ts"),
-      "react-native-safe-area-context": standIn("safe-area-context.ts"),
-      "expo-sqlite": standIn("expo-sqlite.ts"),
-      "expo-crypto": standIn("expo-crypto.ts"),
-    },
+    // Exact names: `expo-file-system/legacy` is not stood in.
+    alias: [
+      ["react-native-webview", "webview.ts"],
+      ["react-native", "react-native.ts"],
+      ["react-native-safe-area-context", "safe-area-context.ts"],
+      ["expo-sqlite", "expo-sqlite.ts"],
+      ["expo-crypto", "expo-crypto.ts"],
+      ["expo-file-system", "expo-file-system.ts"],
+    ].map(([name, file]) => ({ find: new RegExp(`^${name}$`), replacement: standIn(file!) })),
   },
   test: {
     name: "mobile",

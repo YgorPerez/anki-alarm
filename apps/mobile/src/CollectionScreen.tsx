@@ -23,6 +23,7 @@ import { Effect } from "effect";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { StudyScreen } from "./StudyScreen.tsx";
+import { pickAndImportApkg } from "./apkg.ts";
 
 type Form = { kind: "deck" | "note"; id?: string; first: string; second: string };
 const regular = { fontFamily: "AtkinsonHyperlegible_400Regular" };
@@ -116,6 +117,7 @@ export function CollectionScreen({
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
   const [error, setError] = useState(false);
+  const [notice, setNotice] = useState("");
   const t = copy(locale);
   const insets = useSafeAreaInsets();
   const load = () => {
@@ -160,6 +162,30 @@ export function CollectionScreen({
       onSaved();
     } catch {
       setError(true);
+    }
+    locked.current = false;
+    setBusy(false);
+  }
+  async function importPackage() {
+    if (locked.current) return;
+    locked.current = true;
+    setBusy(true);
+    setError(false);
+    setNotice(t("importing"));
+    try {
+      const summary = await pickAndImportApkg();
+      await queryClient.invalidateQueries({ queryKey: ["collection"] });
+      setNotice(
+        summary
+          ? t("imported", {
+              notes: String(summary.notes),
+              cards: String(summary.cards),
+              entries: String(summary.entries),
+            })
+          : "",
+      );
+    } catch {
+      setNotice(t("importError"));
     }
     locked.current = false;
     setBusy(false);
@@ -242,8 +268,13 @@ export function CollectionScreen({
           remove={confirmDelete}
           select={(id) => {
             setError(false);
+            setNotice("");
             setDeckId(id);
           }}
+          importPackage={() => {
+            void importPackage();
+          }}
+          notice={notice}
         />
       </ScrollView>
     </KeyboardAvoidingView>
@@ -341,22 +372,22 @@ function DeckDetails({
           key={note.id}
           accessibilityRole="button"
           disabled={busy}
-          accessibilityLabel={`${t("editNote")}: ${note.fields.front.value}`}
+          accessibilityLabel={`${t("editNote")}: ${note.values[0]?.value ?? ""}`}
           onPress={() =>
             edit({
               kind: "note",
               id: note.id,
-              first: note.fields.front.value,
-              second: note.fields.back.value,
+              first: note.values[0]?.value ?? "",
+              second: note.values[1]?.value ?? "",
             })
           }
           className="min-h-16 gap-2 border-b border-border py-4 active:opacity-80"
         >
           <Text style={bold} className="text-body text-foreground">
-            {note.fields.front.value}
+            {note.values[0]?.value ?? ""}
           </Text>
           <Text style={regular} className="text-body text-answer">
-            {note.fields.back.value}
+            {note.values[1]?.value ?? ""}
           </Text>
         </Pressable>
       ))}
@@ -374,17 +405,33 @@ function DeckDetails({
 function DeckList({
   t,
   state,
+  busy,
+  notice,
   create,
   select,
+  importPackage,
 }: {
   t: Translate;
   state: CollectionState;
+  busy: boolean;
+  notice: string;
   create: () => void;
   select: (id: string) => void;
+  importPackage: () => void;
 }) {
   return (
     <>
-      <Button label={t("newDeck")} primary onPress={create} />
+      <Button label={t("newDeck")} primary disabled={busy} onPress={create} />
+      <Button label={t("importApkg")} disabled={busy} onPress={importPackage} />
+      {notice ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={regular}
+          className="text-body text-foreground"
+        >
+          {notice}
+        </Text>
+      ) : null}
       {!state.decks.length && (
         <Text style={regular} className="text-body text-muted-foreground">
           {t("empty")}
@@ -394,6 +441,7 @@ function DeckList({
         <Pressable
           key={d.id}
           accessibilityRole="button"
+          disabled={busy}
           onPress={() => select(d.id)}
           className="min-h-16 flex-row flex-wrap items-center justify-between gap-2 border-b border-border py-4 active:opacity-80"
         >
@@ -427,6 +475,8 @@ function ScreenContent({
   cancel,
   remove,
   select,
+  importPackage,
+  notice,
 }: {
   state: CollectionState | undefined;
   form: Form | undefined;
@@ -441,6 +491,8 @@ function ScreenContent({
   cancel: () => void;
   remove: () => void;
   select: (id: string) => void;
+  importPackage: () => void;
+  notice: string;
 }) {
   if (!state) return <Loading t={t} error={error} retry={retry} />;
   if (form)
@@ -453,8 +505,11 @@ function ScreenContent({
     <DeckList
       t={t}
       state={state}
+      busy={busy}
+      notice={notice}
       create={() => setForm({ kind: "deck", first: "", second: "" })}
       select={select}
+      importPackage={importPackage}
     />
   );
 }

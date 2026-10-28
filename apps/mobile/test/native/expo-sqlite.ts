@@ -1,15 +1,27 @@
 /// <reference types="node" />
 // expo-sqlite's async API over Node's SQLite, in memory: the screens' storage code runs as on the
 // phone, against a fresh database per test file.
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 
+const wrap = (sqlite: DatabaseSync) => ({
+  execAsync: async (source: string) => sqlite.exec(source),
+  runAsync: async (source: string, params: SQLInputValue[]) =>
+    sqlite.prepare(source).run(...params),
+  getAllAsync: async (source: string, params: SQLInputValue[] = []) =>
+    sqlite.prepare(source).all(...params),
+  closeAsync: async () => sqlite.close(),
+});
 export async function openDatabaseAsync(_name: string) {
-  const sqlite = new DatabaseSync(":memory:");
-  return {
-    execAsync: async (source: string) => sqlite.exec(source),
-    runAsync: async (source: string, params: SQLInputValue[]) =>
-      sqlite.prepare(source).run(...params),
-    getAllAsync: async (source: string, params: SQLInputValue[]) =>
-      sqlite.prepare(source).all(...params),
-  };
+  return wrap(new DatabaseSync(":memory:"));
+}
+const work = mkdtempSync(join(tmpdir(), "expo-sqlite-"));
+let serialized = 0;
+/** An in-memory copy of a database file's bytes, as SQLite's deserialize gives. */
+export async function deserializeDatabaseAsync(bytes: Uint8Array) {
+  const path = join(work, `${serialized++}.db`);
+  writeFileSync(path, bytes);
+  return wrap(new DatabaseSync(path));
 }
