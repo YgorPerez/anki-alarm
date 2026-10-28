@@ -4,7 +4,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, test } from "vite-plus/test";
-import { openCollectionStore } from "./storage.ts";
+import { Effect } from "effect";
+import { ClientData, clientDataLayer, type ExecuteSql } from "./index.ts";
+import type { Collection } from "@app/core";
+const openCollectionStore = async (
+  execute: ExecuteSql,
+  env: { now: () => number; random: () => Uint8Array },
+) => {
+  const service = await Effect.runPromise(
+    ClientData.pipe(Effect.provide(clientDataLayer({ ...env, connect: () => execute }))),
+  );
+  return {
+    read: () => Effect.runPromise(service.collection),
+    change: (command: (collection: Collection) => void) =>
+      Effect.runPromise(service.changeCollection(command)),
+    pending: () => Effect.runPromise(service.pendingChanges),
+  };
+};
 
 test("SQLite reload retains decks, edited notes, cards and permanent tombstones", async () => {
   const directory = mkdtempSync(join(tmpdir(), "anki-alarm-38-"));
@@ -52,6 +68,7 @@ test("SQLite reload retains decks, edited notes, cards and permanent tombstones"
       }),
     ).rejects.toThrow("abort");
     expect(await reopened.read()).toEqual(fresh);
+    const pending = await reopened.pending();
     failInsert = true;
     await expect(
       reopened.change((c) => {
@@ -60,6 +77,7 @@ test("SQLite reload retains decks, edited notes, cards and permanent tombstones"
     ).rejects.toThrow("Failed query");
     failInsert = false;
     expect(await reopened.read()).toEqual(fresh);
+    expect(await reopened.pending()).toEqual(pending);
   } finally {
     sqlite.close();
     rmSync(directory, { recursive: true, force: true });

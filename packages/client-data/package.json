@@ -1,0 +1,19 @@
+{
+  "name": "@app/client-data",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@app/core": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "effect": "^4.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

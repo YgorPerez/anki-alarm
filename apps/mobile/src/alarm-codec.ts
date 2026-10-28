@@ -22,10 +22,8 @@ const event = Schema.Struct({
   wallTime: Schema.Number,
   elapsedRealtime: Schema.Number,
 });
-export const decodeAlarm = Schema.decodeUnknownSync(Schema.fromJsonString(alarm));
 export const decodeAlarms = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(alarm)));
 export const decodeEvents = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(event)));
-export const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(event));
 export const decodeRing = Schema.decodeUnknownSync(
   Schema.fromJsonString(
     Schema.NullOr(

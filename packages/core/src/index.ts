@@ -32,3 +32,5 @@ export type { Alarm, AlarmRule } from "./alarm.ts";
 export { releaseVersion } from "./release.ts";
 export { newerApk, SYNC_PROTOCOL } from "./release.ts";
 export { releaseArtifact } from "./release.ts";
+export { updateThemeSettings } from "./settings.ts";
+export type { Settings } from "./settings.ts";

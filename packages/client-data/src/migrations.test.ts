@@ -17,6 +17,7 @@ test("numbered migrations preserve existing collection and alarm data across rep
       });
       expect(db.prepare("SELECT id FROM schema_migrations ORDER BY id").all()).toEqual([
         { id: database === "collection.db" ? 1 : 2 },
+        { id: database === "collection.db" ? 3 : 4 },
       ]);
       const other = database === "collection.db" ? "alarms" : "decks";
       expect(
