@@ -25,9 +25,23 @@ export function replayCard(
   preset: Preset,
   now: number,
 ): MemoryState {
-  const entries = log
-    .filter((e) => e.cardId === cardId)
-    .sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
+  return replayEntries(
+    log.filter((e) => e.cardId === cardId),
+    preset,
+    now,
+  );
+}
+/**
+ * Folds one card's entries in answer-time order. `visit` sees each entry that counts with the
+ * state it found, for stats.
+ */
+export function replayEntries(
+  cardLog: readonly LogEntry[],
+  preset: Preset,
+  now: number,
+  visit?: (entry: LogEntry, before: MemoryState) => void,
+): MemoryState {
+  const entries = [...cardLog].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
   const voided = new Set(entries.filter((e) => e.kind === "void").map((e) => e.targetId));
   const scheduler = fsrs({
     request_retention: preset.fields.desiredRetention.value,
@@ -37,6 +51,7 @@ export function replayCard(
   let state = createEmptyCard(new Date(now));
   for (const entry of entries) {
     if (voided.has(entry.id)) continue;
+    visit?.(entry, state);
     switch (entry.kind) {
       case "review":
         state = scheduler.next(state, new Date(entry.at), entry.grade).card;
