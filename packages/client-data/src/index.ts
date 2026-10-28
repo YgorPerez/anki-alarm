@@ -10,6 +10,7 @@ import {
 } from "./schema.ts";
 import { syncEngine } from "./sync.ts";
 export { AccountMismatch, type SyncResult } from "./sync.ts";
+export { syncScheduler, type SyncScheduler, type SyncStatus } from "./scheduler.ts";
 export { type ExecuteSql } from "./collection.ts";
 import { openCollectionStore, type ExecuteSql } from "./collection.ts";
 import { migrationStatements } from "./migrations.ts";
