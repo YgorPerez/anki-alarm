@@ -32,17 +32,11 @@ import {
   type Alarm,
   type AnkiPackage,
   type AnkiDroidSource,
+  type AlarmEvent,
   stampAlarm,
 } from "@app/core";
 
-export interface AlarmEvent {
-  id: string;
-  kind: string;
-  alarmId: string;
-  ringId: string | null;
-  wallTime: number;
-  elapsedRealtime: number;
-}
+export type { AlarmEvent } from "@app/core";
 export interface PendingChange {
   database: "collection.db" | "anki-alarm.db";
   sequence: number;
