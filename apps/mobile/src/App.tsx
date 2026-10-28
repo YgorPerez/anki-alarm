@@ -45,6 +45,17 @@ function Home() {
   const t = copy(locale);
   const insets = useSafeAreaInsets();
   useEffect(() => {
+    // Theme settings can replace these factory dark colors through the same service API.
+    void run(
+      Effect.flatMap(AlarmService, (service) =>
+        service.setAppearance(
+          { background: "#000000", foreground: "#ffffff", primary: "#c9b6ff" },
+          locale,
+        ),
+      ),
+    ).catch(() => setError(copy(locale)("alarmError")));
+  }, [locale]);
+  useEffect(() => {
     const refresh = () => {
       setPermissions(native.getPermissions());
       void Effect.runPromise(controller.resume.pipe(Effect.provide(androidAlarmService)))
