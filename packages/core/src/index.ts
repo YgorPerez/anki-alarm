@@ -18,3 +18,7 @@ export type {
 
 export { nextRing, RING_POLICY } from "./alarm.ts";
 export type { Alarm, AlarmRule } from "./alarm.ts";
+
+export { releaseVersion } from "./release.ts";
+export { newerApk, SYNC_PROTOCOL } from "./release.ts";
+export { releaseArtifact } from "./release.ts";

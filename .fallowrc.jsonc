@@ -11,6 +11,8 @@
   "ignoreDependencies": [
     // Core's scheduling (log replay through FSRS) is its next rule; the spec fixes the dependency.
     "ts-fsrs",
+    // Auto-linked native update loader; configuration is in app.config.ts.
+    "expo-updates",
   ],
   "ignoreExports": [
     // shadcn's generated components export their variants for whoever composes them.

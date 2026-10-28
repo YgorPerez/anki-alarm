@@ -1,3 +1,4 @@
+import { UpdateOffer } from "./UpdateOffer.tsx";
 import { nextRing, type Alarm, type Locale } from "@app/core";
 import {
   AtkinsonHyperlegible_400Regular,
@@ -155,6 +156,7 @@ function Home() {
         }
         ListFooterComponent={
           <View className="gap-4">
+            <UpdateOffer locale={locale} />
             <Text accessibilityRole="alert" className="text-body text-attention">
               {error}
             </Text>
