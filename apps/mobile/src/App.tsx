@@ -12,6 +12,8 @@ import {
 } from "@expo-google-fonts/atkinson-hyperlegible";
 import { CollectionScreen } from "./CollectionScreen.tsx";
 import { androidAnkiDroid } from "./ankidroid-android.ts";
+import { StatsScreen } from "./StatsScreen.tsx";
+import { statsCopy } from "./stats-copy.ts";
 import { Effect } from "effect";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
@@ -25,6 +27,7 @@ import {
   Text,
   TextInput,
   View,
+  useColorScheme,
 } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { copy } from "./copy.ts";
@@ -67,6 +70,8 @@ function Home() {
   const [onboarding, setOnboarding] = useState(() => !native.isOnboardingComplete());
   const [showSettings, setShowSettings] = useState(false);
   const [showDecks, setShowDecks] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const scheme = useColorScheme();
   const [controller] = useState(() => alarmController(repository));
   const client = useQueryClient();
   const [showTheme, setShowTheme] = useState(false);
@@ -180,6 +185,14 @@ function Home() {
       />
     );
   if (showTheme) return <ThemeSettings locale={locale} onBack={() => setShowTheme(false)} />;
+  if (showStats)
+    return (
+      <StatsScreen
+        locale={locale}
+        theme={themeFor(theme, scheme === "dark" ? "dark" : "light")}
+        onExit={() => setShowStats(false)}
+      />
+    );
   if (showDecks)
     return (
       <CollectionScreen
@@ -205,6 +218,9 @@ function Home() {
             <Text className="text-title font-bold text-foreground">{t("alarms")}</Text>
             <Pressable accessibilityRole="button" onPress={() => setShowDecks(true)}>
               <Text className="text-body text-primary">{t("title")}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => setShowStats(true)}>
+              <Text className="text-body text-primary-ink">{statsCopy(locale)("stats")}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={() => setShowTheme(true)}>
               <Text className="text-body text-primary-ink">{t("theme")}</Text>
