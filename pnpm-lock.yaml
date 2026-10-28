@@ -231,6 +231,19 @@ importers:
         specifier: 4.154.0
         version: 4.154.0(@cloudflare/workers-types@5.20261027.1)(@types/node@24.12.4)
 
+  packages/contracts:
+    dependencies:
+      effect:
+        specifier: ^4.0.6
+        version: 4.0.6
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vite-plus:
+        specifier: 'catalog:'
+        version: 1.4.0(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/ui@5.0.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(typescript@7.0.2)(yaml@2.9.1)
+
   packages/core:
     dependencies:
       ts-fsrs:
