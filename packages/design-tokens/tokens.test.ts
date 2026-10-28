@@ -1,9 +1,9 @@
 // Keeps tokens.css, web.css and DESIGN.md in step, and checks the factory theme's contrast.
-// Runs on Node's own runner (`node --test`) until the workspace's test runner exists.
 // When Core's theme module lands, add: Core's factory theme derives exactly these values.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { test } from "node:test";
+
+import { test } from "vite-plus/test";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tokensCss = read("./tokens.css");
@@ -15,7 +15,9 @@ type Theme = Map<string, string>;
 const variant = (name: "light" | "dark"): Theme => {
   const block = new RegExp(`@variant ${name} \\{([^}]*)\\}`).exec(tokensCss)?.[1];
   assert.ok(block, `tokens.css has a ${name} variant`);
-  return new Map([...block.matchAll(/--color-([\w-]+):\s*([^;]+);/g)].map((m) => [m[1]!, m[2]!.trim()]));
+  return new Map(
+    [...block.matchAll(/--color-([\w-]+):\s*([^;]+);/g)].map((m) => [m[1]!, m[2]!.trim()]),
+  );
 };
 const light = variant("light");
 const dark = variant("dark");
@@ -39,7 +41,7 @@ test("every color is a plain #rrggbb literal", () => {
 });
 
 test("web.css registers exactly the colors tokens.css defines", () => {
-  const registered = [...webCss.matchAll(/--color-([\w-]+):\s*unset;/g)].map((m) => m[1]);
+  const registered = [...webCss.matchAll(/--color-([\w-]+):\s*unset;/g)].map((m) => m[1]!);
   assert.deepEqual(registered.sort(), [...light.keys()].sort());
 });
 
@@ -80,7 +82,10 @@ const PAIRS: [text: string, ground: string][] = [
   ["destructive", "background"],
 ];
 
-for (const [mode, theme] of [["light", light], ["dark", dark]] as const) {
+for (const [mode, theme] of [
+  ["light", light],
+  ["dark", dark],
+] as const) {
   test(`${mode}: text meets WCAG AA on what it sits on`, () => {
     for (const [text, ground] of PAIRS) {
       const ratio = contrast(theme.get(text)!, theme.get(ground)!);

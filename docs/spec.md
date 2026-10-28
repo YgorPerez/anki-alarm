@@ -29,11 +29,11 @@ Words in **bold** on first use are defined in `GLOSSARY.md`.
 A pnpm monorepo on GitHub under `YgorPerez`, driven by Vite+ (`vp check`, `vp lint`, `vp fmt`,
 `vp test`), as in pesquisa-relacionamentos.
 
-| Path            | What                                                                                                                                                                                                                         |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/mobile`   | Expo + React Native, react-native-reusables on uniwind (Tailwind 4), expo-sqlite + drizzle, Effect for services. Local Kotlin Expo modules: `modules/alarm-native` (alarms, audio, TTS) and `modules/ankidroid`.                          |
-| `apps/web`      | TanStack Start/Router/Query, shadcn on Base UI (`@base-ui/react`), Tailwind 4, `@shadcn/lint`, Storybook, Vitest, Playwright. Deployed to Cloudflare Workers.                                                                |
-| `apps/sync`     | Cloudflare Worker with D1 (data) and R2 (media), as in wave's `apps/sync`.                                                                                                                                                   |
+| Path            | What                                                                                                                                                                                                                       |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/mobile`   | Expo + React Native, react-native-reusables on uniwind (Tailwind 4), expo-sqlite + drizzle, Effect for services. Local Kotlin Expo modules: `modules/alarm-native` (alarms, audio, TTS) and `modules/ankidroid`.           |
+| `apps/web`      | TanStack Start/Router/Query, shadcn on Base UI (`@base-ui/react`), Tailwind 4, `@shadcn/lint`, Storybook, Vitest, Playwright. Deployed to Cloudflare Workers.                                                              |
+| `apps/sync`     | Cloudflare Worker with D1 (data) and R2 (media), as in wave's `apps/sync`.                                                                                                                                                 |
 | `packages/core` | Every decision-heavy rule, with **zero runtime dependencies** except `ts-fsrs`: log replay, session and dismiss rules, snooze cost, card picking, daily limits, `.apkg` model, template rendering, stats, alarm time math. |
 
 `packages/core` uses erasable TypeScript only and is tested through its public API. The apps stay

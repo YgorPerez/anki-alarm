@@ -1,0 +1,20 @@
+{
+  "name": "@app/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Every decision-heavy rule of the app, with no runtime dependency besides ts-fsrs.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vp test run"
+  },
+  "dependencies": {
+    "ts-fsrs": "6.0.0"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

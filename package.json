@@ -1,0 +1,21 @@
+{
+  "name": "anki-alarm",
+  "private": true,
+  "description": "An alarm clock for Android that you turn off by reviewing flashcards.",
+  "type": "module",
+  "scripts": {
+    "check": "vp check",
+    "lint": "vp lint",
+    "fmt": "vp fmt",
+    "test": "vp test run"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.22.0"
+}

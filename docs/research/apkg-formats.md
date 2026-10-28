@@ -15,11 +15,11 @@ Research for ticket #5. Sources are pinned to:
 **Read three package shapes.** An `.apkg` is a zip. Which collection file to read follows from
 the `meta` entry, or from the file names when `meta` is missing:
 
-| Package          | `meta`                    | Collection file                     | SQLite schema | Media map                          | Compression                            |
-| ---------------- | ------------------------- | ----------------------------------- | ------------- | ---------------------------------- | -------------------------------------- |
-| Legacy 1         | absent (or `version=1`)   | `collection.anki2`                  | 11            | JSON `{"0":"a.jpg",...}`           | none                                   |
-| Legacy 2         | absent (or `version=2`)   | `collection.anki21`                 | 11            | JSON                               | none                                   |
-| Latest (2.1.50+) | protobuf, `version=3`     | `collection.anki21b`                | 18            | protobuf `MediaEntries`            | zstd on collection, map and each file  |
+| Package          | `meta`                  | Collection file      | SQLite schema | Media map                | Compression                           |
+| ---------------- | ----------------------- | -------------------- | ------------- | ------------------------ | ------------------------------------- |
+| Legacy 1         | absent (or `version=1`) | `collection.anki2`   | 11            | JSON `{"0":"a.jpg",...}` | none                                  |
+| Legacy 2         | absent (or `version=2`) | `collection.anki21`  | 11            | JSON                     | none                                  |
+| Latest (2.1.50+) | protobuf, `version=3`   | `collection.anki21b` | 18            | protobuf `MediaEntries`  | zstd on collection, map and each file |
 
 Anki desktop and AnkiDroid write Latest by default and Legacy 2 when "Support older Anki versions"
 is ticked. Both also put a dummy `collection.anki2` in every package so that old clients show a
@@ -307,6 +307,7 @@ Presets are shared: many decks can point to one preset.
   ([#L406-L515](https://github.com/ankitects/anki/blob/29bb700b951e3f0c0cb69b77c0180fc1fe33e6ba/rslib/src/deckconfig/schema11.rs#L406-L515)).
   Default `desiredRetention` is 0.9
   ([#L280-L320](https://github.com/ankitects/anki/blob/29bb700b951e3f0c0cb69b77c0180fc1fe33e6ba/rslib/src/deckconfig/schema11.rs#L280-L320)).
+
 - **Schema 14+**: `deck_config(id, name, mtime_secs, usn, config)`. `config` is a protobuf
   `DeckConfig.Config`
   ([A/proto/anki/deck_config.proto#L59-L204](https://github.com/ankitects/anki/blob/29bb700b951e3f0c0cb69b77c0180fc1fe33e6ba/proto/anki/deck_config.proto#L59-L204),
@@ -386,6 +387,7 @@ Format: Legacy 2.
   The dummy `collection.anki2` is optional for current clients, because `meta` (or
   `collection.anki21`) decides the file read
   ([meta.rs#L71-L95](https://github.com/ankitects/anki/blob/29bb700b951e3f0c0cb69b77c0180fc1fe33e6ba/rslib/src/import_export/package/meta.rs#L71-L95)).
+
 - **`collection.anki21`**:
   - The DDL of
     [schema11.sql](https://github.com/ankitects/anki/blob/29bb700b951e3f0c0cb69b77c0180fc1fe33e6ba/rslib/src/storage/schema11.sql#L1-L78):

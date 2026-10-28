@@ -1,0 +1,19 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+
+# Expo
+apps/mobile/.expo/
+apps/mobile/android/
+apps/mobile/ios/
+
+# Web
+apps/web/.output/
+apps/web/.tanstack/
+apps/web/.nitro/
+
+# Worker
+apps/sync/.wrangler/
+apps/sync/.dev.vars

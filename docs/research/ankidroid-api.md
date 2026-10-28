@@ -21,11 +21,12 @@ revlog access.
 **Pull** can bring in new and edited notes (compare `mod`) and each card's current scheduling state.
 On AnkiDroid 2.24.0 and later that state includes reps, lapses, type, queue, due, interval, FSRS
 stability, difficulty and last review time. It can't bring in individual reviews. You can see
-*that* a card was reviewed (reps went up, `last_review_time_secs` moved) and how many times, but
+_that_ a card was reviewed (reps went up, `last_review_time_secs` moved) and how many times, but
 not the grades or the times of reviews before the last one.
 
 **Sync back** works. It answers any card by note id and ord, due or not, through AnkiDroid's own
 scheduler, and that writes a real revlog row. Limits:
+
 - The review is stamped with the time of the sync, not the time the user answered.
 - Time taken is capped by the AnkiDroid deck's "maximum answer seconds" (60 s by default).
 - Answering a suspended or buried card puts it back in a study queue.
@@ -52,7 +53,7 @@ card was reviewed at all.
 3. **Initial import also has no history.** Either start linked cards from a snapshot (same as
    pull), or let the user export the deck from AnkiDroid as `.apkg` and import that, which brings
    full `revlog` and media, then link by note id.
-4. **Media needs another route.** The API only *adds* media to AnkiDroid. It never returns file
+4. **Media needs another route.** The API only _adds_ media to AnkiDroid. It never returns file
    contents. Proposal: the AnkiDroid import screen asks for an `.apkg` export of the deck (shared
    to the app from AnkiDroid). That file gives media and history, and the API is used only for
    pull and sync back afterwards. Without it, a linked deck has no images or audio, and pulled
@@ -105,10 +106,10 @@ card was reviewed at all.
 
 ### Version facts
 
-| Feature                                                                                                               | First release | Evidence                                                                                                                                                                                                                                                                                                                                     |
-| --------------------------------------------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Notes, note types, templates, decks, `schedule` (answer, bury, suspend)                                               | 2.5 / 2.6     | [wiki](https://github.com/ankidroid/Anki-Android/wiki/AnkiDroid-API), spec v2 note above                                                                                                                                                                                                                                                     |
-| `cards` search URI, `cards/<id>`, `_id` column                                                                        | 2.24.0        | [`d20fd89`](https://github.com/ankidroid/Anki-Android/commit/d20fd891a6ba823d9e868d2d8479a2a2c7b84858) (2026-01-23)                                                                                                                                                                                                                          |
+| Feature                                                                                                                  | First release | Evidence                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Notes, note types, templates, decks, `schedule` (answer, bury, suspend)                                                  | 2.5 / 2.6     | [wiki](https://github.com/ankidroid/Anki-Android/wiki/AnkiDroid-API), spec v2 note above                                                                                                                                                                                                                               |
+| `cards` search URI, `cards/<id>`, `_id` column                                                                           | 2.24.0        | [`d20fd89`](https://github.com/ankidroid/Anki-Android/commit/d20fd891a6ba823d9e868d2d8479a2a2c7b84858) (2026-01-23)                                                                                                                                                                                                    |
 | `reps`, `lapses`, `type`, `queue`, `due`, `interval`, `left`, FSRS stability, difficulty, decay, `last_review_time_secs` | 2.24.0        | [`570c05a`](https://github.com/ankidroid/Anki-Android/commit/570c05accde169cfadff368290f52d576d3f4f5b), [`f946f26`](https://github.com/ankidroid/Anki-Android/commit/f946f268939dceb8ce87e998cbe0a091329f4d75), [`e6a8f14`](https://github.com/ankidroid/Anki-Android/commit/e6a8f1498c288c7da11f546dbc64ac8278c77fd8) |
 
 All four commits are ancestors of tag `v2.24.0` (published 2026-05-02) and not of `v2.23.3`
@@ -155,8 +156,8 @@ tags.
   - `reps`, `lapses`: stored counters.
   - `type`: 0 new, 1 learning, 2 review, 3 relearning.
   - `queue`: -3 and -2 buried, -1 suspended, 0 to 4 active.
-  - `due`: a position for new cards, Unix seconds for intraday learning, and a *collection day
-    number* for review cards. The contract says converting that day number to a date needs
+  - `due`: a position for new cards, Unix seconds for intraday learning, and a _collection day
+    number_ for review cards. The contract says converting that day number to a date needs
     collection-creation and day-cutoff data the API doesn't expose (L783-785).
   - `interval` (days), `sm2_factor`, `left`.
   - `fsrs_stability`, `fsrs_difficulty`, `fsrs_desired_retention`, `fsrs_decay`: `null` when the
@@ -190,16 +191,16 @@ tags.
   `fsrsParams6`, `desiredRetention`
   ([Anki deckconfig/schema11.rs L32-80](https://github.com/ankitects/anki/blob/e64c6b1aee3e8d668fb8bbe084beada8e070d985/rslib/src/deckconfig/schema11.rs#L32-L80)).
   That covers everything our deck options hold.
-- Bug: `deck_desc` returns the *currently selected* deck's description, not the requested deck's
+- Bug: `deck_desc` returns the _currently selected_ deck's description, not the requested deck's
   (`col.decks.current().description`, L1386-1389). Don't import descriptions from it.
 
 ### Media
 
-- The provider's only media operation is *insert*: it copies a file from a URI we give it into
+- The provider's only media operation is _insert_: it copies a file from a URI we give it into
   AnkiDroid's `collection.media` and returns the new name
   ([CardContentProvider L1142-1145, L1156-1208](https://github.com/ankidroid/Anki-Android/blob/ef558bc06e5e63cb74001aac8f1650c09ea51f49/AnkiDroid/src/main/java/com/ichi2/anki/provider/CardContentProvider.kt#L1156-L1208)).
   There is no query or `openFile` for media.
-- `schedule` rows include `media_files`, which lists the file *names* in the card
+- `schedule` rows include `media_files`, which lists the file _names_ in the card
   ([L1283-1286](https://github.com/ankidroid/Anki-Android/blob/ef558bc06e5e63cb74001aac8f1650c09ea51f49/AnkiDroid/src/main/java/com/ichi2/anki/provider/CardContentProvider.kt#L1283-L1286)).
   Fields and rendered HTML also carry names only.
 - AnkiDroid's collection folder is either the legacy public `AnkiDroid/` folder or its
@@ -221,7 +222,7 @@ How it runs, from `update()` on `schedule`:
 2. `answerCard` sets the card's timer to `now - time_taken` and calls
    `sched.answerCard(card, rating)`
    ([L1292-1309](https://github.com/ankidroid/Anki-Android/blob/ef558bc06e5e63cb74001aac8f1650c09ea51f49/AnkiDroid/src/main/java/com/ichi2/anki/provider/CardContentProvider.kt#L1292-L1309)).
-3. libanki asks the backend for that card's scheduling states *right now*, then builds the answer
+3. libanki asks the backend for that card's scheduling states _right now_, then builds the answer
    with `answeredAtMillis = now` and `millisecondsTaken = card.timeTaken(col)`
    ([Scheduler.kt L138-170](https://github.com/ankidroid/Anki-Android/blob/ef558bc06e5e63cb74001aac8f1650c09ea51f49/libanki/src/main/java/com/ichi2/anki/libanki/sched/Scheduler.kt#L138-L170)).
    `timeTaken` is `min(elapsed, deck maxTaken × 1000)`
@@ -238,7 +239,7 @@ How it runs, from `update()` on `schedule`:
 Consequences:
 
 - **A card that isn't due can be answered.** Nothing on this path checks due time or queue
-  membership. The current state comes from the card's *type*, not its queue
+  membership. The current state comes from the card's _type_, not its queue
   ([Anki current.rs L19-137](https://github.com/ankitects/anki/blob/e64c6b1aee3e8d668fb8bbe084beada8e070d985/rslib/src/scheduler/answering/current.rs#L19-L137)).
   For a review card answered early, `elapsed_days` is smaller than the interval (L106-115). With
   FSRS, the next interval comes from the real days elapsed since `last_review_time`

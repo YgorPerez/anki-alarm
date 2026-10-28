@@ -1,0 +1,27 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Versions shared across workspace packages. SDK-bound mobile dependencies are pinned in the
+# app's package.json by `expo install` instead.
+catalog:
+  "@types/node": 24.12.4
+  typescript: 7.0.2
+  # The workspace's Vite is Vite+'s core, and its Vitest is the one Vite+ ships. They move together.
+  vite: npm:@voidzero-dev/vite-plus-core@1.4.0
+  vite-plus: 1.4.0
+  vitest: 5.0.5
+
+minimumReleaseAgeExclude:
+  - "@open-spaced-repetition/srs-kit@1.0.0"
+  - ts-fsrs@6.0.0
+
+# One Vite and one Vitest in the workspace, Vite+'s, so every app and `vp test` see the same copy.
+overrides:
+  vite@*: "catalog:"
+  vitest@*: "catalog:"
+
+peerDependencyRules:
+  allowAny:
+    - vite
+    - vitest

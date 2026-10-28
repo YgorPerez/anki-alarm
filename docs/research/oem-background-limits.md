@@ -44,7 +44,7 @@ apps", and Samsung documents a deep link to it.
 **Motorola** is near-stock. DKMA reports one extra killer, "Battery care" / "Improve battery while
 inactive", and recommends setting the app's battery use to "Unrestricted".
 
-**A platform rule bites every brand: restricted settings.** The Android 15 and 16 CDDs *require*
+**A platform rule bites every brand: restricted settings.** The Android 15 and 16 CDDs _require_
 "Display over other apps" to be a restricted setting for apps installed from a downloaded or local
 APK. That is exactly how our friends install. On Android 15+ the overlay toggle is greyed out until
 the user opens App info → ⋮ → "Allow restricted settings". That menu item only appears after the
@@ -153,8 +153,7 @@ links exist for every screen. Xiaomi documents two intents, and Samsung document
   dialog. Open App info → ⋮ → Allow restricted settings, and confirm with PIN or fingerprint. Back on
   the overlay page, turn it on
   ([Google support](https://support.google.com/android/answer/12623953)).
-- **The app can predict it.** `PackageManager.getInstallSourceInfo(ownPackage).packageSource` (API
-  33) tells the app how it was installed. The ECM state itself is a system API, so the app can't
+- **The app can predict it.** `PackageManager.getInstallSourceInfo(ownPackage).packageSource` (API 33) tells the app how it was installed. The ECM state itself is a system API, so the app can't
   read it.
 - **Unconfirmed:** whether One UI and HyperOS show the same menu item and wording. Whether Xiaomi's
   own installer (`com.miui.packageinstaller`) records `PACKAGE_SOURCE_LOCAL_FILE`. Whether
@@ -165,7 +164,7 @@ links exist for every screen. Xiaomi documents two intents, and Samsung document
 
 Xiaomi's developer docs (primary):
 
-- **Autostart** is "not granted by default" (默认不开放自启动权限). It covers starts at boot *and*
+- **Autostart** is "not granted by default" (默认不开放自启动权限). It covers starts at boot _and_
   "receiving system broadcasts" (接收系统广播). Developers should send the user to the autostart page
   with action `miui.intent.action.OP_AUTO_START` and `CATEGORY_DEFAULT`
   ([Xiaomi adaptation FAQ, item 12](https://dev.mi.com/docs/appsmarket/technical_docs/adaptation_FAQ/)).
@@ -238,7 +237,7 @@ Samsung's developer docs ([Samsung Application Management](https://developer.sam
 
 - **Sleeping apps.** Apps "not used for about 3 days and causing poor system health" go to
   sleeping. "A bucket restriction applies … Job, Alarm, and Foreground-service are restricted", and
-  the page links Android's *restricted* bucket. In AOSP the restricted bucket does not stop alarm
+  the page links Android's _restricted_ bucket. In AOSP the restricted bucket does not stop alarm
   clocks (see above). Whether Samsung's version honours that is the open question.
 - **Deep sleeping apps.** Apps unused for "16 days, but subject to change" go to deep sleep. They
   "only become active when the user opens them … can't perform any activities, including
@@ -274,7 +273,7 @@ inferences and need a device check.
 
 dontkillmyapp ([motorola/user.md](https://github.com/urbandroid-team/dont-kill-my-app/blob/3616bc8b3b6b3910ac204e107ff0dfd6064f877c/_vendors-content/motorola/user.md)), first-hand. We found no Motorola developer doc.
 
-- **"Improve battery while inactive".** On some models the *Battery care* app
+- **"Improve battery while inactive".** On some models the _Battery care_ app
   (`com.motorola.batterycare`) "does seem to kill the apps even if you disable the option". The only
   fix DKMA gives is uninstalling it over adb, which is not something we can ask friends to do.
 - **Battery usage.** Use App info → App battery usage → allow background usage, then tap the row →
@@ -312,20 +311,20 @@ From dontkillmyapp ([oneplus](https://github.com/urbandroid-team/dont-kill-my-ap
 
 "Detect" means the app can read the state. "Link" means it can open the exact screen.
 
-| OEM | What breaks | Setting that fixes it | Detect | Link |
-|---|---|---|---|---|
-| All, Android 15+ (sideloaded) | Overlay toggle greyed out | App info → ⋮ → Allow restricted settings (after one failed try) | Predict from own `packageSource`; result via `Settings.canDrawOverlays()` | `ACTION_APPLICATION_DETAILS_SETTINGS`, then `ACTION_MANAGE_OVERLAY_PERMISSION` |
-| All | Full-screen intent off (user or OEM default) | Full-screen notifications | `NotificationManager.canUseFullScreenIntent()` | `ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT` |
-| All | Battery "Restricted" / OEM restriction | Battery: Unrestricted | `ActivityManager.isBackgroundRestricted()`, `PowerManager.isIgnoringBatteryOptimizations()` | `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` |
-| Xiaomi | No re-arm after reboot, time or zone change; maybe no restart after a kill | Autostart on | Reflection on `android.miui.AppOpsUtils` (MIUI ≤14 tested), or op 10008 (community) | `miui.intent.action.OP_AUTO_START` (official) |
-| Xiaomi | Alarm screen doesn't show over the lock screen | Show on lock screen | Op 10020 via `checkOpNoThrow` (community) | `miui.intent.action.APP_PERM_EDITOR` + `extra_pkgname` (official) |
-| Xiaomi | `startActivity` over an unlocked phone blocked even with overlay | Open new windows while running in the background | Op 10021 (community) | Same permission editor |
-| Xiaomi | PowerKeeper freezes or kills the app | Battery saver: No restrictions | `Settings.System` `MILLET_NO_RESTRICT_APP` (community) | `com.miui.powerkeeper/.ui.HiddenAppsConfigActivity` (community) |
-| Xiaomi | "Clear all" or swipe may force-stop and drop alarms (community) | Lock the app in Recents | No | No; explain with a picture |
-| Samsung | Deep sleeping: app inactive in the background (official); sleeping: Job, Alarm and FGS restricted (official, alarm clock exemption unknown) | Never sleeping apps; per-app battery Unrestricted | Inferred: standby bucket 45, `isBackgroundRestricted()` | `com.samsung.android.sm.ACTION_OPEN_CHECKABLE_LISTACTIVITY` / `com.samsung.android.lool`, `activity_type=2` (official) |
-| Samsung | Unknown: swipe-away and full-screen intent default on One UI 6+ | "Keep open" in Recents (DKMA) | n/a | n/a |
-| Motorola | Battery care kills (DKMA) | Battery: Unrestricted; turn off "Improve battery while inactive" and Adaptive battery | `isBackgroundRestricted()`, battery optimization | App info only |
-| OnePlus, Oppo, Realme, Vivo | Autostart, background pop-ups, recents-clear kills (DKMA) | Auto-launch / Autostart; background pop-ups (Realme, Vivo); lock in Recents | No | Community components above, App info fallback |
+| OEM                           | What breaks                                                                                                                                 | Setting that fixes it                                                                 | Detect                                                                                      | Link                                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| All, Android 15+ (sideloaded) | Overlay toggle greyed out                                                                                                                   | App info → ⋮ → Allow restricted settings (after one failed try)                       | Predict from own `packageSource`; result via `Settings.canDrawOverlays()`                   | `ACTION_APPLICATION_DETAILS_SETTINGS`, then `ACTION_MANAGE_OVERLAY_PERMISSION`                                         |
+| All                           | Full-screen intent off (user or OEM default)                                                                                                | Full-screen notifications                                                             | `NotificationManager.canUseFullScreenIntent()`                                              | `ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT`                                                                             |
+| All                           | Battery "Restricted" / OEM restriction                                                                                                      | Battery: Unrestricted                                                                 | `ActivityManager.isBackgroundRestricted()`, `PowerManager.isIgnoringBatteryOptimizations()` | `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`                                                                          |
+| Xiaomi                        | No re-arm after reboot, time or zone change; maybe no restart after a kill                                                                  | Autostart on                                                                          | Reflection on `android.miui.AppOpsUtils` (MIUI ≤14 tested), or op 10008 (community)         | `miui.intent.action.OP_AUTO_START` (official)                                                                          |
+| Xiaomi                        | Alarm screen doesn't show over the lock screen                                                                                              | Show on lock screen                                                                   | Op 10020 via `checkOpNoThrow` (community)                                                   | `miui.intent.action.APP_PERM_EDITOR` + `extra_pkgname` (official)                                                      |
+| Xiaomi                        | `startActivity` over an unlocked phone blocked even with overlay                                                                            | Open new windows while running in the background                                      | Op 10021 (community)                                                                        | Same permission editor                                                                                                 |
+| Xiaomi                        | PowerKeeper freezes or kills the app                                                                                                        | Battery saver: No restrictions                                                        | `Settings.System` `MILLET_NO_RESTRICT_APP` (community)                                      | `com.miui.powerkeeper/.ui.HiddenAppsConfigActivity` (community)                                                        |
+| Xiaomi                        | "Clear all" or swipe may force-stop and drop alarms (community)                                                                             | Lock the app in Recents                                                               | No                                                                                          | No; explain with a picture                                                                                             |
+| Samsung                       | Deep sleeping: app inactive in the background (official); sleeping: Job, Alarm and FGS restricted (official, alarm clock exemption unknown) | Never sleeping apps; per-app battery Unrestricted                                     | Inferred: standby bucket 45, `isBackgroundRestricted()`                                     | `com.samsung.android.sm.ACTION_OPEN_CHECKABLE_LISTACTIVITY` / `com.samsung.android.lool`, `activity_type=2` (official) |
+| Samsung                       | Unknown: swipe-away and full-screen intent default on One UI 6+                                                                             | "Keep open" in Recents (DKMA)                                                         | n/a                                                                                         | n/a                                                                                                                    |
+| Motorola                      | Battery care kills (DKMA)                                                                                                                   | Battery: Unrestricted; turn off "Improve battery while inactive" and Adaptive battery | `isBackgroundRestricted()`, battery optimization                                            | App info only                                                                                                          |
+| OnePlus, Oppo, Realme, Vivo   | Autostart, background pop-ups, recents-clear kills (DKMA)                                                                                   | Auto-launch / Autostart; background pop-ups (Realme, Vivo); lock in Recents           | No                                                                                          | Community components above, App info fallback                                                                          |
 
 ## Onboarding steps, per OEM
 
@@ -374,14 +373,14 @@ end with "Done" / "I couldn't find it".
 The prototype at `prototype/alarm` `8c83081`, silent mode on. Battery set to "Optimized" from check 7
 on; before that the app was on the allowlist.
 
-| Check | Result |
-| --- | --- |
+| Check                               | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 1. Sideload and restricted settings | APK opened from My Files: `packageSource=3` (local file), installer `com.google.android.packageinstaller`, originating `com.sec.android.app.myfiles`. Play Protect warned during install. "Appear on top" turned on with no "Restricted setting" dialog, and App info's ⋮ menu has no "Allow restricted settings" item. The app-op `ACCESS_RESTRICTED_SETTINGS` still reads `deny` with a reject time. One UI 8.5 doesn't apply the CDD 9.8 overlay restriction. Full-screen intent and exact alarms granted at install. |
-| 2. Locked, screen off | Fired on time; alarm screen over the keyguard within 1.5 s; plays with the ringer on silent. |
-| 3. Unlocked, Settings in front | `startActivity` from the service got through; alarm screen in front within 1.5 s. |
-| 4. Swipe-away and Close all | Swiping the card mid-ring removed only the task (`onTaskRemoved`). The process and service stayed up, and the watchdog reopened the alarm screen. "Close all" while idle killed the process (`am_kill … remove task`) without a force-stop (`stopped=false`); the alarm stayed registered and rang on time. |
-| 5. Process death mid-ring | `am crash` during a ring: `Scheduling restart of crashed service … in 1000ms`, `START_STICKY` restart, ring and alarm screen back. |
-| 11. Deep links | `activity_type` 0, 1, 2 and 4 open the lists named above. `ACTION_BATTERY` opens Device care's battery page. |
+| 2. Locked, screen off               | Fired on time; alarm screen over the keyguard within 1.5 s; plays with the ringer on silent.                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 3. Unlocked, Settings in front      | `startActivity` from the service got through; alarm screen in front within 1.5 s.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 4. Swipe-away and Close all         | Swiping the card mid-ring removed only the task (`onTaskRemoved`). The process and service stayed up, and the watchdog reopened the alarm screen. "Close all" while idle killed the process (`am_kill … remove task`) without a force-stop (`stopped=false`); the alarm stayed registered and rang on time.                                                                                                                                                                                                              |
+| 5. Process death mid-ring           | `am crash` during a ring: `Scheduling restart of crashed service … in 1000ms`, `START_STICKY` restart, ring and alarm screen back.                                                                                                                                                                                                                                                                                                                                                                                       |
+| 11. Deep links                      | `activity_type` 0, 1, 2 and 4 open the lists named above. `ACTION_BATTERY` opens Device care's battery page.                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 Not run: 6 (Direct Boot reboot; Samsung has no autostart block and stock behaviour is covered by
 the #6 emulator runs), 7 (deep Doze; `force-idle` failed while "stay awake" kept the screen on, and

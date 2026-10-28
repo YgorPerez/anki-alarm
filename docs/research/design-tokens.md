@@ -41,7 +41,10 @@ packages/design-tokens/            name: @app/design-tokens (the spec's working 
 }
 
 @theme {
-  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 10px; --radius-xl: 14px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
   /* type sizes, spacing extras: plain values, no platform variants */
 }
 ```
@@ -52,15 +55,23 @@ packages/design-tokens/            name: @app/design-tokens (the spec's working 
 /* The same variants uniwind generates for itself: a .light/.dark class on <html> wins,
    otherwise the OS setting. */
 @custom-variant dark {
-  &:where(.dark, .dark *) { @slot; }
+  &:where(.dark, .dark *) {
+    @slot;
+  }
   @media (prefers-color-scheme: dark) {
-    &:not(:where(.light, .light *, .dark, .dark *)) { @slot; }
+    &:not(:where(.light, .light *, .dark, .dark *)) {
+      @slot;
+    }
   }
 }
 @custom-variant light {
-  &:where(.light, .light *) { @slot; }
+  &:where(.light, .light *) {
+    @slot;
+  }
   @media (prefers-color-scheme: light) {
-    &:not(:where(.light, .light *, .dark, .dark *)) { @slot; }
+    &:not(:where(.light, .light *, .dark, .dark *)) {
+      @slot;
+    }
   }
 }
 
@@ -87,7 +98,9 @@ packages/design-tokens/            name: @app/design-tokens (the spec's working 
 @import "tailwindcss";
 @import "uniwind";
 @import "@app/design-tokens/tokens.css";
-@theme { --font-sans: "<LoadedFontFileName>"; }   /* fonts stay per app */
+@theme {
+  --font-sans: "<LoadedFontFileName>";
+} /* fonts stay per app */
 ```
 
 Light/dark: uniwind follows the system by default; `Uniwind.setTheme('light' | 'dark' | 'system')`
@@ -102,7 +115,9 @@ for the user's choice. No provider. React Navigation colors come from
 @import "shadcn/tailwind.css";
 @import "@app/design-tokens/tokens.css";
 @import "@app/design-tokens/web.css";
-@theme { --font-sans: "…", system-ui, sans-serif; }
+@theme {
+  --font-sans: "…", system-ui, sans-serif;
+}
 ```
 
 Light/dark: shadcn's TanStack Start `ThemeProvider` (a `ScriptOnce` that puts `light` or `dark` on
@@ -187,8 +202,8 @@ packages that contain classes:
 
 shadcn's convention is raw `--background` under `:root` and `.dark`, mapped with
 `@theme inline { --color-background: var(--background) }`
-([S/apps/v4/content/docs/(root)/theming.mdx#L37](https://github.com/shadcn-ui/ui/blob/96da9cc7f1aa10580a3741664e2a77c721206c00/apps/v4/content/docs/(root)/theming.mdx#L37),
-[#L118-L130](https://github.com/shadcn-ui/ui/blob/96da9cc7f1aa10580a3741664e2a77c721206c00/apps/v4/content/docs/(root)/theming.mdx#L118-L130);
+([S/apps/v4/content/docs/(root)/theming.mdx#L37](<https://github.com/shadcn-ui/ui/blob/96da9cc7f1aa10580a3741664e2a77c721206c00/apps/v4/content/docs/(root)/theming.mdx#L37>),
+[#L118-L130](<https://github.com/shadcn-ui/ui/blob/96da9cc7f1aa10580a3741664e2a77c721206c00/apps/v4/content/docs/(root)/theming.mdx#L118-L130>);
 [monorepo globals.css#L6-L120](https://github.com/shadcn-ui/ui/blob/96da9cc7f1aa10580a3741664e2a77c721206c00/templates/react-router-monorepo/packages/ui/src/styles/globals.css#L6-L120)).
 Put inside uniwind variants, that shape breaks opacity modifiers: `bg-primary/12` compiles to
 `color-mix(… unset 12% …)` on web and native, because uniwind registers `--primary: unset` and
