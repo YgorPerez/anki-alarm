@@ -54,39 +54,58 @@ export async function openCollectionStore(
       tombstones: (await db.select().from(tombstones)).map((r) => r.body),
     });
   let queue: Promise<unknown> = Promise.resolve();
-  const change = (command: (collection: Collection) => void): Promise<CollectionState> => {
+  /**
+   * Runs a Core command and writes only the records it changed, with their outbox entries, in one
+   * transaction. `within` adds writes of its own to the same transaction.
+   */
+  const run = <R>(
+    command: (collection: Collection) => R,
+    within: (result: R) => Promise<void> = async () => {},
+  ): Promise<{ state: CollectionState; result: R }> => {
     const operation = queue.then(async () => {
       await db.run(sql`BEGIN IMMEDIATE`);
       try {
         const before = await read();
         const collection = new Collection(environment, before);
-        command(collection);
+        const result = command(collection);
         const state = collection.snapshot();
-        // Replace the local snapshot atomically. Tombstones are retained in every snapshot.
         // A failed statement must stop subsequent writes before rollback.
         for (const name of tables) {
-          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- Ordered SQLite transaction.
-          await db.run(sql`DELETE FROM ${sql.identifier(name)}`);
+          const previous = new Map(before[name].map((r) => [r.id, JSON.stringify(r)]));
+          const changed: { id: string; body: string }[] = [];
           for (const record of state[name]) {
+            const body = JSON.stringify(record);
+            if (previous.get(record.id) !== body) changed.push({ id: record.id, body });
+            previous.delete(record.id);
+          }
+          for (const ids of chunks([...previous.keys()], BATCH))
             // react-doctor-disable-next-line react-doctor/async-await-in-loop -- Ordered SQLite transaction.
             await db.run(
-              sql`INSERT INTO ${sql.identifier(name)} (id, body) VALUES (${record.id}, ${JSON.stringify(record)})`,
+              sql`DELETE FROM ${sql.identifier(name)} WHERE id IN (${sql.join(
+                ids.map((id) => sql`${id}`),
+                sql`, `,
+              )})`,
             );
+          for (const rows of chunks(changed, BATCH)) {
+            const values = sql.join(
+              rows.map((r) => sql`(${r.id}, ${r.body})`),
+              sql`, `,
+            );
+            // react-doctor-disable-next-line react-doctor/async-await-in-loop -- Ordered SQLite transaction.
+            await db.run(
+              sql`INSERT INTO ${sql.identifier(name)} (id, body) VALUES ${values} ON CONFLICT (id) DO UPDATE SET body = excluded.body`,
+            );
+            const queued = sql.join(
+              rows.map((r) => sql`(${name}, ${r.id}, ${r.body})`),
+              sql`, `,
+            );
+            // react-doctor-disable-next-line react-doctor/async-await-in-loop -- Ordered SQLite transaction.
+            await db.run(sql`INSERT INTO outbox (kind, record_id, body) VALUES ${queued}`);
           }
         }
-        for (const name of tables) {
-          for (const record of state[name]) {
-            if (
-              JSON.stringify(before[name].find((r) => r.id === record.id)) !==
-              JSON.stringify(record)
-            )
-              await db.run(
-                sql`INSERT INTO outbox (kind, record_id, body) VALUES (${name}, ${record.id}, ${JSON.stringify(record)})`,
-              );
-          }
-        }
+        await within(result);
         await db.run(sql`COMMIT`);
-        return state;
+        return { state, result };
       } catch (error) {
         await db.run(sql`ROLLBACK`);
         throw error;
@@ -95,5 +114,14 @@ export async function openCollectionStore(
     queue = operation.catch(() => {});
     return operation;
   };
-  return { read, change, deviceId: device.value };
+  const change = async (command: (collection: Collection) => void) => (await run(command)).state;
+  return { read, change, run, deviceId: device.value };
+}
+
+/** Rows per statement: two or three parameters each stays under SQLite's oldest 999 limit. */
+const BATCH = 200;
+function chunks<T>(items: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < items.length; i += size) result.push(items.slice(i, i + size));
+  return result;
 }

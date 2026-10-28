@@ -18,5 +18,9 @@ tombstones. The first settings record has a UUIDv7 id and one HLC per theme colo
 Sync transport, server cursors, outbox acknowledgement and initial upload of records that predate
 the outbox belong to #52. Alarm records retain #40's shape; sync must add per-property HLCs before
 merging alarms. Native journal events remain device-local and are not queued as alarm edits.
-The collection writer still replaces its snapshot, as in #38; large imports will need incremental
-writes. The package contains no Expo or React Native imports.
+A collection command still reads the whole collection into Core, but only the records it changed
+are written, in batches, with their outbox entries. `importAnki` merges an Anki package that Core
+has read and appends its review log in the same transaction; the app stores the media files
+first. Reads pass stored records through Core's `upgradeCollection`, so Basic notes saved before
+#49 (with `front` and `back` properties) come back in the current shape. The package contains no
+Expo or React Native imports.

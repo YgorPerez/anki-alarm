@@ -23,6 +23,7 @@ export type {
   NoteType,
   Note,
   Card,
+  Template,
   RecordKind,
   Tombstone,
   CollectionState,
@@ -56,10 +57,13 @@ export {
   replayCard,
   studyQueue,
   studyDayStart,
-  renderCard,
   checkLogEntry,
   cardMemory,
   CardState,
   dueInDays,
 } from "./study.ts";
+export { renderCard } from "./template.ts";
+export type { RenderInput } from "./template.ts";
+export { readApkg } from "./apkg.ts";
+export type { ApkgHost, ApkgMedia, AnkiDatabase, AnkiPackage } from "./apkg.ts";
 export type { LogEntry, MemoryState, Grade } from "./study.ts";

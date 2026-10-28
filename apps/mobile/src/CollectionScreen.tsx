@@ -30,6 +30,7 @@ import { editingCopy } from "./editing-copy.ts";
 import { bold, regular } from "./fonts.ts";
 import { NoteEditor, type NoteDraft } from "./NoteEditor.tsx";
 import { StudyScreen } from "./StudyScreen.tsx";
+import { pickAndImportApkg } from "./apkg.ts";
 
 type Form = { kind: "deck"; id?: string } | { kind: "note"; id?: string } | { kind: "options" };
 type Translate = ReturnType<typeof copy>;
@@ -59,6 +60,7 @@ export function CollectionScreen({
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
   const [error, setError] = useState(false);
+  const [notice, setNotice] = useState("");
   const t = copy(locale);
   const insets = useSafeAreaInsets();
   const goBack = useCallback(() => {
@@ -114,6 +116,30 @@ export function CollectionScreen({
   }
   const change = (command: (collection: Collection) => void, onSaved: () => void) =>
     write((data) => data.changeCollection(command), onSaved);
+  async function importPackage() {
+    if (locked.current) return;
+    locked.current = true;
+    setBusy(true);
+    setError(false);
+    setNotice(t("importing"));
+    try {
+      const summary = await pickAndImportApkg();
+      await queryClient.invalidateQueries({ queryKey: ["collection"] });
+      setNotice(
+        summary
+          ? t("imported", {
+              notes: String(summary.notes),
+              cards: String(summary.cards),
+              entries: String(summary.entries),
+            })
+          : "",
+      );
+    } catch {
+      setNotice(t("importError"));
+    }
+    locked.current = false;
+    setBusy(false);
+  }
   const deck = state?.decks.find((d) => d.id === deckId);
   const cancel = () => {
     setError(false);
@@ -242,11 +268,15 @@ export function CollectionScreen({
       <DeckList
         t={t}
         state={state}
+        busy={busy}
+        notice={notice}
         create={() => setForm({ kind: "deck" })}
         select={(id) => {
           setError(false);
+          setNotice("");
           setDeckId(id);
         }}
+        importPackage={() => void importPackage()}
       />
     );
   };
@@ -398,17 +428,33 @@ function DeckDetails({
 function DeckList({
   t,
   state,
+  busy,
+  notice,
   create,
   select,
+  importPackage,
 }: {
   t: Translate;
   state: CollectionState;
+  busy: boolean;
+  notice: string;
   create: () => void;
   select: (id: string) => void;
+  importPackage: () => void;
 }) {
   return (
     <>
-      <Button label={t("newDeck")} primary onPress={create} />
+      <Button label={t("newDeck")} primary disabled={busy} onPress={create} />
+      <Button label={t("importApkg")} disabled={busy} onPress={importPackage} />
+      {notice ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={regular}
+          className="text-body text-foreground"
+        >
+          {notice}
+        </Text>
+      ) : null}
       {!state.decks.length && (
         <Text style={regular} className="text-body text-muted-foreground">
           {t("empty")}
@@ -418,6 +464,7 @@ function DeckList({
         <Pressable
           key={d.id}
           accessibilityRole="button"
+          disabled={busy}
           onPress={() => select(d.id)}
           className="min-h-16 flex-row flex-wrap items-center justify-between gap-2 border-b border-border py-4 active:opacity-80"
         >

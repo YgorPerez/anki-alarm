@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { Effect, Result } from "effect";
 import { expect, test } from "vite-plus/test";
+import type { AnkiPackage } from "@app/core";
 import { ClientData, clientDataLayer, type ExecuteSql } from "./index.ts";
 
 test("public services persist local changes and outbox together across reopen", async () => {
@@ -210,6 +211,129 @@ test("study answers survive reopen and outbox failure rolls back the review", as
         .filter((c) => c.kind === "reviewLog")
         .map((c) => c.body),
     ).toEqual([review]);
+  } finally {
+    for (const db of databases.values()) db.close();
+  }
+});
+
+const shared = (count: number): AnkiPackage => ({
+  version: 3,
+  noteTypes: [
+    {
+      id: 7,
+      name: "Basic",
+      mtime: 1000,
+      kind: "standard",
+      css: "",
+      fields: [
+        { name: "Front", id: "1" },
+        { name: "Back", id: "2" },
+      ],
+      templates: [{ name: "Card 1", front: "{{Front}}", back: "{{Back}}", id: "3" }],
+    },
+  ],
+  decks: [{ id: 20, name: "Shared", mtime: 1000, presetId: 1, desiredRetention: null }],
+  presets: [
+    {
+      id: 1,
+      name: "Default",
+      mtime: 0,
+      newPerDay: 20,
+      reviewsPerDay: 200,
+      desiredRetention: 0.9,
+      learningSteps: [1, 10],
+    },
+  ],
+  notes: Array.from({ length: count }, (_, i) => ({
+    id: 100 + i,
+    guid: `guid-${i}`,
+    noteTypeId: 7,
+    mtime: 1700000000000,
+    tags: [],
+    fields: [`front ${i}`, `back ${i}`],
+  })),
+  cards: Array.from({ length: count }, (_, i) => ({
+    id: 1000 + i,
+    noteId: 100 + i,
+    deckId: 20,
+    ordinal: 0,
+    mtime: 1700000000000,
+    suspended: false,
+  })),
+  revlog: [
+    {
+      id: 1700000000000,
+      cardId: 1000,
+      at: 1700000000000,
+      kind: "review",
+      grade: 3,
+      durationMs: 900,
+    },
+  ],
+});
+
+test("an Anki import commits records, reviews and outbox together and adds nothing again", async () => {
+  const databases = new Map<string, DatabaseSync>();
+  let fail = false;
+  let n = 0;
+  const connect = (name: string): ExecuteSql => {
+    const db = databases.get(name) ?? new DatabaseSync(":memory:");
+    databases.set(name, db);
+    return async (query, params, method) => {
+      if (fail && query.includes('insert into "review_log"')) throw new Error("disk full");
+      const stmt = db.prepare(query);
+      if (method === "run") {
+        stmt.run(...params);
+        return { rows: [] };
+      }
+      stmt.setReturnArrays(true);
+      return { rows: stmt.all(...params) };
+    };
+  };
+  const open = () =>
+    Effect.runPromise(
+      ClientData.pipe(
+        Effect.provide(
+          clientDataLayer({
+            connect,
+            now: () => 1800000000000,
+            random: () => new Uint8Array(16).fill(n++),
+          }),
+        ),
+      ),
+    );
+  // More notes than one batched statement holds.
+  const source = shared(450);
+  try {
+    const data = await open();
+    const before = await Effect.runPromise(data.pendingChanges);
+    fail = true;
+    await expect(Effect.runPromise(data.importAnki(source))).rejects.toThrow(/review_log/);
+    expect((await Effect.runPromise(data.collection)).notes).toEqual([]);
+    expect(await Effect.runPromise(data.pendingChanges)).toEqual(before);
+    fail = false;
+    expect(await Effect.runPromise(data.importAnki(source))).toEqual({
+      notes: 450,
+      cards: 450,
+      entries: 1,
+    });
+    const pending = await Effect.runPromise(data.pendingChanges);
+    expect(pending.filter((c) => c.kind === "notes")).toHaveLength(450);
+    expect(pending.filter((c) => c.kind === "reviewLog")).toHaveLength(1);
+    const reopened = await open();
+    expect(await Effect.runPromise(reopened.importAnki(source))).toEqual({
+      notes: 450,
+      cards: 450,
+      entries: 0,
+    });
+    expect(await Effect.runPromise(reopened.pendingChanges)).toEqual(pending);
+    const state = await Effect.runPromise(reopened.collection);
+    expect(state.decks.map((d) => d.fields.name.value)).toEqual(["Shared"]);
+    expect(state.cards).toHaveLength(450);
+    const first = state.cards.find((c) => c.anki?.id === 1000)!;
+    expect(await Effect.runPromise(reopened.reviewLog)).toMatchObject([
+      { kind: "review", origin: "import", grade: 3, cardId: first.id },
+    ]);
   } finally {
     for (const db of databases.values()) db.close();
   }

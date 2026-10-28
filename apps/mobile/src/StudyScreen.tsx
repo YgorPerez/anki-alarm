@@ -1,5 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { renderCard, studyQueue, type Grade, type Locale, type LogEntry } from "@app/core";
+import {
+  renderCard,
+  studyQueue,
+  type Grade,
+  type Locale,
+  type LogEntry,
+  type RenderInput,
+} from "@app/core";
 import { Effect } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { BackHandler, Pressable, Text, View, useColorScheme } from "react-native";
@@ -8,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { localData } from "./database.ts";
 import { copy } from "./copy.ts";
 import { editingCopy } from "./editing-copy.ts";
+import { mediaBaseUrl, mediaUrl } from "./apkg.ts";
 
 export function StudyScreen({
   deckId,
@@ -21,8 +29,9 @@ export function StudyScreen({
   const t = copy(locale);
   const insets = useSafeAreaInsets();
   const dark = useColorScheme() === "dark";
-  const { query, cardId, note, type, busy, error, revealed, reveal, answer, canUndo, undo } =
+  const { query, card, note, type, busy, error, revealed, reveal, answer, canUndo, undo } =
     useStudySession(deckId, onExit);
+  const deckName = query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value;
   return (
     <View
       className="flex-1 gap-4 bg-background px-6"
@@ -55,7 +64,7 @@ export function StudyScreen({
         className="text-title text-foreground"
         style={{ fontFamily: "AtkinsonHyperlegible_700Bold" }}
       >
-        {query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value ?? t("study")}
+        {deckName ?? t("study")}
       </Text>
       {(error || query.isError) && (
         <Text accessibilityRole="alert" className="text-body text-destructive">
@@ -72,16 +81,20 @@ export function StudyScreen({
           <Text>{t("retry")}</Text>
         </Pressable>
       )}
-      {note && type ? (
+      {card && note && type ? (
         <>
-          <WebView
-            key={`${cardId}-${revealed}-${dark}`}
-            accessibilityLabel={t(revealed ? "answer" : "front")}
-            style={{ flex: 1, backgroundColor: dark ? "#000" : "#fff" }}
-            source={{ html: renderCard(note, type, revealed ? "back" : "front", dark) }}
-            javaScriptEnabled={false}
-            originWhitelist={["about:*"]}
-            onShouldStartLoadWithRequest={(request) => request.url === "about:blank"}
+          <CardSide
+            key={`${card.id}-${revealed}-${dark}`}
+            label={t(revealed ? "answer" : "front")}
+            dark={dark}
+            input={{
+              note,
+              type,
+              ordinal: card.fields.ordinal.value,
+              side: revealed ? "back" : "front",
+              dark,
+              ...(deckName === undefined ? {} : { deckName }),
+            }}
           />
           <AnswerControls
             revealed={revealed}
@@ -97,6 +110,23 @@ export function StudyScreen({
         </Text>
       )}
     </View>
+  );
+}
+/** A card side in a WebView without JavaScript. Card media load from local files only. */
+function CardSide({ label, dark, input }: { label: string; dark: boolean; input: RenderInput }) {
+  const baseUrl = mediaBaseUrl();
+  return (
+    <WebView
+      accessibilityLabel={label}
+      style={{ flex: 1, backgroundColor: dark ? "#000" : "#fff" }}
+      source={{ html: renderCard({ ...input, media: mediaUrl }), baseUrl }}
+      javaScriptEnabled={false}
+      allowFileAccess
+      originWhitelist={["about:*", "file://*"]}
+      onShouldStartLoadWithRequest={(request) =>
+        request.url === "about:blank" || request.url === baseUrl
+      }
+    />
   );
 }
 const gradeLabels = { 1: "again", 2: "hard", 3: "good", 4: "easy" } as const;
@@ -177,7 +207,8 @@ function useStudySession(deckId: string, onExit: () => void) {
     : [];
   // An undone card comes back first, as it was before the answer.
   const item = queue.find((c) => c.card.id === undone) ?? queue[0];
-  const cardId = item?.card.id;
+  const card = item?.card;
+  const cardId = card?.id;
   const revealed = Boolean(cardId && revealedId === cardId);
   useEffect(() => {
     const handler = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -234,7 +265,7 @@ function useStudySession(deckId: string, onExit: () => void) {
 
   return {
     query,
-    cardId,
+    card,
     note,
     type,
     busy,

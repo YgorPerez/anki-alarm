@@ -30,8 +30,13 @@ function withVocabularyType() {
   vocabulary.id = "018bcfe5-6800-7fff-bfff-000000000001";
   vocabulary.fields.name.value = "Vocabulary";
   vocabulary.fields.fieldNames.value = ["Word", "Reading", "Meaning"];
-  vocabulary.fields.frontTemplate.value = "{{Word}}";
-  vocabulary.fields.backTemplate.value = "{{FrontSide}}<hr id=answer>{{Reading}} {{ Meaning }}";
+  vocabulary.fields.templates.value = [
+    {
+      name: "Card 1",
+      front: "{{Word}}",
+      back: "{{FrontSide}}<hr id=answer>{{Reading}} {{ Meaning }}",
+    },
+  ];
   const next: CollectionState = { ...state, noteTypes: [basic, vocabulary] };
   return {
     collection: new Collection(environment(), next),
@@ -57,8 +62,10 @@ test("notes of any note type keep one clocked value per field", () => {
   expect(edited.values[2]!.hlc.counter).toBeGreaterThan(note.values[2]!.hlc.counter);
 
   const type = state.noteTypes.find((t) => t.id === typeId)!;
-  expect(renderCard(edited, type, "front", false)).not.toContain("みず");
-  expect(renderCard(edited, type, "back", false)).toContain("水<hr id=answer>みず water (drink)");
+  const render = (side: "front" | "back") =>
+    renderCard({ note: edited, type, ordinal: 0, side, dark: false });
+  expect(render("front")).not.toContain("みず");
+  expect(render("back")).toContain("水<hr id=answer>みず water (drink)");
 });
 
 test("moved cards study in their new deck and survive deleting the old one", () => {
@@ -172,7 +179,7 @@ test("collections saved before note values and FSRS parameters read in the curre
   expect(state.notes).toEqual([
     {
       id: "n",
-      fields: { noteTypeId: { value: "t", hlc: hlc(1) } },
+      fields: { noteTypeId: { value: "t", hlc: hlc(1) }, tags: { value: [], hlc: hlc(1) } },
       values: [
         { value: "casa", hlc: hlc(1) },
         { value: "house", hlc: hlc(4) },

@@ -129,10 +129,12 @@ test("Basic rendering keeps the back hidden until reveal and includes author CSS
   const note = state.notes[0]!;
   const type = state.noteTypes[0]!;
   type.fields.css.value = ".card{font-size:32px}";
-  expect(renderCard(note, type, "front", true)).toContain("nightMode night_mode");
-  expect(renderCard(note, type, "front", true)).not.toContain("um");
-  expect(renderCard(note, type, "back", true)).toContain('one<hr id="answer">um');
-  expect(renderCard(note, type, "back", true)).toContain(".card{font-size:32px}");
+  const side = (shown: "front" | "back") =>
+    renderCard({ note, type, ordinal: 0, side: shown, dark: true });
+  expect(side("front")).toContain("nightMode night_mode");
+  expect(side("front")).not.toContain("um");
+  expect(side("back")).toContain('one<hr id="answer">um');
+  expect(side("back")).toContain(".card{font-size:32px}");
 });
 
 test("reset puts a card after the untouched new cards", () => {

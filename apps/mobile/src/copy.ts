@@ -92,6 +92,10 @@ const messages = {
     iconWarning:
       "Seu launcher pode remover o atalho da tela inicial. Se isso acontecer, adicione o app novamente pela lista de aplicativos.",
     applyIcon: "Aplicar cores ao ícone",
+    importApkg: "Importar .apkg",
+    importing: "Importando…",
+    imported: "Importado: {notes} notas, {cards} cartões e {entries} revisões novas.",
+    importError: "Não foi possível importar esse arquivo. Confira se é um .apkg do Anki.",
   },
   en: {
     study: "Study",
@@ -184,6 +188,10 @@ const messages = {
     iconWarning:
       "Your launcher may remove the home-screen shortcut. If that happens, add the app again from the app drawer.",
     applyIcon: "Apply colors to icon",
+    importApkg: "Import .apkg",
+    importing: "Importing…",
+    imported: "Imported {notes} notes, {cards} cards and {entries} new reviews.",
+    importError: "Could not import that file. Check that it is an Anki .apkg.",
   },
 } satisfies Messages<string>;
 type CopyKey = keyof (typeof messages)["pt-BR"];
