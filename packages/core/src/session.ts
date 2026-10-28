@@ -14,9 +14,25 @@ export const SESSION_RULES = { gradeDelaySeconds: 3, retryGap: 2 };
 /** Good and Easy count toward N. */
 const isRight = (grade: Grade) => grade === Rating.Good || grade === Rating.Easy;
 
-/** A ring needs the largest N among its alarm and the alarms folded into it. */
-export function ringNeed(alarm: Alarm, absorbed: readonly Alarm[]) {
-  return Math.max(alarm.need, ...absorbed.map((a) => a.need));
+/** Cards each snooze adds to the ring's N: the snooze cost. */
+const SNOOZE_COST = 2;
+
+/**
+ * A ring needs the largest N among its alarm and the alarms folded into it, plus the snooze cost
+ * for each snooze so far.
+ */
+export function ringNeed(alarm: Alarm, absorbed: readonly Alarm[], snoozes = 0) {
+  return Math.max(alarm.need, ...absorbed.map((a) => a.need)) + snoozes * SNOOZE_COST;
+}
+
+/**
+ * The snooze a ring offers after `snoozes` snoozes: its length, the cards it adds, and the snoozes
+ * left counting this one. Null when the alarm doesn't allow snooze or the ring reached the cap.
+ */
+export function snoozeOffer(alarm: Alarm, snoozes: number) {
+  const left = alarm.snoozeCap - snoozes;
+  if (!alarm.snooze || left <= 0) return null;
+  return { minutes: alarm.snoozeMinutes, cost: SNOOZE_COST, left };
 }
 
 /** The deck and its subdecks, which Anki names `Parent::Child`. */

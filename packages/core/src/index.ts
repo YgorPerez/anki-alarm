@@ -55,10 +55,12 @@ export {
   parseAlarmSound,
   readAlarm,
   MAX_NEED,
+  MAX_SNOOZE_CAP,
+  SNOOZE_CHOICES,
   stampAlarm,
   alarmFromRecord,
 } from "./alarm.ts";
-export { alarmSession, ringNeed, SESSION_RULES } from "./session.ts";
+export { alarmSession, ringNeed, snoozeOffer, SESSION_RULES } from "./session.ts";
 export type { AlarmSessionInput } from "./session.ts";
 export type { Alarm, AlarmRecord, AlarmRule, AlarmSound, BundledSound } from "./alarm.ts";
 
