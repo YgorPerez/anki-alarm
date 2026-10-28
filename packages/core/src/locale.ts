@@ -7,8 +7,14 @@ export type Messages<Key extends string> = {
   en: Partial<Record<Key, string>>;
 };
 
-/** Looks up copy in `locale`. A string missing in English falls back to pt-BR. */
+/**
+ * Looks up copy in `locale`. A string missing in English falls back to pt-BR. `{name}` in the copy
+ * takes `params.name`.
+ */
 export const translator =
   <Key extends string>(messages: Messages<Key>, locale: Locale = "pt-BR") =>
-  (key: Key): string =>
-    (locale === "en" ? messages.en[key] : undefined) ?? messages["pt-BR"][key];
+  (key: Key, params: Record<string, string> = {}): string =>
+    ((locale === "en" ? messages.en[key] : undefined) ?? messages["pt-BR"][key]).replace(
+      /\{(\w+)\}/g,
+      (placeholder, name: string) => params[name] ?? placeholder,
+    );

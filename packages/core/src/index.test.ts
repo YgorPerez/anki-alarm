@@ -19,4 +19,15 @@ describe("translator", () => {
   test("falls back to pt-BR for a string missing in English", () => {
     expect(translator(messages, "en")("start")).toBe("Começar");
   });
+
+  test("fills in {placeholders}, leaving unknown ones as they are", () => {
+    const pair = {
+      "pt-BR": { pair: "{a} e {b} se parecem." },
+      en: { pair: "{a} and {b} look alike." },
+    };
+    expect(translator(pair, "en")("pair", { a: "Again", b: "Hard" })).toBe(
+      "Again and Hard look alike.",
+    );
+    expect(translator(pair)("pair", { a: "De novo" })).toBe("De novo e {b} se parecem.");
+  });
 });

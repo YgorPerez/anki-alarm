@@ -1,8 +1,9 @@
-// Keeps tokens.css, web.css and DESIGN.md in step, and checks the factory theme's contrast.
-// When Core's theme module lands, add: Core's factory theme derives exactly these values.
+// Keeps tokens.css, web.css, DESIGN.md and Core's theme in step, and checks the factory theme's
+// contrast.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { FACTORY_THEME, themeFor } from "@app/core";
 import { test } from "vite-plus/test";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
@@ -62,6 +63,14 @@ test("DESIGN.md's colors match tokens.css", () => {
     const name = isDark ? key!.slice(0, -"-dark".length) : key!;
     assert.equal((isDark ? dark : light).get(name), value, key);
   }
+});
+
+test("Core derives exactly these colors from the factory theme", () => {
+  for (const [mode, theme] of [
+    ["light", light],
+    ["dark", dark],
+  ] as const)
+    assert.deepEqual(new Map(Object.entries(themeFor(FACTORY_THEME, mode))), theme, mode);
 });
 
 const PAIRS: [text: string, ground: string][] = [
