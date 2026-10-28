@@ -6,7 +6,7 @@ import {
   type ReliabilityStep,
 } from "@app/core";
 import { Effect } from "effect";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ListRenderItemInfo } from "react-native";
 import { BackHandler, Pressable, FlatList, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -68,7 +68,7 @@ export function ReliabilityScreen({
   const [error, setError] = useState(false);
   const t = reliabilityCopy(locale);
   const insets = useSafeAreaInsets();
-  const steps = reliabilitySteps(permissions);
+  const steps = useMemo(() => reliabilitySteps(permissions), [permissions]);
   const back = useCallback(() => {
     if (!onboarding) onExit();
     else {
@@ -81,21 +81,24 @@ export function ReliabilityScreen({
     const sub = BackHandler.addEventListener("hardwareBackPress", back);
     return () => sub.remove();
   }, [back]);
-  function open(kind: ReliabilityKind | "appInfo") {
-    setError(false);
-    void run(Effect.flatMap(AlarmService, (service) => service.getPermissions))
-      .then((p) => {
-        refresh();
-        // Re-check overlay before sending a user who already granted it back to Settings.
-        if (kind === "overlay" && p.overlay === "granted") return true;
-        return run(Effect.flatMap(AlarmService, (service) => service.request(kind)));
-      })
-      .then((ok) => {
-        if (!ok) setError(true);
-      })
-      .catch(() => setError(true));
-  }
-  function next() {
+  const open = useCallback(
+    (kind: ReliabilityKind | "appInfo") => {
+      setError(false);
+      void run(Effect.flatMap(AlarmService, (service) => service.getPermissions))
+        .then((p) => {
+          refresh();
+          // Re-check overlay before sending a user who already granted it back to Settings.
+          if (kind === "overlay" && p.overlay === "granted") return true;
+          return run(Effect.flatMap(AlarmService, (service) => service.request(kind)));
+        })
+        .then((ok) => {
+          if (!ok) setError(true);
+        })
+        .catch(() => setError(true));
+    },
+    [refresh],
+  );
+  const next = useCallback(() => {
     if (index < steps.length - 1) {
       list.current?.scrollToOffset({ offset: 0, animated: false });
       setIndex(index + 1);
@@ -107,7 +110,25 @@ export function ReliabilityScreen({
         else setError(true);
       })
       .catch(() => setError(true));
-  }
+  }, [index, steps.length, onExit]);
+  const rows = useMemo(
+    () =>
+      (onboarding ? steps.slice(index, index + 1) : steps).map((step) => ({
+        step,
+        locale,
+        onboarding,
+        index,
+        total: steps.length,
+        confirmed: confirmed.has(step.kind),
+        open,
+        next,
+        confirm: () => {
+          setConfirmed((previous) => new Set([...previous, step.kind]));
+          if (onboarding) next();
+        },
+      })),
+    [onboarding, steps, index, locale, confirmed, open, next],
+  );
   return (
     <View
       className="flex-1 bg-background"
@@ -116,20 +137,7 @@ export function ReliabilityScreen({
       <FlatList
         ref={list}
         contentContainerStyle={{ padding: 24, gap: 20 }}
-        data={(onboarding ? steps.slice(index, index + 1) : steps).map((step) => ({
-          step,
-          locale,
-          onboarding,
-          index,
-          total: steps.length,
-          confirmed: confirmed.has(step.kind),
-          open,
-          next,
-          confirm: () => {
-            setConfirmed(new Set([...confirmed, step.kind]));
-            if (onboarding) next();
-          },
-        }))}
+        data={rows}
         keyExtractor={(row) => row.step.kind}
         ListHeaderComponent={
           <View className="gap-5">
