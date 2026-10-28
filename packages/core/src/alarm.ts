@@ -1,3 +1,5 @@
+import { nextClock, type CollectionEnvironment, type Field } from "./collection.ts";
+
 /** ISO weekdays: Monday = 1, Sunday = 7. A once-date is a local YYYY-MM-DD. */
 export interface AlarmRule {
   hour: number;
@@ -81,6 +83,53 @@ export function readAlarm({ sound, deckId, need, ...alarm }: StoredAlarm): Alarm
         ? Math.min(MAX_NEED, Math.max(1, need))
         : newAlarm(alarm.id).need,
   };
+}
+
+type AlarmProperties = Omit<Alarm, "id">;
+/** An alarm as it syncs: one HLC per property (ADR 0001), so edits on two phones both keep. */
+export interface AlarmRecord {
+  id: string;
+  fields: { [K in keyof AlarmProperties]: Field<AlarmProperties[K]> };
+}
+
+/** Stamps the properties that differ from `previous`; unchanged ones keep their clock. */
+export function stampAlarm(
+  previous: AlarmRecord | undefined,
+  alarm: Alarm,
+  env: CollectionEnvironment,
+): AlarmRecord {
+  const hlc = nextClock(previous, env);
+  const { id, ...properties } = alarm;
+  // Every key of the alarm is kept with its own type.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+  const fields = Object.fromEntries(
+    Object.entries(properties).map(([key, value]) => {
+      // Object.entries keeps the alarm's keys.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      const old = previous?.fields[key as keyof AlarmProperties];
+      const kept = old && JSON.stringify(old.value) === JSON.stringify(value);
+      return [key, kept ? old : { value, hlc }];
+    }),
+  ) as AlarmRecord["fields"];
+  return { id, fields };
+}
+
+/** The alarm a synced record describes. A property it lacks takes the new-alarm default. */
+export function alarmFromRecord(record: AlarmRecord): Alarm {
+  const defaults = newAlarm(record.id);
+  const value = <K extends keyof AlarmProperties>(key: K): AlarmProperties[K] =>
+    record.fields[key]?.value ?? defaults[key];
+  return readAlarm({
+    id: record.id,
+    label: value("label"),
+    enabled: value("enabled"),
+    rule: value("rule"),
+    vibrate: value("vibrate"),
+    rampSeconds: value("rampSeconds"),
+    sound: record.fields.sound?.value,
+    deckId: record.fields.deckId?.value,
+    need: record.fields.need?.value,
+  });
 }
 
 export const RING_POLICY = { leaveSeconds: 10, idleSeconds: 20, awakeCheckSeconds: 60 };

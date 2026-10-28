@@ -13,7 +13,13 @@ export {
 export type { Hex, Theme, ThemeChoice, ThemeField, ThemeMode } from "./theme.ts";
 export { uuid7, cardId, importId } from "./ids.ts";
 export type { ImportKind } from "./ids.ts";
-export { Collection, DEFAULT_FSRS_PARAMETERS, parseCollection, validOption } from "./collection.ts";
+export {
+  Collection,
+  DEFAULT_FSRS_PARAMETERS,
+  parseCollection,
+  parseRecord,
+  validOption,
+} from "./collection.ts";
 export { ankiDroidAccess, linkableAnkiDroidDecks } from "./ankidroid.ts";
 export type {
   AnkiDroidAccess,
@@ -49,10 +55,12 @@ export {
   parseAlarmSound,
   readAlarm,
   MAX_NEED,
+  stampAlarm,
+  alarmFromRecord,
 } from "./alarm.ts";
 export { alarmSession, ringNeed, SESSION_RULES } from "./session.ts";
 export type { AlarmSessionInput } from "./session.ts";
-export type { Alarm, AlarmRule, AlarmSound, BundledSound } from "./alarm.ts";
+export type { Alarm, AlarmRecord, AlarmRule, AlarmSound, BundledSound } from "./alarm.ts";
 
 export { releaseVersion } from "./release.ts";
 export { newerApk, SYNC_PROTOCOL } from "./release.ts";
@@ -91,3 +99,12 @@ export type {
   StudyStats,
   Tally,
 } from "./stats.ts";
+export {
+  compareHlc,
+  mergeRecord,
+  resolveChange,
+  signInPlan,
+  syncSlot,
+  SYNC_KINDS,
+} from "./sync.ts";
+export type { FieldRecord, SyncChange, SyncKind } from "./sync.ts";

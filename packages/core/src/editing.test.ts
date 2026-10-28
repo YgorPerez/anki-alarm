@@ -3,6 +3,7 @@ import {
   Collection,
   cardId,
   parseCollection,
+  parseRecord,
   renderCard,
   replayCard,
   validOption,
@@ -192,6 +193,8 @@ test("collections saved before note values and FSRS parameters read in the curre
   });
   expect(state.presets[0]!.fields.fsrsParameters.value).toHaveLength(21);
   expect(parseCollection(state)).toEqual(state);
+  // One record at a time, as sync reads them, gives the same shape.
+  expect(parseRecord("notes", legacy.notes[0]!)).toEqual(state.notes[0]);
 });
 
 test("a note must match its note type's fields and have a first field", () => {

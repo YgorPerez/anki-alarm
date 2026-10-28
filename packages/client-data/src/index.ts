@@ -1,10 +1,21 @@
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import { sql } from "drizzle-orm";
-import { settings as settingsTable, alarms, alarmEvents, outbox, reviewLog } from "./schema.ts";
+import {
+  settings as settingsTable,
+  alarms,
+  alarmEvents,
+  alarmRecords,
+  outbox,
+  reviewLog,
+} from "./schema.ts";
+import { syncEngine } from "./sync.ts";
+export { AccountMismatch, type SyncResult } from "./sync.ts";
+export { syncScheduler, type SyncScheduler, type SyncStatus } from "./scheduler.ts";
 export { type ExecuteSql } from "./collection.ts";
 import { openCollectionStore, type ExecuteSql } from "./collection.ts";
 import { migrationStatements } from "./migrations.ts";
 import { Context, Effect, Layer } from "effect";
+import { eq } from "drizzle-orm";
 import {
   uuid7,
   studyQueue,
@@ -21,6 +32,7 @@ import {
   type Alarm,
   type AnkiPackage,
   type AnkiDroidSource,
+  stampAlarm,
 } from "@app/core";
 
 export interface AlarmEvent {
@@ -44,7 +56,10 @@ export interface ImportSummary {
   /** Review log entries this import added. */
   entries: number;
 }
-interface Data {
+type Engine = ReturnType<typeof syncEngine>;
+interface Data extends Engine {
+  /** Calls `listener` after each local write commits, to schedule a sync. Returns unsubscribe. */
+  subscribe: (listener: () => void) => () => void;
   collection: Effect.Effect<CollectionState, Error>;
   /**
    * Merges an Anki package into the collection and appends its review log in one transaction.
@@ -118,6 +133,16 @@ async function open(driver: SQLiteConnection): Promise<Data> {
     throw error;
   }
   let queue: Promise<unknown> = Promise.resolve();
+  const listeners = new Set<() => void>();
+  /** Runs a local write in the queue and tells subscribers once it committed. */
+  const local = <A>(operation: () => Promise<A>) =>
+    serial(operation).pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          for (const listener of listeners) listener();
+        }),
+      ),
+    );
   const serial = <A>(operation: () => Promise<A>) =>
     Effect.tryPromise({
       try: () => {
@@ -144,7 +169,7 @@ async function open(driver: SQLiteConnection): Promise<Data> {
   const append = (
     build: (state: CollectionState, log: LogEntry[], entry: { id: string; at: number }) => LogEntry,
   ) =>
-    serial(() =>
+    local(() =>
       transaction(collectionSql, async () => {
         const state = await store.read();
         const log = await readLog();
@@ -173,7 +198,23 @@ async function open(driver: SQLiteConnection): Promise<Data> {
     }
     return added.length;
   };
+  const env = { ...driver, deviceId: store.deviceId };
+  const engine = syncEngine({
+    collectionDb,
+    alarmDb,
+    serial,
+    inCollection: (operation) => transaction(collectionSql, operation),
+    inAlarms: (operation) => transaction(alarmSql, operation),
+    env,
+  });
   return {
+    ...engine,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
     reviewLog: serial(readLog),
     answerCard: (cardId, grade, durationMs, ringId) =>
       append((state, log, base) => {
@@ -215,7 +256,7 @@ async function open(driver: SQLiteConnection): Promise<Data> {
       }),
     collection: serial(store.read),
     importAnki: (source) =>
-      serial(async () => {
+      local(async () => {
         let entries = 0;
         const { result } = await store.run(
           (collection) => collection.importAnki(source),
@@ -226,7 +267,7 @@ async function open(driver: SQLiteConnection): Promise<Data> {
         return { notes: result.notes, cards: result.cards, entries };
       }),
     linkAnkiDroidDeck: (source) =>
-      serial(async () => {
+      local(async () => {
         const { result } = await store.run(
           (c) => c.linkAnkiDroid(source),
           async ({ snapshots }) => {
@@ -235,7 +276,7 @@ async function open(driver: SQLiteConnection): Promise<Data> {
         );
         return result.deckId;
       }),
-    changeCollection: (command) => serial(() => store.change(command)),
+    changeCollection: (command) => local(() => store.change(command)),
     alarms: serial(async () =>
       (
         await alarmDb
@@ -245,13 +286,22 @@ async function open(driver: SQLiteConnection): Promise<Data> {
       ).map((row) => readAlarm(row.data)),
     ),
     saveAlarm: (alarm) =>
-      serial(() =>
+      local(() =>
         transaction(alarmSql, async () => {
+          const [previous] = await alarmDb
+            .select()
+            .from(alarmRecords)
+            .where(eq(alarmRecords.id, alarm.id));
+          const record = stampAlarm(previous?.body, alarm, env);
           await alarmDb
             .insert(alarms)
             .values({ id: alarm.id, data: alarm })
             .onConflictDoUpdate({ target: alarms.id, set: { data: alarm } });
-          await alarmDb.insert(outbox).values({ kind: "alarms", recordId: alarm.id, body: alarm });
+          await alarmDb
+            .insert(alarmRecords)
+            .values({ id: alarm.id, body: record })
+            .onConflictDoUpdate({ target: alarmRecords.id, set: { body: record } });
+          await alarmDb.insert(outbox).values({ kind: "alarms", recordId: alarm.id, body: record });
         }),
       ),
     ingestEvents: (events) =>
@@ -278,12 +328,9 @@ async function open(driver: SQLiteConnection): Promise<Data> {
       return settings;
     }),
     setTheme: (patch) =>
-      serial(() =>
+      local(() =>
         transaction(collectionSql, async () => {
-          const settings = updateThemeSettings(await readSettings(), patch, {
-            ...driver,
-            deviceId: store.deviceId,
-          });
+          const settings = updateThemeSettings(await readSettings(), patch, env);
           await collectionDb
             .insert(settingsTable)
             .values({ id: settings.id, body: settings })

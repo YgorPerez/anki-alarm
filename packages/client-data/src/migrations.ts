@@ -41,6 +41,14 @@ const migrations = [
       "CREATE TABLE IF NOT EXISTS review_log (id TEXT PRIMARY KEY NOT NULL, body TEXT NOT NULL)",
     ],
   },
+  {
+    // Each alarm as it syncs, one HLC per property. `alarms` keeps the shape native reads.
+    id: 6,
+    database: "anki-alarm.db",
+    statements: [
+      "CREATE TABLE IF NOT EXISTS alarm_records (id TEXT PRIMARY KEY NOT NULL, body TEXT NOT NULL)",
+    ],
+  },
 ] as const;
 
 // Both initial migrations are additive and safe to replay on databases created before the ledger.

@@ -4,6 +4,8 @@ import { AlarmScreen } from "./AlarmScreen.tsx";
 import { ReliabilityScreen } from "./ReliabilityScreen.tsx";
 import { reliabilityCopy } from "./reliability-copy.ts";
 import { UpdateOffer } from "./UpdateOffer.tsx";
+import { AccountPanel } from "./AccountPanel.tsx";
+import { appSync } from "./app-sync.ts";
 import { newAlarm, nextRing, themeFor, type Alarm, type Locale } from "@app/core";
 import {
   AtkinsonHyperlegible_400Regular,
@@ -129,13 +131,30 @@ function Home() {
     refresh();
     const subscription = native.addListener("onChange", refresh);
     const appState = AppState.addEventListener("change", (state) => {
-      if (state === "active") refresh();
+      if (state !== "active") return;
+      refresh();
+      appSync?.syncNow();
+    });
+    // A pull that changed alarms re-arms them, as a local save does.
+    const synced = appSync?.onSynced(({ changed }) => {
+      if (changed.includes("alarms")) refresh();
     });
     return () => {
       subscription.remove();
       appState.remove();
+      synced?.();
     };
   }, [controller, locale, client]);
+  useEffect(() => {
+    // On open: resume the stored session and sync.
+    void appSync?.start();
+  }, []);
+  const [refreshing, setRefreshing] = useState(false);
+  const pullToRefresh = useCallback(() => {
+    setRefreshing(true);
+    appSync?.syncNow();
+    void client.invalidateQueries({ queryKey: ["alarms"] }).finally(() => setRefreshing(false));
+  }, [client]);
   const save = useCallback(
     (alarm: Alarm) => {
       void run(controller.save(alarm))
@@ -164,7 +183,11 @@ function Home() {
           layer={androidAlarmService}
           onDismissed={() => {
             void run(controller.resume)
-              .then(setRing)
+              .then((next) => {
+                setRing(next);
+                // After each alarm session: its reviews reach the other devices.
+                appSync?.syncNow();
+              })
               .catch(() => setError(t("alarmError")));
           }}
         />
@@ -211,6 +234,8 @@ function Home() {
       <FlatList
         contentContainerStyle={{ padding: 24, gap: 20 }}
         data={editing ? [] : alarms}
+        refreshing={refreshing}
+        onRefresh={pullToRefresh}
         keyExtractor={(alarm) => alarm.id}
         renderItem={renderAlarm}
         ListHeaderComponent={
@@ -248,6 +273,7 @@ function Home() {
         ListFooterComponent={
           <View className="gap-4">
             <UpdateOffer locale={locale} />
+            <AccountPanel sync={appSync} locale={locale} />
             <Text accessibilityRole="alert" className="text-body text-attention">
               {error || (alarmsQuery.isError ? t("alarmError") : "")}
             </Text>

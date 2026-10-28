@@ -125,6 +125,17 @@ function ordinalsFor(type: NoteType, values: readonly string[]): number[] {
 }
 /** Anki joins field names and values with the unit separator. */
 const SEPARATOR = "\u001f";
+/** The clock after every field of `previous`, even when the wall clock went backwards. */
+export function nextClock(
+  previous: { fields: { [key: string]: Field<unknown> } } | undefined,
+  env: CollectionEnvironment,
+): Hlc {
+  const clocks = Object.values(previous?.fields ?? {}).map((f) => f.hlc);
+  const wallMs = Math.max(env.now(), ...clocks.map((h) => h.wallMs));
+  const counter =
+    Math.max(-1, ...clocks.filter((h) => h.wallMs === wallMs).map((h) => h.counter)) + 1;
+  return { wallMs, counter, deviceId: env.deviceId };
+}
 const empty = (): CollectionState => ({
   decks: [],
   presets: [],
@@ -165,6 +176,11 @@ export function parseCollection(stored: StoredCollection): CollectionState {
   for (const type of state.noteTypes) {
     const old = legacy(type.fields);
     if (!old.frontTemplate) continue;
+    if (type.fields.templates) {
+      delete old.frontTemplate;
+      delete old.backTemplate;
+      continue;
+    }
     const hlc = old.frontTemplate.hlc;
     type.fields.kind = { value: "standard", hlc };
     const front = old.frontTemplate.value;
@@ -180,11 +196,28 @@ export function parseCollection(stored: StoredCollection): CollectionState {
     delete old.deckId;
     note.fields.tags ??= { value: [], hlc: note.fields.noteTypeId.hlc };
     if (!old.front) continue;
-    note.values = [old.front, old.back ?? { value: "", hlc: old.front.hlc }];
+    // A sync merge may have joined an old record with a current one; current values win.
+    note.values ??= [old.front, old.back ?? { value: "", hlc: old.front.hlc }];
     delete old.front;
     delete old.back;
   }
   return state;
+}
+/** One stored record in the current shape, as `parseCollection` reads it. */
+export function parseRecord<K extends RecordKind>(
+  kind: K,
+  record: StoredCollection[K][number],
+): CollectionState[K][number] {
+  const stored: StoredCollection = {
+    decks: [],
+    presets: [],
+    noteTypes: [],
+    notes: [],
+    cards: [],
+    tombstones: [],
+  };
+  stored[kind].push(record);
+  return parseCollection(stored)[kind][0]!;
 }
 interface Legacy {
   deckId?: Field<string>;

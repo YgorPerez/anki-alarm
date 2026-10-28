@@ -2,6 +2,7 @@ import { newerApk } from "@app/core";
 import { nativeBuildVersion } from "expo-application";
 import * as FileSystem from "expo-file-system/legacy";
 import { startActivityAsync } from "expo-intent-launcher";
+import * as Updates from "expo-updates";
 
 /** Called from Home only. Never mount update prompts in alarm or study screens. */
 export async function findApk() {
@@ -32,4 +33,15 @@ export async function installApk(url: string) {
     type: "application/vnd.android.package-archive",
     flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
   });
+}
+
+/** Downloads a published OTA, if there is one. It applies on the next cold start. */
+export async function fetchOtaInBackground() {
+  try {
+    if (!Updates.isEnabled) return;
+    const check = await Updates.checkForUpdateAsync();
+    if (check.isAvailable) await Updates.fetchUpdateAsync();
+  } catch {
+    // Offline or no update channel: the APK offer on Home still applies.
+  }
 }
