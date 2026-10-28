@@ -16,7 +16,7 @@ export GH_TOKEN=$(gh auth token --user YgorPerez)
 ### Wayfinding
 
 - **Map:** the open issue labelled `wayfinder:map` ("Map: first release").
-- **Tickets:** sub-issues of the map (`gh issue create --parent <map>`), labelled
+- **Tickets:** decision tickets are sub-issues of the map (`gh issue create --parent <map>`), labelled
   `wayfinder:<research|prototype|grilling|task>`.
 - **Blocking:** GitHub's native dependencies:
   `gh api --method POST repos/YgorPerez/anki-alarm/issues/<child>/dependencies/blocked_by -F issue_id=<blocker database id>`
@@ -27,6 +27,16 @@ export GH_TOKEN=$(gh auth token --user YgorPerez)
 - **Resolve:** a code ticket closes through its PR. A ticket without code (`research`, `grilling`,
   `prototype`): comment the answer on it and close it. Either way, add one line (summary + link) to
   "Decisions so far" in the map's body.
+
+## Flow
+
+The `mattpocock-skills` and `impeccable` plugins are enabled in `.claude/settings.json`. If a
+session can't load plugins, read the skill files straight from their GitHub repos.
+
+The map (#1) holds decision tickets only: research, prototypes and grillings. When they're all
+resolved, fold the answers into `docs/spec.md`, run `/to-tickets` to split the spec into
+tracer-bullet build tickets with blocking links, and build each with `/implement`. Use Impeccable
+for the visual direction and UI polish.
 
 ## Conventions
 
