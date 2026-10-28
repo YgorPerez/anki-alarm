@@ -36,7 +36,9 @@ function clientData() {
   });
   return data;
 }
-export const localData = <A>(read: (data: ClientData["Service"]) => Effect.Effect<A, Error>) =>
+export const localData = <A, E = Error>(
+  read: (data: ClientData["Service"]) => Effect.Effect<A, E>,
+) =>
   Effect.tryPromise({ try: () => clientData(), catch: (error) => new Error(String(error)) }).pipe(
     Effect.flatMap(read),
   );
