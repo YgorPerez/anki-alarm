@@ -193,7 +193,7 @@ class AlarmService : Service() {
     )
     AlarmActivityListener.applyLockFlags(true)
     if (player == null) startSound()
-    if (vibrator == null && setting("vibrate") == 1) startVibration()
+    if (vibrator == null && setting("vibrate") == 1 && setting("silent") == 0) startVibration()
     if (!sessionStarted) setTarget(1f, ramp = first)
     handler.removeCallbacks(tick)
     handler.post(tick)

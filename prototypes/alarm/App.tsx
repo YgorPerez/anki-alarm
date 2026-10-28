@@ -177,7 +177,7 @@ function Controls({ state, onChange }: { state: AlarmState; onChange: () => void
         </View>
         <Setting label="Vibrate" on={!!state.settings.vibrate} onPress={toggle('vibrate')} />
         <Setting label="Raise alarm stream to max while ringing" on={!!state.settings.forceMaxVolume} onPress={toggle('forceMaxVolume')} />
-        <Setting label="Silent (volume 0, for test runs)" on={!!state.settings.silent} onPress={toggle('silent')} />
+        <Setting label="Silent (volume 0, no vibration, for test runs)" on={!!state.settings.silent} onPress={toggle('silent')} />
         <Setting label="Also startActivity from the service" on={!!state.settings.directLaunch} onPress={toggle('directLaunch')} />
       </View>
     </>

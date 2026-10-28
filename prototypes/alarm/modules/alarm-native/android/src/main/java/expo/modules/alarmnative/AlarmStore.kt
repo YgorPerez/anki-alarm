@@ -27,7 +27,7 @@ object AlarmStore {
     "vibrate" to 1,
     "forceMaxVolume" to 1,
     "directLaunch" to 1,
-    // #35: phone runs stay quiet. The player still starts, at volume 0, so playback is still tested.
+    // #35: phone runs stay quiet: no vibration, and the player starts at volume 0 so playback is still tested.
     "silent" to 1,
   )
 
