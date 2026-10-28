@@ -7,20 +7,17 @@ packages:
 catalog:
   "@types/node": 24.12.4
   typescript: 7.0.2
-  # The workspace's Vite is Vite+'s core, and its Vitest is the one Vite+ ships. They move together.
+  # The workspace's Vite is Vite+'s core. They move together.
   vite: npm:@voidzero-dev/vite-plus-core@1.4.0
   vite-plus: 1.4.0
-  vitest: 5.0.5
 
-# One Vite and one Vitest in the workspace, Vite+'s, so every app and `vp test` see the same copy.
+# One Vite in the workspace, Vite+'s, so the web's plugins and `vp` see the same copy.
 overrides:
   vite@*: "catalog:"
-  vitest@*: "catalog:"
 
 peerDependencyRules:
   allowAny:
     - vite
-    - vitest
 
 # Packages whose install scripts may run. pnpm fails the install on any other.
 allowBuilds:

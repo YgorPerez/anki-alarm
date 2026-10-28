@@ -1,0 +1,73 @@
+# The checks and tests, on every push. Releases ship from tags in their own workflow
+# (docs/adr/0002-release-policy.md).
+name: CI
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch replaces a run still going.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Format, lint (oxlint, @shadcn/lint on the web) and types, the tests, fallow and React Doctor.
+  check:
+    name: Check and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      # Without `version`, the action reads `packageManager` from the root package.json.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: vp check
+        run: pnpm check
+
+      - name: vp lint
+        run: pnpm lint
+
+      - name: vp test
+        run: pnpm test
+
+      - name: Fallow
+        run: pnpm fallow
+
+      - name: React Doctor
+        run: pnpm doctor
+
+  # The apps build: the web for Workers, and the phone's JS bundle through Metro and uniwind.
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Web
+        run: pnpm --filter @app/web build
+
+      - name: Phone bundle
+        run: pnpm --filter @app/mobile exec expo export --platform android --output-dir "$RUNNER_TEMP/mobile"

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/v3.36.0/schema.json",
+  "ignorePatterns": [
+    "**/.expo/**",
+    "**/.wrangler/**",
+    "**/.impeccable/**",
+    "prototypes/**",
+    "apps/mobile/expo-env.d.ts",
+    "apps/mobile/uniwind-types.d.ts",
+    "apps/web/src/routeTree.gen.ts",
+  ],
+  "ignoreDependencies": [
+    // Core's scheduling (log replay through FSRS) is its next rule; the spec fixes the dependency.
+    "ts-fsrs",
+  ],
+  "ignoreExports": [
+    // shadcn's generated components export their variants for whoever composes them.
+    { "file": "apps/web/src/ui/shadcn/**", "exports": ["*"] },
+  ],
+}
