@@ -2,8 +2,23 @@
 /// <reference lib="webworker" />
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import { ClientData, clientDataLayer, type SQLiteConnection } from "@app/client-data";
-import { ManagedRuntime, type Effect } from "effect";
-import type { Operation, Response, Result } from "./protocol.ts";
+import { makeSyncClient } from "@app/contracts";
+import { Effect, ManagedRuntime } from "effect";
+
+import { SYNC_URL } from "../env.ts";
+import { operations } from "./operations.ts";
+import { toFailure, type Operation, type Response } from "./protocol.ts";
+
+/** The sync API on its own origin. The browser sends the better-auth session cookie with it. */
+const syncClient = () =>
+  SYNC_URL
+    ? Effect.runPromise(
+        makeSyncClient({
+          baseUrl: SYNC_URL,
+          fetch: (input, init) => fetch(input, { ...init, credentials: "include" }),
+        }),
+      )
+    : Promise.reject(new Error("Sync is not configured in this build"));
 
 const open = async () => {
   const sqlite = await sqlite3InitModule();
@@ -24,10 +39,10 @@ const open = async () => {
     },
     now: Date.now,
     random: () => crypto.getRandomValues(new Uint8Array(16)),
+    origin: "web",
   };
   const runtime = ManagedRuntime.make(clientDataLayer(driver));
-  const data = await runtime.runPromise(ClientData);
-  return { runtime, data };
+  return operations(await runtime.runPromise(ClientData), syncClient);
 };
 const ready = open();
 void ready.then(
@@ -37,18 +52,16 @@ void ready.then(
 self.addEventListener(
   "message",
   async ({ data: request }: MessageEvent<{ id: string; operation: Operation }>) => {
-    const response: Response = { type: "response", id: request.id };
+    let response: Response;
+    let changed = false;
     try {
-      const { runtime, data } = await ready;
-      const operation = request.operation;
-      const effect: Effect.Effect<Result, Error> =
-        operation.kind === "setTheme" ? data.setTheme(operation.patch) : data[operation.kind];
-      response.result = await runtime.runPromise(effect);
+      const outcome = await (await ready)(request.operation);
+      response = { type: "response", id: request.id, ok: true, result: outcome.result };
+      changed = outcome.changed;
     } catch (error) {
-      response.error = String(error);
+      response = { type: "response", id: request.id, ok: false, error: toFailure(error) };
     }
     self.postMessage(response);
-    if (!response.error && request.operation.kind === "setTheme")
-      self.postMessage({ type: "changed" });
+    if (changed) self.postMessage({ type: "changed" });
   },
 );

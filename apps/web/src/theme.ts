@@ -8,17 +8,15 @@ import {
   type ThemeChoice,
   type ThemeField,
 } from "@app/core";
-import { QueryClient, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { webData } from "./data/client.ts";
+import { queryClient } from "./query.ts";
 
 // SQLite is the source of truth. localStorage caches only derived CSS for the first paint.
 const CSS_KEY = "theme-css";
 const STYLE_ID = "theme";
 export const THEME_SCRIPT = `try{var c=localStorage.getItem("${CSS_KEY}");if(c){var s=document.createElement("style");s.id="${STYLE_ID}";s.textContent=c;document.head.appendChild(s)}}catch(e){}`;
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { networkMode: "always", retry: false } },
-});
 const key = ["settings"];
 const themeChoiceFromSettings = (settings: Settings) =>
   parseThemeChoice(
@@ -27,7 +25,7 @@ const themeChoiceFromSettings = (settings: Settings) =>
 const options = {
   queryKey: key,
   queryFn: async () => {
-    const settings = readSettings(await webData().request({ kind: "settings" }));
+    const settings = await webData().request("settings");
     let legacy: string | null = null;
     try {
       legacy = localStorage.getItem("theme");
@@ -41,7 +39,7 @@ const options = {
     } catch {
       patch = {};
     }
-    const migrated = readSettings(await webData().request({ kind: "setTheme", patch }));
+    const migrated = await webData().request("setTheme", patch);
     try {
       localStorage.removeItem("theme");
     } catch {
@@ -57,7 +55,7 @@ export const useThemeChoice = () => {
 export const useStorageState = () => useQuery(options, queryClient);
 const save = async (patch: Partial<ThemeChoice>) => {
   try {
-    const settings = readSettings(await webData().request({ kind: "setTheme", patch }));
+    const settings = await webData().request("setTheme", patch);
     queryClient.setQueryData(key, settings);
     queryClient.setQueryData(["storage-error"], null);
     return settings;
@@ -119,14 +117,10 @@ const apply = () => {
 export const followTheme = () => {
   apply();
   const unsubscribe = queryClient.getQueryCache().subscribe(apply);
-  const unfollow = webData().subscribe(() => {
-    void queryClient.invalidateQueries({ queryKey: key });
-  });
   window.addEventListener("pagehide", stop);
   window.addEventListener("pageshow", restore);
   return () => {
     unsubscribe();
-    unfollow();
     window.removeEventListener("pagehide", stop);
     window.removeEventListener("pageshow", restore);
   };
@@ -135,9 +129,4 @@ export const followTheme = () => {
 const stop = () => webData().close();
 const restore = (event: PageTransitionEvent) => {
   if (event.persisted) window.location.reload();
-};
-
-const readSettings = (result: import("./data/protocol.ts").Result): Settings => {
-  if ("fields" in result) return result;
-  throw new Error("Invalid settings response");
 };

@@ -17,6 +17,11 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
+        // The four grades (DESIGN.md): one hue each, Good solid primary.
+        again: "bg-again-tint text-again-ink hover:bg-again-tint/80",
+        hard: "bg-hard-tint text-hard-ink hover:bg-hard-tint/80",
+        good: "bg-good text-good-foreground hover:bg-good/80",
+        easy: "bg-easy-tint text-easy-ink hover:bg-easy-tint/80",
       },
       size: {
         default:
@@ -30,6 +35,8 @@ const buttonVariants = cva(
         "icon-sm":
           "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
         "icon-lg": "size-9",
+        /** Study's thumb-sized pills: Show answer and the grades. */
+        pill: "h-16 rounded-full px-4 text-label font-bold",
       },
     },
     defaultVariants: {
