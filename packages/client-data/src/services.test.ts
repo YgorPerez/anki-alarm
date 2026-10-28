@@ -84,6 +84,8 @@ test("public services persist local changes and outbox together across reopen", 
           vibrate: true,
           rampSeconds: 30,
           sound: { kind: "file" as const, uri: "content://media/7", title: "rooster.mp3" },
+          deckId: "deck",
+          need: 5,
         };
         yield* data.saveAlarm(alarm);
         expect(yield* data.alarms).toEqual([alarm]);
@@ -144,7 +146,7 @@ test("reads legacy alarm sounds through the public service after reopening", asy
       .get("anki-alarm.db")!
       .prepare("INSERT INTO alarms (id, data) VALUES (?, ?)")
       .run(old.id, JSON.stringify(old));
-    expect((await read())[0]?.sound).toEqual({ kind: "default" });
+    expect((await read())[0]).toMatchObject({ sound: { kind: "default" }, deckId: null, need: 3 });
   } finally {
     for (const db of databases.values()) db.close();
   }
@@ -210,6 +212,16 @@ test("study answers survive reopen and outbox failure rolls back the review", as
         .filter((c) => c.kind === "reviewLog")
         .map((c) => c.body),
     ).toEqual([review]);
+    // Not due again yet: normal study refuses the card, an alarm session still gets it.
+    await expect(Effect.runPromise(reopened.answerCard(cardId, 3, 900))).rejects.toThrow(
+      /not available/,
+    );
+    const alarm = await Effect.runPromise(reopened.answerCard(cardId, 1, 900, "ring-1"));
+    expect(alarm).toMatchObject({ kind: "review", origin: "alarm", ringId: "ring-1", grade: 1 });
+    await expect(
+      Effect.runPromise(reopened.answerCard("deleted", 3, 900, "ring-1")),
+    ).rejects.toThrow(/not available/);
+    expect((await Effect.runPromise(reopened.reviewLog)).at(-1)).toEqual(alarm);
   } finally {
     for (const db of databases.values()) db.close();
   }

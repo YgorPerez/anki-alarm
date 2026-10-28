@@ -11,7 +11,7 @@ import {
   type LogEntry,
   type Grade,
   updateThemeSettings,
-  parseAlarmSound,
+  readAlarm,
   type Settings,
   type ThemeChoice,
   type Collection,
@@ -37,7 +37,16 @@ export interface PendingChange {
 interface Data {
   collection: Effect.Effect<CollectionState, Error>;
   reviewLog: Effect.Effect<LogEntry[], Error>;
-  answerCard: (cardId: string, grade: Grade, durationMs: number) => Effect.Effect<LogEntry, Error>;
+  /**
+   * Appends a review and its outbox record. With a ring id the answer belongs to that ring's alarm
+   * session: daily limits and due dates don't hold it back.
+   */
+  answerCard: (
+    cardId: string,
+    grade: Grade,
+    durationMs: number,
+    ringId?: string,
+  ) => Effect.Effect<LogEntry, Error>;
   changeCollection: (
     command: (collection: Collection) => void,
   ) => Effect.Effect<CollectionState, Error>;
@@ -107,7 +116,7 @@ async function open(driver: SQLiteConnection): Promise<Data> {
   const readLog = async () => (await collectionDb.select().from(reviewLog)).map((r) => r.body);
   return {
     reviewLog: serial(readLog),
-    answerCard: (cardId, grade, durationMs) =>
+    answerCard: (cardId, grade, durationMs, ringId) =>
       serial(() =>
         transaction(collectionSql, async () => {
           if (![1, 2, 3, 4].includes(grade) || !Number.isFinite(durationMs) || durationMs < 0)
@@ -117,9 +126,10 @@ async function open(driver: SQLiteConnection): Promise<Data> {
           const at = driver.now();
           if (
             !card ||
-            !studyQueue(state, await readLog(), card.fields.deckId.value, at).some(
-              (c) => c.card.id === cardId,
-            )
+            (ringId === undefined &&
+              !studyQueue(state, await readLog(), card.fields.deckId.value, at).some(
+                (c) => c.card.id === cardId,
+              ))
           )
             throw new Error("Card is not available for study");
           const entry: LogEntry = {
@@ -129,7 +139,7 @@ async function open(driver: SQLiteConnection): Promise<Data> {
             at,
             grade,
             durationMs,
-            origin: "phone",
+            ...(ringId === undefined ? { origin: "phone" } : { origin: "alarm", ringId }),
           };
           await collectionDb.insert(reviewLog).values({ id: entry.id, body: entry });
           await collectionDb
@@ -146,10 +156,7 @@ async function open(driver: SQLiteConnection): Promise<Data> {
           .select()
           .from(alarms)
           .orderBy(sql`rowid`)
-      ).map((row) => {
-        row.data.sound = parseAlarmSound(row.data.sound);
-        return row.data;
-      }),
+      ).map((row) => readAlarm(row.data)),
     ),
     saveAlarm: (alarm) =>
       serial(() =>
