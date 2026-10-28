@@ -1,0 +1,7 @@
+{
+  "oxlint": {},
+  "fallow": {},
+  "react-doctor": {
+    "apps/web/src/ui/shadcn/button.tsx": 1
+  }
+}

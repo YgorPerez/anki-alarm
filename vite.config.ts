@@ -10,6 +10,8 @@ const IGNORED = [
   "**/coverage/**",
   "apps/mobile/android/**",
   "apps/mobile/.expo/**",
+  "apps/mobile/.rnstorybook/storybook.requires.ts",
+  "apps/web/storybook-static/**",
   "apps/mobile/uniwind-types.d.ts",
   "apps/web/.output/**",
   "apps/web/.tanstack/**",

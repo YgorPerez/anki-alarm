@@ -24,3 +24,6 @@ apps/*/.dev.vars
 /release-version.json
 /release-metadata.json
 /anki-alarm.apk
+
+apps/mobile/.rnstorybook/storybook.requires.ts
+apps/web/storybook-static/

@@ -1,0 +1,20 @@
+appId: dev.ygorperez.ankialarm
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Prepare seus alarmes"
+    timeout: 30000
+- repeat:
+    while:
+      visible: "Continuar"
+    commands:
+      - tapOn: "Continuar"
+- tapOn: "Concluir"
+- tapOn: "Baralhos"
+- tapOn: "Criar baralho"
+- tapOn: "Nome do baralho"
+- inputText: "Maestro"
+- hideKeyboard
+- tapOn: "Salvar"
+- assertVisible: "Maestro"
