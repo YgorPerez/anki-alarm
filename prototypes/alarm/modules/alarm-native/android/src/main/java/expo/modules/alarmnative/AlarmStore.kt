@@ -23,7 +23,7 @@ object AlarmStore {
     "rampSeconds" to 30,
     "leaveSeconds" to 10,
     "idleSeconds" to 20,
-    "lowLevel" to 15,
+    "lowLevel" to 0, // #35: Start silences the ring; leaving or going idle brings it back
     "vibrate" to 1,
     "forceMaxVolume" to 1,
     "directLaunch" to 1,

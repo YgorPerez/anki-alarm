@@ -100,14 +100,14 @@ class AlarmService : Service() {
 
   private val leaveRunnable = Runnable {
     log("alarm screen left for ${setting("leaveSeconds")}s: full volume, posting the way-back notification")
-    setTarget(1f, ramp = false)
+    loud()
     postWayBack()
     if (setting("directLaunch") == 1) tryLaunch("leave")
   }
 
   private val idleRunnable = Runnable {
     log("no answer for ${setting("idleSeconds")}s: full volume")
-    setTarget(1f, ramp = false)
+    loud()
   }
 
   override fun onCreate() {
@@ -315,6 +315,19 @@ class AlarmService : Service() {
     handler.postDelayed(idleRunnable, setting("idleSeconds") * 1000L)
   }
 
+  // While answering: sound down to lowLevel, no vibration.
+  private fun quiet() {
+    setTarget(low(), ramp = false)
+    vibrator?.cancel()
+    vibrator = null
+  }
+
+  // Left the screen or went idle: full sound and vibration again.
+  private fun loud() {
+    setTarget(1f, ramp = false)
+    if (vibrator == null && setting("vibrate") == 1 && setting("silent") == 0) startVibration()
+  }
+
   private fun vol() = if (setting("silent") == 1) 0f else level
 
   private fun low() = setting("lowLevel") / 100f
@@ -323,7 +336,7 @@ class AlarmService : Service() {
     handler.removeCallbacks(leaveRunnable)
     getSystemService(NotificationManager::class.java).cancel(WAY_BACK_ID)
     if (sessionStarted) {
-      setTarget(low(), ramp = false)
+      quiet()
       restartIdle()
     }
   }
@@ -335,14 +348,14 @@ class AlarmService : Service() {
 
   fun startSession() {
     sessionStarted = true
-    log("session started: low volume")
-    setTarget(low(), ramp = false)
+    log("session started: sound at ${setting("lowLevel")}%, vibration off")
+    quiet()
     restartIdle()
   }
 
   fun answered(good: Boolean) {
     log("answer ${if (good) "Good" else "Again"}, correct=${AlarmStore.correct(this)}")
-    setTarget(low(), ramp = false)
+    quiet()
     restartIdle()
   }
 
