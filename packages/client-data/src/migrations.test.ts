@@ -19,6 +19,7 @@ test("numbered migrations preserve existing collection and alarm data across rep
         { id: database === "collection.db" ? 1 : 2 },
         { id: database === "collection.db" ? 3 : 4 },
         { id: database === "collection.db" ? 5 : 6 },
+        ...(database === "collection.db" ? [{ id: 7 }] : []),
       ]);
       const other = database === "collection.db" ? "alarms" : "decks";
       expect(

@@ -65,6 +65,14 @@ export const reviewLog = sqliteTable("review_log", {
   body: text({ mode: "json" }).$type<LogEntry>().notNull(),
 });
 
+export const ankiDroidCards = sqliteTable("ankidroid_cards", {
+  id: text().primaryKey(),
+  reps: integer().notNull(),
+});
+export const ankiDroidSent = sqliteTable("ankidroid_sent", {
+  id: text().primaryKey(),
+});
+
 export const alarmRecords = sqliteTable("alarm_records", {
   id: text().primaryKey(),
   body: text({ mode: "json" }).$type<AlarmRecord>().notNull(),

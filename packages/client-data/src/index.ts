@@ -9,6 +9,13 @@ import {
   reviewLog,
 } from "./schema.ts";
 import { syncEngine } from "./sync.ts";
+import {
+  ankiDroidEngine,
+  type AnkiDroidProvider,
+  type PullSummary,
+  type SyncBackSummary,
+} from "./ankidroid.ts";
+export type { AnkiDroidProvider, PullSummary, SyncBackSummary } from "./ankidroid.ts";
 export { AccountMismatch, type SyncResult } from "./sync.ts";
 export { syncScheduler, type SyncScheduler, type SyncStatus } from "./scheduler.ts";
 export { type ExecuteSql } from "./collection.ts";
@@ -91,6 +98,18 @@ interface Data extends Engine {
    * reviewed card, in one transaction. Linking again updates it. Resolves with the deck's id.
    */
   linkAnkiDroidDeck: (source: AnkiDroidSource) => Effect.Effect<string, Error>;
+  /** This phone's id: the `linkedBy` of the decks it linked. */
+  deviceId: string;
+  /**
+   * Sends every review of this phone's linked cards not sent yet, from any origin, to AnkiDroid as
+   * answers, in answer-time order. Each answer is checked and recorded before the next goes.
+   */
+  syncBackAnkiDroid: (provider: AnkiDroidProvider) => Effect.Effect<SyncBackSummary, Error>;
+  /** Syncs back, then brings in the linked deck's new notes, edited fields and newer states. */
+  pullAnkiDroid: (provider: AnkiDroidProvider, deckId: string) => Effect.Effect<PullSummary, Error>;
+  /** Whether sync back runs after each alarm session; on unless turned off. This phone only. */
+  autoSyncBack: Effect.Effect<boolean, Error>;
+  setAutoSyncBack: (on: boolean) => Effect.Effect<void, Error>;
   alarms: Effect.Effect<Alarm[], Error>;
   saveAlarm: (alarm: Alarm) => Effect.Effect<void, Error>;
   ingestEvents: (events: readonly AlarmEvent[]) => Effect.Effect<void, Error>;
@@ -110,6 +129,8 @@ export class SQLiteDriver extends Context.Service<SQLiteDriver, SQLiteConnection
 ) {}
 
 const failure = (error: unknown) => (error instanceof Error ? error : new Error(String(error)));
+const promised = <A>(operation: () => Promise<A>) =>
+  Effect.tryPromise({ try: operation, catch: failure });
 export const ClientDataLive = Layer.effect(
   ClientData,
   Effect.gen(function* () {
@@ -134,24 +155,20 @@ async function open(driver: SQLiteConnection): Promise<Data> {
   }
   let queue: Promise<unknown> = Promise.resolve();
   const listeners = new Set<() => void>();
+  const notify = () => {
+    for (const listener of listeners) listener();
+  };
+  /** Runs `operation` after every earlier one. */
+  const enqueue = <A>(operation: () => Promise<A>) => {
+    const result = queue.then(operation);
+    queue = result.catch(() => {});
+    return result;
+  };
   /** Runs a local write in the queue and tells subscribers once it committed. */
   const local = <A>(operation: () => Promise<A>) =>
-    serial(operation).pipe(
-      Effect.tap(() =>
-        Effect.sync(() => {
-          for (const listener of listeners) listener();
-        }),
-      ),
-    );
+    serial(operation).pipe(Effect.tap(() => Effect.sync(notify)));
   const serial = <A>(operation: () => Promise<A>) =>
-    Effect.tryPromise({
-      try: () => {
-        const result = queue.then(operation);
-        queue = result.catch(() => {});
-        return result;
-      },
-      catch: failure,
-    });
+    Effect.tryPromise({ try: () => enqueue(operation), catch: failure });
   const collectionDb = drizzle(collectionSql);
   const alarmDb = drizzle(alarmSql);
   const readSettings = async () => (await collectionDb.select().from(settingsTable))[0]?.body;
@@ -199,6 +216,18 @@ async function open(driver: SQLiteConnection): Promise<Data> {
     return added.length;
   };
   const env = { ...driver, deviceId: store.deviceId };
+  const ankiDroid = ankiDroidEngine({
+    db: collectionDb,
+    deviceId: store.deviceId,
+    now: driver.now,
+    read: enqueue,
+    write: (operation) => enqueue(() => transaction(collectionSql, operation)),
+    readCollection: store.read,
+    readLog,
+    runCollection: store.run,
+    appendNew,
+    notify,
+  });
   const engine = syncEngine({
     collectionDb,
     alarmDb,
@@ -266,16 +295,12 @@ async function open(driver: SQLiteConnection): Promise<Data> {
         );
         return { notes: result.notes, cards: result.cards, entries };
       }),
-    linkAnkiDroidDeck: (source) =>
-      local(async () => {
-        const { result } = await store.run(
-          (c) => c.linkAnkiDroid(source),
-          async ({ snapshots }) => {
-            await appendNew(snapshots);
-          },
-        );
-        return result.deckId;
-      }),
+    deviceId: store.deviceId,
+    linkAnkiDroidDeck: (source) => promised(async () => (await ankiDroid.link(source)).deckId),
+    syncBackAnkiDroid: (provider) => promised(() => ankiDroid.syncBack(provider)),
+    pullAnkiDroid: (provider, deckId) => promised(() => ankiDroid.pull(provider, deckId)),
+    autoSyncBack: promised(ankiDroid.autoSyncBack),
+    setAutoSyncBack: (on) => promised(() => ankiDroid.setAutoSyncBack(on)),
     changeCollection: (command) => local(() => store.change(command)),
     alarms: serial(async () =>
       (

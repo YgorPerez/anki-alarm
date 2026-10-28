@@ -49,6 +49,16 @@ const migrations = [
       "CREATE TABLE IF NOT EXISTS alarm_records (id TEXT PRIMARY KEY NOT NULL, body TEXT NOT NULL)",
     ],
   },
+  {
+    // This phone's view of AnkiDroid, which doesn't sync: each linked card's `reps` as last seen,
+    // and the review log entries already sent back.
+    id: 7,
+    database: "collection.db",
+    statements: [
+      "CREATE TABLE IF NOT EXISTS ankidroid_cards (id TEXT PRIMARY KEY NOT NULL, reps INTEGER NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS ankidroid_sent (id TEXT PRIMARY KEY NOT NULL)",
+    ],
+  },
 ] as const;
 
 // Both initial migrations are additive and safe to replay on databases created before the ledger.
