@@ -17,6 +17,7 @@ const changed = base
   ? exec("git", ["diff", "--name-only", `${base}...HEAD`])
       .trim()
       .split("\n")
+      .filter(Boolean)
   : [];
 // Shared configuration, tooling and native modules affect the whole workspace.
 const { all, mobile } = ciScope(base, changed);

@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { ClientData, clientDataLayer } from "@app/client-data";
 import { Effect } from "effect";
-import type { Operation } from "../src/data/protocol.ts";
+import type { Operation, Result } from "../src/data/protocol.ts";
 
 // Replace only the browser transport/OPFS boundary. Reads and writes still use the real data
 // service, migrations and Core rules, against a fresh SQLite database for each test file.
@@ -31,9 +31,9 @@ const service = Effect.runPromise(
 export const testWebData = {
   async request(operation: Operation) {
     const data = await service;
-    return Effect.runPromise(
-      operation.kind === "setTheme" ? data.setTheme(operation.patch) : data[operation.kind],
-    );
+    const effect: Effect.Effect<Result, Error> =
+      operation.kind === "setTheme" ? data.setTheme(operation.patch) : data[operation.kind];
+    return Effect.runPromise(effect);
   },
   subscribe: () => () => {},
   close: () => {},
