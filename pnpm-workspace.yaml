@@ -13,6 +13,9 @@ catalog:
   "@types/react-dom": ~19.3.0
   tailwindcss: 4.3.3
   "@tailwindcss/vite": 4.3.3
+  # React Compiler, on in both apps: through Babel on the web and through babel-preset-expo on the
+  # phone, so one compiler version.
+  babel-plugin-react-compiler: 1.0.0
   typescript: 7.0.2
   # The workspace's Vite is Vite+'s core. They move together.
   vite: npm:@voidzero-dev/vite-plus-core@1.4.0

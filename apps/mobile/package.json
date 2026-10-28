@@ -37,6 +37,7 @@
     "@expo/fingerprint": "0.21.7",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
+    "babel-plugin-react-compiler": "catalog:",
     "typescript": "catalog:"
   },
   "expo": {

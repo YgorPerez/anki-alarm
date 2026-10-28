@@ -29,6 +29,8 @@ const config: ExpoConfig = {
     requestHeaders: { "expo-channel-name": "production" },
   },
   extra: { eas: { projectId } },
+  // babel-preset-expo runs React Compiler on the app's code (babel-plugin-react-compiler).
+  experiments: { reactCompiler: true },
   plugins: ["expo-dev-client", "expo-sqlite", "expo-font", "./plugins/with-alarm-native.js"],
 };
 

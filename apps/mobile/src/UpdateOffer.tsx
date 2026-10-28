@@ -37,9 +37,8 @@ export function UpdateOffer({ locale }: { locale: Locale }) {
             await installApk(apk.url);
           } catch {
             setFailed(true);
-          } finally {
-            setBusy(false);
           }
+          setBusy(false);
         }}
       >
         <Text className="text-body text-primary">

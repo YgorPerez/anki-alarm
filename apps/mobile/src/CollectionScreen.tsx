@@ -145,10 +145,9 @@ export function CollectionScreen({ locale, onExit }: { locale: Locale; onExit: (
       onSaved();
     } catch {
       setError(true);
-    } finally {
-      locked.current = false;
-      setBusy(false);
     }
+    locked.current = false;
+    setBusy(false);
   }
   const deck = state?.decks.find((d) => d.id === deckId);
   const notes = state?.notes.filter((n) => n.fields.deckId.value === deckId) ?? [];
