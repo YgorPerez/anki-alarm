@@ -105,4 +105,42 @@ export const syncRecords = sqliteTable(
   ],
 );
 
+/** The media files R2 holds, by SHA-256, for every user (migrations/0002_media.sql). */
+export const mediaFiles = sqliteTable("media_files", {
+  sha256: text("sha256").primaryKey(),
+  size: integer("size").notNull(),
+});
+
+/** Each account's media records: the hash a file name holds. */
+export const mediaNames = sqliteTable(
+  "media_names",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sha256: text("sha256").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.name] }),
+    index("media_names_sha256_idx").on(table.userId, table.sha256),
+  ],
+);
+
+/** The media names each stored note references, so a download can check the account uses it. */
+export const noteMedia = sqliteTable(
+  "note_media",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    noteId: text("note_id").notNull(),
+    name: text("name").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.noteId, table.name] }),
+    index("note_media_name_idx").on(table.userId, table.name),
+  ],
+);
+
 export const schema = { user, session, account, verification, syncAccounts, syncRecords };

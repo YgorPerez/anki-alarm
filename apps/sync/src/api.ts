@@ -1,15 +1,27 @@
 // The contract's implementation with `HttpApiBuilder`. The session middleware asks better-auth
 // for the request's session; the handlers read and write D1 through the store.
 import { SYNC_PROTOCOL } from "@app/core";
-import { CurrentUser, MAX_CHANGES, Session, SyncApi, Unauthorized } from "@app/contracts";
+import {
+  CurrentUser,
+  MAX_CHANGES,
+  MediaNotFound,
+  MediaRejected,
+  Session,
+  SyncApi,
+  Unauthorized,
+} from "@app/contracts";
 import { Context, DateTime, Effect, Layer } from "effect";
 import { HttpRouter, HttpServer, HttpServerRequest } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 
 import type { Auth } from "./auth.ts";
+import type { MediaStore } from "./media.ts";
 import type { SyncStore } from "./store.ts";
 
-class Backend extends Context.Service<Backend, { auth: Auth; store: SyncStore }>()("Backend") {}
+class Backend extends Context.Service<
+  Backend,
+  { auth: Auth; store: SyncStore; media: MediaStore }
+>()("Backend") {}
 
 const SessionLive = Layer.effect(
   Session,
@@ -60,11 +72,39 @@ const ChangesLive = HttpApiBuilder.group(SyncApi, "changes", (handlers) =>
   }),
 );
 
+const MediaLive = HttpApiBuilder.group(SyncApi, "media", (handlers) =>
+  Effect.gen(function* () {
+    const { media } = yield* Backend;
+    return handlers
+      .handle("missing", ({ payload }) =>
+        Effect.map(
+          Effect.promise(() => media.missing(payload.hashes)),
+          (missing) => ({ missing }),
+        ),
+      )
+      .handle("upload", ({ params, payload }) =>
+        Effect.flatMap(
+          Effect.promise(() => media.upload(params.sha256, payload)),
+          (result) =>
+            result === "stored" ? Effect.void : Effect.fail(new MediaRejected({ reason: result })),
+        ),
+      )
+      .handle("download", ({ params }) =>
+        Effect.flatMap(CurrentUser, (user) =>
+          Effect.flatMap(
+            Effect.promise(() => media.download(user.id, params.sha256)),
+            (bytes) => (bytes ? Effect.succeed(bytes) : Effect.fail(new MediaNotFound())),
+          ),
+        ),
+      );
+  }),
+);
+
 /** A web handler for the sync routes over one backend. */
 export const syncHandler = (backend: Backend["Service"]) =>
   HttpRouter.toWebHandler(
     HttpApiBuilder.layer(SyncApi).pipe(
-      Layer.provide([MetadataLive, ChangesLive]),
+      Layer.provide([MetadataLive, ChangesLive, MediaLive]),
       Layer.provide(SessionLive),
       Layer.provide(HttpServer.layerServices),
       Layer.provide(Layer.succeed(Backend, backend)),

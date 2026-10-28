@@ -1,10 +1,11 @@
 /// <reference types="node" />
-// The Worker against a local D1 (wrangler's platform proxy, Miniflare), called through the
+// The Worker against a local D1 and R2 (wrangler's platform proxy, Miniflare), called through the
 // contract's derived client. Google's signature check is the only part replaced: the test signs in
 // with unsigned ID tokens that the overridden verifier accepts.
-import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
 import { SYNC_PROTOCOL } from "@app/core";
-import { makeSyncClient, type Change, type SyncClient } from "@app/contracts";
+import { MAX_MEDIA_BYTES, makeSyncClient, type Change, type SyncClient } from "@app/contracts";
 import { Effect } from "effect";
 import { getPlatformProxy } from "wrangler";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
@@ -29,11 +30,15 @@ beforeAll(async () => {
     GOOGLE_CLIENT_ID: "web-client.apps.googleusercontent.com",
     GOOGLE_CLIENT_SECRET: "unused",
   };
-  const migration = await readFile(
-    new URL("../migrations/0001_init.sql", import.meta.url).pathname,
-    "utf8",
+  const directory = new URL("../migrations/", import.meta.url).pathname;
+  // oxlint-disable-next-line unicorn/no-array-sort -- ES2022 target; sorts a fresh array.
+  const files = (await readdir(directory)).filter((f) => f.endsWith(".sql")).sort();
+  const migrations = await Promise.all(
+    files.map((file) => readFile(`${directory}${file}`, "utf8")),
   );
-  const statements = migration
+  // Every migration in order, in one batch.
+  const statements = migrations
+    .join(";\n")
     .replaceAll(/^--.*$/gm, "")
     .split(";")
     .map((statement) => statement.trim())
@@ -204,4 +209,116 @@ test("concurrent pushes for one account both keep their field", async () => {
 
   const { changes } = await run(api.changes.pull({ payload: { cursor: 0 } }));
   expect(changes).toEqual([note("n1", ["front", 50], ["back", 60])]);
+});
+
+const PICTURE = new TextEncoder().encode("a picture");
+const PICTURE_SHA = "92b2fa58028958317e408bd84ecfa70f5ee35b121991dbc232c49d166353708b";
+const media = (name: string, sha256: string, at = 1): Change => ({
+  kind: "media",
+  record: {
+    id: `media:${name}`,
+    fields: {
+      name: { value: name, hlc: hlc(at) },
+      sha256: { value: sha256, hlc: hlc(at) },
+      size: { value: PICTURE.length, hlc: hlc(at) },
+    },
+  },
+});
+const pictureNote = (id: string, html: string): Change => ({
+  kind: "notes",
+  record: {
+    id,
+    fields: { noteTypeId: { value: "basic", hlc: hlc(1) } },
+    values: [{ value: html, hlc: hlc(1) }],
+  },
+});
+
+test("media is stored once in R2 by SHA-256, and checked against its address", async () => {
+  const ana = await client(await signIn("fabi"));
+  const bia = await client(await signIn("gabi"));
+  const other = "0".repeat(64);
+  expect(await run(ana.media.missing({ payload: { hashes: [PICTURE_SHA, other] } }))).toEqual({
+    missing: [PICTURE_SHA, other],
+  });
+  await expect(
+    run(ana.media.upload({ params: { sha256: other }, payload: PICTURE })),
+  ).rejects.toMatchObject({ _tag: "MediaRejected", reason: "hash" });
+
+  await run(ana.media.upload({ params: { sha256: PICTURE_SHA }, payload: PICTURE }));
+  await run(bia.media.upload({ params: { sha256: PICTURE_SHA }, payload: PICTURE }));
+
+  expect(await run(bia.media.missing({ payload: { hashes: [PICTURE_SHA, other] } }))).toEqual({
+    missing: [other],
+  });
+  const listed = await env.MEDIA.list();
+  expect(listed.objects.map((o) => o.key)).toEqual([PICTURE_SHA]);
+});
+
+test("a media record whose file never arrived isn't stored", async () => {
+  const api = await client(await signIn("hugo"));
+  expect(
+    await run(api.changes.push({ payload: { changes: [media("x.jpg", "1".repeat(64))] } })),
+  ).toEqual({ accepted: 0 });
+});
+
+test("the Worker serves a file only to a user with a note that references it", async () => {
+  const ana = await client(await signIn("iris"));
+  const bia = await client(await signIn("joao"));
+  await run(ana.media.upload({ params: { sha256: PICTURE_SHA }, payload: PICTURE }));
+  const download = (api: SyncClient) =>
+    run(api.media.download({ params: { sha256: PICTURE_SHA } }));
+
+  await run(ana.changes.push({ payload: { changes: [media("casa.jpg", PICTURE_SHA)] } }));
+  await expect(download(ana)).rejects.toMatchObject({ _tag: "MediaNotFound" });
+
+  await run(
+    ana.changes.push({ payload: { changes: [pictureNote("n1", '<img src="casa.jpg">')] } }),
+  );
+  expect(await download(ana)).toEqual(PICTURE);
+  // Another account knowing the hash isn't enough, even with a note of the same name.
+  await run(
+    bia.changes.push({ payload: { changes: [pictureNote("n1", '<img src="casa.jpg">')] } }),
+  );
+  await expect(download(bia)).rejects.toMatchObject({ _tag: "MediaNotFound" });
+
+  // Editing the note away from the file, or deleting it, ends access.
+  await run(
+    ana.changes.push({
+      payload: {
+        changes: [
+          {
+            kind: "notes",
+            record: {
+              id: "n1",
+              fields: { noteTypeId: { value: "basic", hlc: hlc(1) } },
+              values: [{ value: "no picture", hlc: hlc(2) }],
+            },
+          },
+          pictureNote("n2", "[sound:casa.jpg]"),
+        ],
+      },
+    }),
+  );
+  expect(await download(ana)).toEqual(PICTURE);
+  await run(
+    ana.changes.push({
+      payload: {
+        changes: [
+          { kind: "tombstone", tombstone: { id: "n2", kind: "notes", sequence: 0, hlc: hlc(3) } },
+        ],
+      },
+    }),
+  );
+  await expect(download(ana)).rejects.toMatchObject({ _tag: "MediaNotFound" });
+});
+
+test("a large file uploads whole, and one over the limit is refused", async () => {
+  const api = await client(await signIn("kai"));
+  const big = new Uint8Array(8 * 1024 * 1024).map((_, i) => i % 251);
+  const sha256 = createHash("sha256").update(big).digest("hex");
+  await run(api.media.upload({ params: { sha256 }, payload: big }));
+  expect((await env.MEDIA.head(sha256))?.size).toBe(big.length);
+  await expect(
+    run(api.media.upload({ params: { sha256 }, payload: new Uint8Array(MAX_MEDIA_BYTES + 1) })),
+  ).rejects.toMatchObject({ _tag: "MediaRejected", reason: "size" });
 });
