@@ -377,3 +377,21 @@ export const parseThemeChoice = (value: unknown): ThemeChoice => {
     easy: read("easy") ?? FACTORY_THEME.easy,
   };
 };
+
+/** Stable indices shared by the generated Android resources and the native preference. */
+export const nativeAppearance = (choice: ThemeChoice) => {
+  const nearest = (field: "lightBackground" | "darkBackground" | "primary" | "secondary") => {
+    const colors = THEME_SWATCHES[field];
+    return colors.reduce(
+      (best, color, i) =>
+        distance(choice[field], color) < distance(choice[field], colors[best]!) ? i : best,
+      0,
+    );
+  };
+  return {
+    light: nearest("lightBackground"),
+    dark: nearest("darkBackground"),
+    primary: nearest("primary"),
+    secondary: nearest("secondary"),
+  };
+};
