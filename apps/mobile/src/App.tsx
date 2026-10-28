@@ -10,7 +10,16 @@ import { Effect } from "effect";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
 import type { ListRenderItemInfo } from "react-native";
-import { AppState, Pressable, FlatList, Switch, Text, TextInput, View } from "react-native";
+import {
+  AppState,
+  BackHandler,
+  Pressable,
+  FlatList,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { copy } from "./copy.ts";
 import { AlarmService, alarmController, type Ring } from "./alarms.ts";
@@ -19,7 +28,7 @@ import { localData } from "./database.ts";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ThemeSettings } from "./ThemeSettings.tsx";
 import { initializeTheme } from "./theme.ts";
-import { BackHandler } from "react-native";
+import { ScopedTheme } from "uniwind";
 import { queryClient } from "./query.ts";
 import { useUI } from "./ui.ts";
 const repository = {
@@ -66,13 +75,13 @@ function Home() {
     void initializeTheme().catch(() => setError(copy(locale)("error")));
   }, [locale]);
   useEffect(() => {
-    if (!showTheme) return undefined;
+    if (!showTheme || ring) return undefined;
     const back = BackHandler.addEventListener("hardwareBackPress", () => {
       setShowTheme(false);
       return true;
     });
     return () => back.remove();
-  }, [showTheme]);
+  }, [showTheme, ring]);
   const [permissions, setPermissions] = useState(() => native.getPermissions());
   const t = copy(locale);
   const insets = useSafeAreaInsets();
@@ -114,31 +123,33 @@ function Home() {
   );
   if (ring)
     return (
-      <View
-        className="flex-1 justify-center gap-6 bg-black p-6"
-        style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
-      >
-        <Text className="text-clock font-bold text-white">
-          {new Date(ring.startedAt).toLocaleTimeString(locale, {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
-        <Text className="text-question text-white">{ring.alarm.label}</Text>
-        <Pressable
-          accessibilityRole="button"
-          className="rounded-pill bg-primary p-6"
-          onPress={() => {
-            void run(Effect.flatMap(AlarmService, (service) => service.dismiss(ring.id)))
-              .then(() => run(controller.resume))
-              .then(setRing)
-              .catch(() => setError(t("alarmError")));
-          }}
+      <ScopedTheme theme="dark">
+        <View
+          className="flex-1 justify-center gap-6 bg-background p-6"
+          style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
         >
-          <Text className="text-body text-primary-foreground">{t("dismiss")}</Text>
-        </Pressable>
-        <Text className="text-body text-white">{error}</Text>
-      </View>
+          <Text className="text-clock font-bold text-foreground">
+            {new Date(ring.startedAt).toLocaleTimeString(locale, {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+          <Text className="text-question text-foreground">{ring.alarm.label}</Text>
+          <Pressable
+            accessibilityRole="button"
+            className="rounded-pill bg-primary p-6"
+            onPress={() => {
+              void run(Effect.flatMap(AlarmService, (service) => service.dismiss(ring.id)))
+                .then(() => run(controller.resume))
+                .then(setRing)
+                .catch(() => setError(t("alarmError")));
+            }}
+          >
+            <Text className="text-body text-primary-foreground">{t("dismiss")}</Text>
+          </Pressable>
+          <Text className="text-body text-foreground">{error}</Text>
+        </View>
+      </ScopedTheme>
     );
   if (showTheme) return <ThemeSettings locale={locale} onBack={() => setShowTheme(false)} />;
   if (showDecks)
@@ -166,7 +177,7 @@ function Home() {
               <Text className="text-body text-primary">{t("title")}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={() => setShowTheme(true)}>
-              <Text className="text-body text-primary">{t("theme")}</Text>
+              <Text className="text-body text-primary-ink">{t("theme")}</Text>
             </Pressable>
             {editing ? (
               <AlarmEditor
