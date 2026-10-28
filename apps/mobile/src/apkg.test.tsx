@@ -3,9 +3,13 @@ import { fireEvent, render, screen } from "@testing-library/react-native/pure";
 import { expect, test } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Effect } from "effect";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { unzipSync } from "fflate";
 import { fakeSyncApi } from "@app/contracts/testing";
-import { File, Paths, picks } from "../test/native/expo-file-system.ts";
+import { File, Paths, folders, picks } from "../test/native/expo-file-system.ts";
 import { memoryAnkiDroid } from "./ankidroid.ts";
 import { CollectionScreen } from "./CollectionScreen.tsx";
 import { localData } from "./database.ts";
@@ -91,4 +95,43 @@ test("imported cards study with their templates, cloze numbers and local media",
   expect(asked).toContain('<span class="cloze" data-ordinal="1">[...]</span>');
   expect(asked).toContain('<span class="cloze" data-ordinal="2">[país]</span>');
   expect(asked).not.toContain("house");
+});
+
+test("exports a deck into a picked folder and importing the file back adds nothing", async () => {
+  await render(
+    <QueryClientProvider client={client()}>
+      <CollectionScreen
+        locale="pt-BR"
+        onExit={() => {}}
+        onTheme={() => {}}
+        ankiDroid={memoryAnkiDroid({ installed: null })}
+      />
+    </QueryClientProvider>,
+  );
+  await fireEvent.press(await screen.findByRole("button", { name: /Português::Verbos/ }));
+  // Leaving the folder picker exports nothing and says nothing.
+  await fireEvent.press(await screen.findByRole("button", { name: "Exportar .apkg" }));
+  await screen.findByRole("button", { name: "Exportar .apkg" });
+  expect(screen.queryByText(/Salvo como|Não foi possível exportar/)).toBeNull();
+
+  const folder = mkdtempSync(join(tmpdir(), "export-"));
+  folders.push(folder);
+  await fireEvent.press(screen.getByRole("button", { name: "Exportar .apkg" }));
+  expect(await screen.findByText("Salvo como Português - Verbos.apkg.")).toBeDefined();
+  const zip = unzipSync(readFileSync(join(folder, "Português - Verbos.apkg")));
+  expect(Object.keys(zip).toSorted((a, b) => a.localeCompare(b))).toEqual([
+    "0",
+    "1",
+    "collection.anki21",
+    "media",
+    "meta",
+  ]);
+  expect(JSON.parse(new TextDecoder().decode(zip.media))).toEqual({
+    "0": "gato.png",
+    "1": "miau.mp3",
+  });
+
+  // The phone's own answers from the study test come back as the reviews they already are.
+  picks.push(join(folder, "Português - Verbos.apkg"));
+  expect(await pickAndImportApkg()).toEqual({ notes: 3, cards: 5, entries: 0 });
 });

@@ -142,7 +142,13 @@ options. Caches of the result are fine; the log is what syncs.
 - `.apkg` import on the phone and on the web, through one parser in Core. It reads the legacy
   format and the current one (`anki21b`, zstd-compressed). It brings note types, notes, decks, deck
   options, media and the review history (`revlog`), which becomes imported reviews.
-- `.apkg` export of any deck, with its scheduling, so nothing is locked in.
+- `.apkg` export of any deck, with its scheduling, so nothing is locked in. It writes the legacy
+  format (`collection.anki21`) with the deck's subdecks, media, review history and each card's FSRS
+  memory state; forgets and set due dates become Anki's manual revlog entries. Anki keeps the
+  schedule only when "Import any learning progress" and "Import deck presets" are ticked, and a
+  profile that already has the notes doesn't update their schedule; the deck screen says so. The
+  app's own records carry their ids (note guid, a JSON key on note types, decks and presets), so
+  importing the file back, here or after a trip through Anki, finds the same records and reviews.
 
 ## AnkiDroid
 

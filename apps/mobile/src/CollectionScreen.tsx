@@ -31,6 +31,7 @@ import { bold, regular } from "./fonts.ts";
 import { NoteEditor, type NoteDraft } from "./NoteEditor.tsx";
 import { StudyScreen } from "./StudyScreen.tsx";
 import { pickAndImportApkg } from "./apkg.ts";
+import { DeckExport } from "./DeckExport.tsx";
 import { AnkiDroidScreen } from "./AnkiDroidScreen.tsx";
 import { ankiDroidCopy } from "./ankidroid-copy.ts";
 import type { AnkiDroidApi } from "./ankidroid.ts";
@@ -478,6 +479,7 @@ function DeckDetails({
         disabled={busy}
         onPress={() => edit({ kind: "deck", id: deck.id })}
       />
+      <DeckExport deckId={deck.id} locale={locale} busy={busy} />
       <Button label={t("delete")} destructive disabled={busy} onPress={remove} />
     </>
   );
