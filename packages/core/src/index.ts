@@ -34,3 +34,11 @@ export { newerApk, SYNC_PROTOCOL } from "./release.ts";
 export { releaseArtifact } from "./release.ts";
 export { updateThemeSettings } from "./settings.ts";
 export type { Settings } from "./settings.ts";
+
+export { reliabilitySteps } from "./reliability.ts";
+export type {
+  AlarmPermissions,
+  PermissionState,
+  ReliabilityKind,
+  ReliabilityStep,
+} from "./reliability.ts";

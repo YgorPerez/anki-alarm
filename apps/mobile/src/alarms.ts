@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect";
-import { RING_POLICY, type Alarm } from "@app/core";
+import { RING_POLICY, type Alarm, type AlarmPermissions, type ReliabilityKind } from "@app/core";
 
 export interface Ring {
   id: string;
@@ -10,6 +10,10 @@ export interface Ring {
 import type { AlarmEvent } from "@app/client-data";
 export type { AlarmEvent } from "@app/client-data";
 interface AlarmPort {
+  getPermissions: Effect.Effect<AlarmPermissions, Error>;
+  request: (kind: ReliabilityKind | "appInfo") => Effect.Effect<boolean, Error>;
+  isOnboardingComplete: Effect.Effect<boolean, Error>;
+  completeOnboarding: Effect.Effect<boolean, Error>;
   capabilities: { canHoldDismissal: boolean; canTakeOverScreen: boolean };
   setAlarms: (alarms: readonly Alarm[], policy: typeof RING_POLICY) => Effect.Effect<void, Error>;
   list: Effect.Effect<readonly Alarm[], Error>;
@@ -71,7 +75,27 @@ export function memoryAlarmService() {
   let alarms: readonly Alarm[] = [];
   let ring: Ring | null = null;
   let events: AlarmEvent[] = [];
+  let complete = false;
+  let permissions: AlarmPermissions = {
+    manufacturer: "unknown",
+    sdk: 35,
+    installSource: "unknown",
+    standbyBucket: null,
+    notifications: "unknown",
+    overlay: "unknown",
+    exactAlarm: "unknown",
+    fullScreenIntent: "unknown",
+    battery: "unknown",
+    backgroundRestricted: "unknown",
+  };
   const service: AlarmPort = {
+    getPermissions: Effect.sync(() => ({ ...permissions })),
+    request: () => Effect.succeed(true),
+    isOnboardingComplete: Effect.sync(() => complete),
+    completeOnboarding: Effect.sync(() => {
+      complete = true;
+      return true;
+    }),
     capabilities: { canHoldDismissal: true, canTakeOverScreen: true },
     setAlarms: (list) =>
       Effect.sync(() => {
@@ -91,6 +115,9 @@ export function memoryAlarmService() {
       }),
   };
   return {
+    permissions: (next: Partial<AlarmPermissions>) => {
+      permissions = { ...permissions, ...next };
+    },
     layer: Layer.succeed(AlarmService, service),
     deliver: (event: AlarmEvent, active: Ring | null = null) => {
       events.push(event);

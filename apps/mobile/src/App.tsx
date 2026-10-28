@@ -1,3 +1,5 @@
+import { ReliabilityScreen } from "./ReliabilityScreen.tsx";
+import { reliabilityCopy } from "./reliability-copy.ts";
 import { UpdateOffer } from "./UpdateOffer.tsx";
 import { nextRing, type Alarm, type Locale } from "@app/core";
 import {
@@ -58,6 +60,8 @@ const run = <A,>(effect: Effect.Effect<A, Error, AlarmService>) =>
 
 const currentTime = () => Date.now();
 function Home() {
+  const [onboarding, setOnboarding] = useState(() => !native.isOnboardingComplete());
+  const [showSettings, setShowSettings] = useState(false);
   const [showDecks, setShowDecks] = useState(false);
   const [controller] = useState(() => alarmController(repository));
   const client = useQueryClient();
@@ -151,6 +155,20 @@ function Home() {
         </View>
       </ScopedTheme>
     );
+  if (onboarding || showSettings)
+    return (
+      <ReliabilityScreen
+        permissions={permissions}
+        onboarding={onboarding}
+        locale={locale}
+        refresh={() => setPermissions(native.getPermissions())}
+        onExit={() => {
+          setOnboarding(false);
+          setShowSettings(false);
+        }}
+        switchLanguage={() => setLocale(locale === "en" ? "pt-BR" : "en")}
+      />
+    );
   if (showTheme) return <ThemeSettings locale={locale} onBack={() => setShowTheme(false)} />;
   if (showDecks)
     return (
@@ -160,6 +178,7 @@ function Home() {
         onTheme={() => setShowTheme(true)}
       />
     );
+
   return (
     <View
       className="flex-1 bg-background"
@@ -215,19 +234,13 @@ function Home() {
             <Text accessibilityRole="alert" className="text-body text-attention">
               {error || (alarmsQuery.isError ? t("alarmError") : "")}
             </Text>
-            <Text className="text-body text-foreground">{t("permission")}</Text>
-            {(["notifications", "exactAlarm", "fullScreenIntent", "overlay", "battery"] as const)
-              .filter((kind) => !permissions[kind])
-              .map((kind) => (
-                <Pressable
-                  key={kind}
-                  accessibilityRole="button"
-                  onPress={() => native.request(kind)}
-                >
-                  <Text className="text-body text-primary">{t(kind)}</Text>
-                </Pressable>
-              ))}
-            <Text className="text-label text-muted-foreground">{t("forceStop")}</Text>
+            <Pressable
+              accessibilityRole="button"
+              className="min-h-12 justify-center"
+              onPress={() => setShowSettings(true)}
+            >
+              <Text className="text-body text-primary">{reliabilityCopy(locale)("settings")}</Text>
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               onPress={() => setLocale(locale === "en" ? "pt-BR" : "en")}

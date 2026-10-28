@@ -1,3 +1,4 @@
+import type { AlarmPermissions, ReliabilityKind } from "@app/core";
 import { requireNativeModule } from "expo";
 
 interface NativeAlarm {
@@ -8,8 +9,10 @@ interface NativeAlarm {
   drainJournal: () => string;
   ack: (ids: readonly string[]) => void;
   dismiss: (ringId: string) => void;
-  getPermissions: () => Record<string, boolean>;
-  request: (kind: string) => void;
+  getPermissions: () => AlarmPermissions;
+  isOnboardingComplete: () => boolean;
+  completeOnboarding: () => boolean;
+  request: (kind: ReliabilityKind | "appInfo") => boolean;
   addListener: (event: "onChange", listener: () => void) => { remove: () => void };
 }
 export default requireNativeModule<NativeAlarm>("AlarmNative");
