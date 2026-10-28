@@ -1,5 +1,15 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
-import type { Deck, Note, Card, NoteType, Preset, Tombstone, Settings, Alarm } from "@app/core";
+import type {
+  Deck,
+  Note,
+  Card,
+  NoteType,
+  Preset,
+  Tombstone,
+  Settings,
+  Alarm,
+  LogEntry,
+} from "@app/core";
 import type { AlarmEvent } from "./index.ts";
 // JSON bodies preserve each field's independent HLC. Ids remain indexed SQLite keys.
 export const decks = sqliteTable("decks", {
@@ -48,4 +58,9 @@ export const outbox = sqliteTable("outbox", {
   kind: text().notNull(),
   recordId: text("record_id").notNull(),
   body: text({ mode: "json" }).$type<unknown>().notNull(),
+});
+
+export const reviewLog = sqliteTable("review_log", {
+  id: text().primaryKey(),
+  body: text({ mode: "json" }).$type<LogEntry>().notNull(),
 });

@@ -149,3 +149,68 @@ test("reads legacy alarm sounds through the public service after reopening", asy
     for (const db of databases.values()) db.close();
   }
 });
+
+test("study answers survive reopen and outbox failure rolls back the review", async () => {
+  const databases = new Map<string, DatabaseSync>();
+  let fail = false;
+  let n = 0;
+  const connect = (name: string): ExecuteSql => {
+    const db = databases.get(name) ?? new DatabaseSync(":memory:");
+    databases.set(name, db);
+    return async (query, params, method) => {
+      if (fail && query.includes('insert into "outbox"')) throw new Error("disk full");
+      const stmt = db.prepare(query);
+      if (method === "run") {
+        stmt.run(...params);
+        return { rows: [] };
+      }
+      stmt.setReturnArrays(true);
+      return { rows: stmt.all(...params) };
+    };
+  };
+  const open = () =>
+    Effect.runPromise(
+      ClientData.pipe(
+        Effect.provide(
+          clientDataLayer({
+            connect,
+            now: () => 1700000000000,
+            random: () => new Uint8Array(16).fill(n++),
+          }),
+        ),
+      ),
+    );
+  try {
+    const data = await open();
+    const state = await Effect.runPromise(
+      data.changeCollection((c) => {
+        const d = c.createDeck("Words");
+        c.addBasicNote(d.id, "house", "casa");
+      }),
+    );
+    const cardId = state.cards[0]!.id;
+    fail = true;
+    await expect(Effect.runPromise(data.answerCard(cardId, 3, 1400))).rejects.toThrow(/outbox/);
+    expect(await Effect.runPromise(data.reviewLog)).toEqual([]);
+    fail = false;
+    const review = await Effect.runPromise(data.answerCard(cardId, 3, 1400));
+    expect(review).toMatchObject({
+      kind: "review",
+      cardId,
+      grade: 3,
+      durationMs: 1400,
+      origin: "phone",
+      at: 1700000000000,
+    });
+    expect(review.id).toMatch(/^[\da-f-]{14}7/);
+    const reopened = await open();
+    expect(await Effect.runPromise(reopened.reviewLog)).toEqual([review]);
+    expect(
+      (await Effect.runPromise(reopened.pendingChanges))
+        .filter((c) => c.kind === "reviewLog")
+        .map((c) => c.body),
+    ).toEqual([review]);
+  } finally {
+    for (const db of databases.values()) db.close();
+  }
+});
