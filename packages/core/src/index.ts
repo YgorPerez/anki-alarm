@@ -34,8 +34,10 @@ export {
   RAMP_CHOICES,
   BUNDLED_SOUNDS,
   parseAlarmSound,
+  stampAlarm,
+  alarmFromRecord,
 } from "./alarm.ts";
-export type { Alarm, AlarmRule, AlarmSound, BundledSound } from "./alarm.ts";
+export type { Alarm, AlarmRecord, AlarmRule, AlarmSound, BundledSound } from "./alarm.ts";
 
 export { releaseVersion } from "./release.ts";
 export { newerApk, SYNC_PROTOCOL } from "./release.ts";
@@ -52,3 +54,12 @@ export type {
 } from "./reliability.ts";
 export { replayCard, studyQueue, studyDayStart, renderCard } from "./study.ts";
 export type { LogEntry, MemoryState, Grade } from "./study.ts";
+export {
+  compareHlc,
+  mergeRecord,
+  resolveChange,
+  signInPlan,
+  syncSlot,
+  SYNC_KINDS,
+} from "./sync.ts";
+export type { FieldRecord, SyncChange, SyncKind } from "./sync.ts";
