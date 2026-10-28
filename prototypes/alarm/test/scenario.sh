@@ -5,6 +5,7 @@
 #   test/scenario.sh <serial> leave [KEY]         # during a ring: starts the session, leaves, waits 14 s
 #   test/scenario.sh <serial> finish              # starts the session and answers Good until dismissed
 #   test/scenario.sh <serial> unlock              # wakes and unlocks with PIN 1234
+#   test/scenario.sh <serial> oem                 # #35: the OEM state as adb sees it, plus the app's own reads
 set -uo pipefail
 S=$1; A=~/Android/Sdk/platform-tools/adb; UI="python3 -I $(dirname "$0")/ui.py -s $S"
 P=dev.ygorperez.alarmprototype
@@ -74,5 +75,20 @@ case $2 in
     $UI tap "Start the session (drops the sound)" >/dev/null
     for _ in 1 2 3; do sleep 1; $UI tap "Show answer" >/dev/null; sleep 1; $UI tap "Good" >/dev/null; done
     sleep 1; $A -s "$S" logcat -d -s AlarmPrototype | grep -E "DISMISSED|destroyed" | sed 's/^.* AlarmPrototype: /  log: /'
+    ;;
+  oem)
+    echo "device: $(sh getprop ro.product.manufacturer) $(sh getprop ro.product.model), Android $(sh getprop ro.build.version.release)"
+    sh getprop | grep -E 'ro\.miui\.ui\.version|ro\.mi\.os\.version|ro\.build\.version\.oneui' | sed 's/^/  prop: /'
+    echo "  $(sh dumpsys package $P | grep -m1 -oE 'packageSource=[0-9]+') $(sh dumpsys package $P | grep -m1 -oE 'installerPackageName=[^ ]*')"
+    echo "  stopped: $(sh dumpsys package $P | grep -m1 -oE 'stopped=[a-z]+')"
+    echo "  standby bucket: $(sh am get-standby-bucket $P)"
+    echo "  process: $(sh pidof $P || echo none)"
+    echo "  alarms: $(sh dumpsys alarm | grep -c "$P")"
+    echo "  MILLET_NO_RESTRICT_APP has app: $(sh settings get system MILLET_NO_RESTRICT_APP | grep -c "$P")"
+    sh appops get $P | sed 's/^/  appops: /'
+    $A -s "$S" logcat -c
+    sh am start -n $P/.MainActivity >/dev/null 2>&1; sleep 4
+    $UI tap "Log OEM state" >/dev/null; sleep 1
+    $A -s "$S" logcat -d -s AlarmPrototype | grep 'oem:' | sed 's/^.* AlarmPrototype: /  app: /'
     ;;
 esac

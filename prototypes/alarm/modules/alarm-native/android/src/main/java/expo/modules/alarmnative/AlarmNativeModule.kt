@@ -61,6 +61,11 @@ class AlarmNativeModule : Module() {
       }
     }
 
+    Function("logOem") { AlarmStore.log(context, "oem: ${OemChecks.summary(context)}") }
+
+    // #35: OEM screens. Tries each candidate intent in order and logs which one opened.
+    Function("openOemSettings") { target: String -> OemChecks.open(context, target) }
+
     Function("openSettings") { target: String ->
       val pkg = Uri.parse("package:${context.packageName}")
       val intent = when {

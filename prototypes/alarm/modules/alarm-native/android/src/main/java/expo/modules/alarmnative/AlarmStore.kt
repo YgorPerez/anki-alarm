@@ -140,6 +140,7 @@ object AlarmStore {
       "alarms" to alarms(ctx).map { mapOf("id" to it.id, "at" to it.at.toDouble()) },
       "nextSystemAlarm" to am.nextAlarmClock?.triggerTime?.toDouble(),
       "permissions" to permissions(ctx),
+      "oem" to OemChecks.snapshot(ctx),
       "settings" to defaults.keys.associateWith { setting(ctx, it) },
       "audio" to mapOf(
         "alarmVolume" to audio.getStreamVolume(AudioManager.STREAM_ALARM),

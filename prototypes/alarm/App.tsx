@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { AppState, BackHandler, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import Alarm, { type AlarmState, type Settings, type SettingsTarget } from './modules/alarm-native';
+import Alarm, { type AlarmState, type OemTarget, type Settings, type SettingsTarget } from './modules/alarm-native';
 
 const N = 3;
 
@@ -124,6 +124,8 @@ function Controls({ state, onChange }: { state: AlarmState; onChange: () => void
         <Button label="App settings" onPress={fix('app')} />
       </View>
 
+      <Oem state={state} onChange={onChange} />
+
       <View style={s.card}>
         <Text style={s.h}>Alarms</Text>
         <View style={s.row}>
@@ -178,6 +180,55 @@ function Controls({ state, onChange }: { state: AlarmState; onChange: () => void
         <Setting label="Also startActivity from the service" on={!!state.settings.directLaunch} onPress={toggle('directLaunch')} />
       </View>
     </>
+  );
+}
+
+// #35: the OEM settings from docs/research/oem-background-limits.md, read and linked.
+function Oem({ state, onChange }: { state: AlarmState; onChange: () => void }) {
+  const o = state.oem;
+  const open = (target: OemTarget) => () => {
+    Alarm.openOemSettings(target);
+    onChange();
+  };
+  const rows: [string, string | boolean | null | undefined][] = [
+    ['MIUI', o.miuiVersion],
+    ['HyperOS', o.hyperOsVersion],
+    ['One UI', o.oneUiVersion],
+    ['Install source', o.installSource],
+    ['Restricted settings op', o.restrictedSettings],
+    ['Background restricted', o.backgroundRestricted],
+    ['Standby bucket', o.standbyBucket],
+    ['MIUI autostart (op 10008)', o.miuiAutostart],
+    ['MIUI autostart (AppOpsUtils)', o.miuiAutostartReflect],
+    ['MIUI show on lock screen (op 10020)', o.miuiShowWhenLocked],
+    ['MIUI background pop-ups (op 10021)', o.miuiBackgroundStart],
+    ['MIUI battery saver: No restrictions', o.miuiNoRestrictions],
+  ];
+  return (
+    <View style={s.card}>
+      <Text style={s.h}>OEM ({o.brand})</Text>
+      {rows
+        .filter(([, v]) => v != null)
+        .map(([label, v]) => (
+          <Text key={label}>
+            {label}: {String(v)}
+          </Text>
+        ))}
+      <View style={s.row}>
+        <Button label="Autostart (Xiaomi)" onPress={open('miuiAutostart')} />
+        <Button label="Permissions (Xiaomi)" onPress={open('miuiPermissions')} />
+        <Button label="Battery saver (Xiaomi)" onPress={open('miuiBatterySaver')} />
+        <Button label="Never sleeping (Samsung)" onPress={open('samsungNeverSleeping')} />
+        <Button label="Autostart (Oppo/Vivo/OnePlus)" onPress={open('oemAutostart')} />
+        <Button
+          label="Log OEM state"
+          onPress={() => {
+            Alarm.logOem();
+            onChange();
+          }}
+        />
+      </View>
+    </View>
   );
 }
 

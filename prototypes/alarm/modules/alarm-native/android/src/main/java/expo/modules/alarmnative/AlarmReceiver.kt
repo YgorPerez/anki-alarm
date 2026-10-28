@@ -37,6 +37,7 @@ class BootReceiver : BroadcastReceiver() {
     holdWakeLock(ctx)
     val action = intent.action?.substringAfterLast('.') ?: "?"
     AlarmStore.log(ctx, "system broadcast $action")
+    AlarmStore.log(ctx, "oem: ${OemChecks.summary(ctx)}")
     AlarmScheduler.rearmAll(ctx, action)
   }
 }

@@ -179,6 +179,7 @@ class AlarmService : Service() {
     val first = !AlarmStore.isRinging(this)
     if (first) {
       AlarmStore.setRinging(this, true)
+      log("oem: ${OemChecks.summary(this)}")
       sessionStarted = false
     }
     val pm = getSystemService(PowerManager::class.java)
