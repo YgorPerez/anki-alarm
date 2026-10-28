@@ -72,3 +72,26 @@ test("clock survives reload and a backwards device clock", () => {
   expect(hlc.wallMs).toBe(deck.fields.name.hlc.wallMs);
   expect(hlc.counter).toBeGreaterThan(deck.fields.name.hlc.counter);
 });
+
+test("every created property carries a clock and app records use UUIDv7", () => {
+  const c = new Collection(environment());
+  const deck = c.createDeck("  Words  ");
+  c.addBasicNote(deck.id, "front", "");
+  const state = c.snapshot();
+  for (const records of [state.decks, state.notes, state.noteTypes, state.presets]) {
+    for (const record of records) {
+      expect(record.id).toMatch(/^[\da-f]{8}-[\da-f]{4}-7[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
+      for (const field of Object.values(record.fields)) {
+        expect(field.hlc).toEqual({
+          wallMs: 1700000000000,
+          counter: expect.any(Number),
+          deviceId: "phone-a",
+        });
+      }
+    }
+  }
+  expect(deck.fields.name.value).toBe("Words");
+  expect(() => c.createDeck("  ")).toThrow("Deck name is required");
+  expect(() => c.addBasicNote("missing", "front", "back")).toThrow("Invalid note");
+  expect(c.snapshot()).toEqual(state);
+});
