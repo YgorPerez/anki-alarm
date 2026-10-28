@@ -1,6 +1,6 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only freshly filtered/mapped arrays are sorted. */
 import { createEmptyCard, fsrs, State, type Card as MemoryState, type Grade } from "ts-fsrs";
-import type { CollectionState, Preset } from "./collection.ts";
+import type { Card, CollectionState, Preset } from "./collection.ts";
 export type { MemoryState, Grade };
 /** FSRS card states: New, Learning, Review, Relearning. */
 export { State as CardState };
@@ -12,6 +12,8 @@ export type LogEntry = Entry &
         grade: Grade;
         durationMs: number;
         origin: "phone" | "web" | "alarm" | "import";
+        /** The ring an alarm-session answer belongs to: its progress toward N. */
+        ringId?: string;
       }
     | {
         kind: "snapshot";
@@ -110,6 +112,15 @@ export function dueInDays(days: number, now: number, hour = 4): number {
   date.setDate(date.getDate() + days);
   return date.getTime();
 }
+/** New cards come in creation order; a reset moves a card behind the untouched ones. */
+export function newPosition(card: Card, log: readonly LogEntry[], voided: ReadonlySet<string>) {
+  return Math.max(
+    card.fields.noteId.hlc.wallMs,
+    ...log
+      .filter((e) => e.cardId === card.id && e.kind === "reset" && !voided.has(e.id))
+      .map((e) => e.at),
+  );
+}
 /** Local calendar arithmetic keeps the 4am boundary correct across DST. */
 export function studyDayStart(now: number, hour = 4): number {
   const date = new Date(now);
@@ -181,12 +192,7 @@ export function studyQueue(
     .map((card) => ({
       card,
       memory: replayCard(card.id, entries.get(card.id) ?? [], preset, now),
-      newPosition: Math.max(
-        card.fields.noteId.hlc.wallMs,
-        ...(entries.get(card.id) ?? [])
-          .filter((e) => e.kind === "reset" && !voided.has(e.id))
-          .map((e) => e.at),
-      ),
+      newPosition: newPosition(card, entries.get(card.id) ?? [], voided),
     }))
     .filter(({ memory }) =>
       memory.state === State.New

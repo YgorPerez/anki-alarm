@@ -53,6 +53,14 @@ object AlarmStore {
     event(ctx, "ringStarted", newRing = ring)
     AlarmService.start(ctx, "scheduled ring")
   }
+  /** Sets the active ring's phase; a stale ring id changes nothing. Returns whether it matched. */
+  @Synchronized fun setPhase(ctx: Context, ringId: String?, phase: String): Boolean {
+    val active = ring(ctx) ?: return false
+    if (ringId != null && active.getString("id") != ringId) return false
+    if (active.optString("phase") != phase)
+      check(prefs(ctx).edit().putString("ring", active.put("phase", phase).toString()).commit())
+    return true
+  }
   @Synchronized fun finish(ctx: Context) {
     if (!isRinging(ctx)) return
     event(ctx, "dismissed", clearRing = true)

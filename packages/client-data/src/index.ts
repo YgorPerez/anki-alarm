@@ -13,7 +13,7 @@ import {
   type LogEntry,
   type Grade,
   updateThemeSettings,
-  parseAlarmSound,
+  readAlarm,
   type Settings,
   type ThemeChoice,
   type Collection,
@@ -52,7 +52,16 @@ interface Data {
    */
   importAnki: (source: AnkiPackage) => Effect.Effect<ImportSummary, Error>;
   reviewLog: Effect.Effect<LogEntry[], Error>;
-  answerCard: (cardId: string, grade: Grade, durationMs: number) => Effect.Effect<LogEntry, Error>;
+  /**
+   * Appends a review and its outbox record. With a ring id the answer belongs to that ring's alarm
+   * session: daily limits and due dates don't hold it back.
+   */
+  answerCard: (
+    cardId: string,
+    grade: Grade,
+    durationMs: number,
+    ringId?: string,
+  ) => Effect.Effect<LogEntry, Error>;
   /** Forget: appends a reset. */
   forgetCard: (cardId: string) => Effect.Effect<LogEntry, Error>;
   /** Appends a set due date at the start of the study day `days` from today. */
@@ -166,19 +175,29 @@ async function open(driver: SQLiteConnection): Promise<Data> {
   };
   return {
     reviewLog: serial(readLog),
-    answerCard: (cardId, grade, durationMs) =>
+    answerCard: (cardId, grade, durationMs, ringId) =>
       append((state, log, base) => {
         if (![1, 2, 3, 4].includes(grade) || !Number.isFinite(durationMs) || durationMs < 0)
           throw new Error("Invalid answer");
         const card = state.cards.find((c) => c.id === cardId);
         if (
           !card ||
-          !studyQueue(state, log, card.fields.deckId.value, base.at).some(
-            (c) => c.card.id === cardId,
-          )
+          (ringId === undefined &&
+            !studyQueue(state, log, card.fields.deckId.value, base.at).some(
+              (c) => c.card.id === cardId,
+            ))
         )
           throw new Error("Card is not available for study");
-        return { ...base, kind: "review", cardId, grade, durationMs, origin: "phone" };
+        return {
+          ...base,
+          kind: "review",
+          cardId,
+          grade,
+          durationMs,
+          ...(ringId === undefined
+            ? { origin: "phone" as const }
+            : { origin: "alarm" as const, ringId }),
+        };
       }),
     forgetCard: (cardId) => append((_, __, base) => ({ ...base, kind: "reset", cardId })),
     setDueDate: (cardId, days) =>
@@ -223,10 +242,7 @@ async function open(driver: SQLiteConnection): Promise<Data> {
           .select()
           .from(alarms)
           .orderBy(sql`rowid`)
-      ).map((row) => {
-        row.data.sound = parseAlarmSound(row.data.sound);
-        return row.data;
-      }),
+      ).map((row) => readAlarm(row.data)),
     ),
     saveAlarm: (alarm) =>
       serial(() =>

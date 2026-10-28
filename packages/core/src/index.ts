@@ -47,7 +47,11 @@ export {
   RAMP_CHOICES,
   BUNDLED_SOUNDS,
   parseAlarmSound,
+  readAlarm,
+  MAX_NEED,
 } from "./alarm.ts";
+export { alarmSession, ringNeed, SESSION_RULES } from "./session.ts";
+export type { AlarmSessionInput } from "./session.ts";
 export type { Alarm, AlarmRule, AlarmSound, BundledSound } from "./alarm.ts";
 
 export { releaseVersion } from "./release.ts";

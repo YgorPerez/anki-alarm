@@ -113,7 +113,15 @@ export function StudyScreen({
   );
 }
 /** A card side in a WebView without JavaScript. Card media load from local files only. */
-function CardSide({ label, dark, input }: { label: string; dark: boolean; input: RenderInput }) {
+export function CardSide({
+  label,
+  dark,
+  input,
+}: {
+  label: string;
+  dark: boolean;
+  input: RenderInput;
+}) {
   const baseUrl = mediaBaseUrl();
   return (
     <WebView
@@ -133,14 +141,17 @@ const gradeLabels = { 1: "again", 2: "hard", 3: "good", 4: "easy" } as const;
 const gradeClasses = { 1: "bg-again-tint", 2: "bg-hard-tint", 3: "bg-good", 4: "bg-easy-tint" };
 const gradeText = { 1: "text-again", 2: "text-hard", 3: "text-good-foreground", 4: "text-easy" };
 
-function AnswerControls({
+/** Show answer, then the four grades. The alarm keeps the grades back for a moment. */
+export function AnswerControls({
   revealed,
+  gradesShown = true,
   busy,
   locale,
   onReveal,
   onAnswer,
 }: {
   revealed: boolean;
+  gradesShown?: boolean;
   busy: boolean;
   locale: Locale;
   onReveal: () => void;
@@ -158,6 +169,7 @@ function AnswerControls({
         <Text className="text-body text-foreground">{t("reveal")}</Text>
       </Pressable>
     );
+  if (!gradesShown) return <View className="min-h-16" />;
   return (
     <View className="flex-row gap-2">
       {([1, 2, 3, 4] as const).map((grade) => (

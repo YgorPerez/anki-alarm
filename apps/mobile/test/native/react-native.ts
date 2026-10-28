@@ -4,7 +4,10 @@
 // Library looks for. Add an export when a screen under test imports something new.
 import { createElement, type ReactNode } from "react";
 
-type Props = Record<string, unknown> & { children?: ReactNode };
+type Props = Record<string, unknown> & {
+  children?: ReactNode;
+  accessibilityState?: Record<string, unknown>;
+};
 
 const host = (name: string) =>
   function Host(props: Props) {
@@ -22,7 +25,15 @@ export const KeyboardAvoidingView = View;
 export function Pressable({ children, disabled, ...props }: Props) {
   return createElement(
     "View",
-    { ...props, accessible: true, disabled, accessibilityState: { disabled: Boolean(disabled) } },
+    {
+      ...props,
+      accessible: true,
+      disabled,
+      accessibilityState: {
+        ...props.accessibilityState,
+        disabled: Boolean(disabled),
+      },
+    },
     typeof children === "function" ? (children as (state: object) => ReactNode)({}) : children,
   );
 }

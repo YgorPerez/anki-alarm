@@ -56,6 +56,16 @@ class AlarmNativeModule : Module() {
     Function("getRing") { AlarmStore.ring(context)?.toString() }
     Function("drainJournal") { AlarmStore.prefs(context).getString("journal", "[]") }
     Function("ack") { ids: List<String> -> AlarmStore.ack(context, ids) }
+    // Start: silence the ring and begin the idle timer. Native keeps the phase for restarts.
+    Function("sessionStarted") { ringId: String ->
+      if (AlarmStore.setPhase(context, ringId, "session"))
+        android.os.Handler(android.os.Looper.getMainLooper()).post { AlarmService.instance?.startSession() }
+    }
+    // Any tap or answer in the session restarts the idle timer.
+    Function("activity") { ringId: String ->
+      if (AlarmStore.ring(context)?.getString("id") == ringId)
+        android.os.Handler(android.os.Looper.getMainLooper()).post { AlarmService.instance?.onActivity() }
+    }
     Function("dismiss") { ringId: String ->
       if (AlarmStore.ring(context)?.getString("id") == ringId) {
         // Persist dismissal synchronously before returning to JS.

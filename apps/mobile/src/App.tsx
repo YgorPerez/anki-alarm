@@ -1,4 +1,6 @@
 import { AlarmSoundSettings } from "./AlarmSoundSettings.tsx";
+import { AlarmDeckSettings } from "./AlarmDeckSettings.tsx";
+import { AlarmScreen } from "./AlarmScreen.tsx";
 import { ReliabilityScreen } from "./ReliabilityScreen.tsx";
 import { reliabilityCopy } from "./reliability-copy.ts";
 import { UpdateOffer } from "./UpdateOffer.tsx";
@@ -112,7 +114,11 @@ function Home() {
       setPermissions(native.getPermissions());
       void client.invalidateQueries({ queryKey: ["alarms"] });
       void Effect.runPromise(controller.resume.pipe(Effect.provide(androidAlarmService)))
-        .then(setRing)
+        .then((active) => {
+          setRing(active);
+          // An alarm folded into the ring can raise its N.
+          void client.invalidateQueries({ queryKey: ["alarmSession"] });
+        })
         .catch(() => setError(copy(locale)("alarmError")));
     };
     refresh();
@@ -146,31 +152,17 @@ function Home() {
   if (ring)
     return (
       <ScopedTheme theme="dark">
-        <View
-          className="flex-1 justify-center gap-6 bg-background p-6"
-          style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
-        >
-          <Text className="text-clock font-bold text-foreground">
-            {new Date(ring.startedAt).toLocaleTimeString(locale, {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-          <Text className="text-question text-foreground">{ring.alarm.label}</Text>
-          <Pressable
-            accessibilityRole="button"
-            className="rounded-pill bg-primary p-6"
-            onPress={() => {
-              void run(Effect.flatMap(AlarmService, (service) => service.dismiss(ring.id)))
-                .then(() => run(controller.resume))
-                .then(setRing)
-                .catch(() => setError(t("alarmError")));
-            }}
-          >
-            <Text className="text-body text-primary-foreground">{t("dismiss")}</Text>
-          </Pressable>
-          <Text className="text-body text-foreground">{error}</Text>
-        </View>
+        <AlarmScreen
+          key={ring.id}
+          ring={ring}
+          locale={locale}
+          layer={androidAlarmService}
+          onDismissed={() => {
+            void run(controller.resume)
+              .then(setRing)
+              .catch(() => setError(t("alarmError")));
+          }}
+        />
       </ScopedTheme>
     );
   if (onboarding || showSettings)
@@ -382,6 +374,7 @@ function AlarmEditor({
         }}
         className="rounded-lg bg-surface p-4 text-body text-foreground"
       />
+      <AlarmDeckSettings alarm={options} locale={locale} onChange={setOptions} />
       <AlarmSoundSettings alarm={options} locale={locale} onChange={setOptions} />
       <Text accessibilityRole="alert" className="text-body text-attention">
         {error}
@@ -391,7 +384,8 @@ function AlarmEditor({
         className="rounded-pill bg-primary p-4"
         onPress={() => {
           const rule = parseRule(time, date, days);
-          if (rule) onSave({ ...options, label, rule });
+          if (!options.deckId) setError(t("chooseDeck"));
+          else if (rule) onSave({ ...options, label, rule });
           else setError(t("invalid"));
         }}
       >
