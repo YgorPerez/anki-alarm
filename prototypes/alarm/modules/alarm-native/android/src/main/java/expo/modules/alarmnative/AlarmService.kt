@@ -86,7 +86,7 @@ class AlarmService : Service() {
   private val tick = object : Runnable {
     override fun run() {
       level = if (level < target) minOf(target, level + rampPerTick) else target
-      player?.setVolume(level, level)
+      player?.setVolume(vol(), vol())
       handler.postDelayed(this, 250)
     }
   }
@@ -212,12 +212,13 @@ class AlarmService : Service() {
     rampPerTick = 1f / (seconds * 4)
     if (!ramp || t < level) level = t
     if (ramp && level == 0f) level = 0.05f
-    player?.setVolume(level, level)
+    player?.setVolume(vol(), vol())
   }
 
   private fun startSound() {
     val audio = getSystemService(AudioManager::class.java)
-    if (setting("forceMaxVolume") == 1) {
+    if (setting("silent") == 1) log("silent mode: playing at volume 0")
+    if (setting("forceMaxVolume") == 1 && setting("silent") == 0) {
       savedAlarmVolume = audio.getStreamVolume(AudioManager.STREAM_ALARM)
       try {
         audio.setStreamVolume(AudioManager.STREAM_ALARM, audio.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0)
@@ -247,7 +248,7 @@ class AlarmService : Service() {
         mp.setDataSource(this, uri)
         mp.isLooping = true
         mp.setWakeMode(this, PowerManager.PARTIAL_WAKE_LOCK)
-        mp.setVolume(level, level)
+        mp.setVolume(vol(), vol())
         mp.prepare()
         mp.start()
         player = mp
@@ -259,7 +260,7 @@ class AlarmService : Service() {
     }
     // Last resort, e.g. before the first unlock if the media provider can't serve ringtones.
     try {
-      tone = android.media.ToneGenerator(AudioManager.STREAM_ALARM, 100)
+      tone = android.media.ToneGenerator(AudioManager.STREAM_ALARM, if (setting("silent") == 1) 0 else 100)
       tone!!.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, -1)
       log("playing ToneGenerator fallback")
     } catch (e: Exception) {
@@ -313,6 +314,8 @@ class AlarmService : Service() {
     handler.removeCallbacks(idleRunnable)
     handler.postDelayed(idleRunnable, setting("idleSeconds") * 1000L)
   }
+
+  private fun vol() = if (setting("silent") == 1) 0f else level
 
   private fun low() = setting("lowLevel") / 100f
 

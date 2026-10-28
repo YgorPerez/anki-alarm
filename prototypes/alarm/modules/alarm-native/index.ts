@@ -7,6 +7,7 @@ export type Settings = {
   lowLevel: number; // percent of full while answering
   vibrate: number; // 0 | 1
   forceMaxVolume: number; // 0 | 1: raise the alarm stream to max while ringing
+  silent: number; // 0 | 1: play at volume 0 (phone test runs)
   directLaunch: number; // 0 | 1: also try startActivity from the service
 };
 

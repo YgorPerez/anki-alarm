@@ -27,6 +27,8 @@ object AlarmStore {
     "vibrate" to 1,
     "forceMaxVolume" to 1,
     "directLaunch" to 1,
+    // #35: phone runs stay quiet. The player still starts, at volume 0, so playback is still tested.
+    "silent" to 1,
   )
 
   private val time = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
