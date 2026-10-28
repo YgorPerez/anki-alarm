@@ -33,8 +33,8 @@ unlock, when the JS bundle, SQLite and media are all locked away in credential s
   `MY_PACKAGE_REPLACED` and after each ring. Core has the same math for display ("rings in 7 h");
   both run the same JSON fixtures from `packages/core`.
 - `ringPolicy` holds the fixed timings, defined as constants in Core: re-ring after leaving the
-  screen (10 s), idle time before full volume, the low level while answering, the awake check's
-  60 s. They aren't user settings, and an OTA can tune them.
+  screen (10 s), idle time before full volume, the awake check's 60 s. They aren't user settings,
+  and an OTA can tune them.
 
 ### A ring
 
@@ -44,7 +44,7 @@ gives each ring a UUIDv7 id.
 - At ring time a foreground service plays the sound on the alarm stream, vibrates, ramps the volume
   and opens the alarm screen by full-screen intent (plus `startActivity` when "Display over other
   apps" is granted). It rings until dismissal; there is no give-up timeout.
-- JS signals `sessionStarted(ringId)` (sound drops to the low level), `activity(ringId)` (any tap or
+- JS signals `sessionStarted(ringId)` (sound and vibration stop), `activity(ringId)` (any tap or
   answer, resets the idle timer), `snooze(ringId, minutes)` and `dismiss(ringId, { awakeCheckAfter })`.
   `dismiss` is idempotent. Native runs the volume policy itself from these signals and from whether
   the alarm screen is visible, so a stalled JS thread can't leave the alarm quiet.
@@ -85,6 +85,10 @@ and battery optimization. `request(kind)` shows the runtime prompt or opens the 
 page; JS re-checks on resume. Onboarding asks for notifications and display over other apps (the
 only way to take over an unlocked phone in use on Android 17); Settings shows the rest and warns
 that force-stop drops alarms.
+
+Amended in #35: Start silences the ring and stops the vibration instead of dropping to a low level.
+Decided after the first real-phone round. Leaving the screen or going idle brings both back at
+full.
 
 ## Testing
 

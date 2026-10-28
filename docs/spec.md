@@ -158,8 +158,8 @@ session** is a special mode of it on the phone.
 - At ring time a foreground service starts the sound on the alarm audio stream (so it plays in
   silent and Do Not Disturb), starts vibration, and opens the alarm screen as a full-screen intent
   over the lock screen. The volume ramps up over the alarm's ramp time.
-- Leaving the alarm screen before dismissal brings the sound back at full volume after about 10
-  seconds and offers the way back. If the app is killed, the service restarts and rings again. A
+- Leaving the alarm screen before dismissal brings the sound and vibration back at full after about
+  10 seconds and offers the way back. If the app is killed, the service restarts and rings again. A
   reboot mid-session re-rings at boot.
 - A **ring** goes on until dismissal. It survives reboots with a PIN: before the first unlock a small
   native lock-screen activity shows the clock, the label and "Unlock to start", in the user's theme.
@@ -172,8 +172,8 @@ session** is a special mode of it on the phone.
 
 ### The alarm session
 
-- Tapping Start on the alarm screen starts the session. The sound drops to a low level while you answer and
-  comes back at full volume if no answer comes for a while.
+- Tapping Start on the alarm screen starts the session. The sound and the vibration stop while you
+  answer, and both come back at full if no answer comes for a while.
 - Cards come from the alarm's deck in this order: due cards, then new cards, then reviews ahead
   (cards due soonest). FSRS handles early reviews.
 - The back can only be graded after it's revealed, and the grade buttons appear a few seconds after
@@ -186,8 +186,8 @@ session** is a special mode of it on the phone.
 ### Read aloud
 
 When on, each card's front is read after it appears: the card's own audio if it has some, the
-device's TTS otherwise, in the language of the deck (pt-BR by default). The sound sits under it at a
-low level.
+device's TTS otherwise, in the language of the deck (pt-BR by default). The alarm sound stays off
+while it reads.
 
 ### Snooze
 
