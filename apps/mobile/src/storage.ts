@@ -11,6 +11,7 @@ import {
   type Preset,
   type Tombstone,
 } from "@app/core";
+import { migrationStatements } from "./migrations.ts";
 import { sql } from "drizzle-orm";
 import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
@@ -55,17 +56,16 @@ export async function openCollectionStore(
   env: Omit<CollectionEnvironment, "deviceId">,
 ) {
   const db = drizzle(execute);
-  // Additive v1 migration; never drops a user's database on startup.
-  await Promise.all(
-    tables.map((name) =>
-      db.run(
-        sql`CREATE TABLE IF NOT EXISTS ${sql.identifier(name)} (id TEXT PRIMARY KEY NOT NULL, body TEXT NOT NULL)`,
-      ),
-    ),
-  );
-  await db.run(
-    sql`CREATE TABLE IF NOT EXISTS metadata (id TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)`,
-  );
+  try {
+    for (const statement of migrationStatements("collection.db")) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- Migrations must run in order.
+      // react-doctor-disable-next-line react-doctor/raw-sql-injection-risk -- Statements come only from the static migration registry, never user input.
+      await db.run(sql.raw(statement));
+    }
+  } catch (error) {
+    await db.run(sql`ROLLBACK`);
+    throw error;
+  }
   await db
     .insert(metadata)
     .values({ id: "deviceId", value: uuid7(env.now(), env.random()) })

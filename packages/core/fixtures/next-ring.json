@@ -1,0 +1,68 @@
+[
+  {
+    "name": "once",
+    "rule": {
+      "hour": 7,
+      "minute": 30,
+      "onceDate": "2026-10-29"
+    },
+    "now": "2026-10-28T12:00:00Z",
+    "zone": "America/Sao_Paulo",
+    "expected": "2026-10-29T10:30:00Z"
+  },
+  {
+    "name": "passed once",
+    "rule": {
+      "hour": 7,
+      "minute": 30,
+      "onceDate": "2026-10-28"
+    },
+    "now": "2026-10-28T12:00:00Z",
+    "zone": "America/Sao_Paulo",
+    "expected": null
+  },
+  {
+    "name": "repeat next week",
+    "rule": {
+      "hour": 7,
+      "minute": 30,
+      "repeatDays": [3]
+    },
+    "now": "2026-10-28T10:30:00Z",
+    "zone": "America/Sao_Paulo",
+    "expected": "2026-11-04T10:30:00Z"
+  },
+  {
+    "name": "spring gap shifts forward",
+    "rule": {
+      "hour": 2,
+      "minute": 30,
+      "repeatDays": [7]
+    },
+    "now": "2026-03-08T05:00:00Z",
+    "zone": "America/New_York",
+    "expected": "2026-03-08T07:30:00Z"
+  },
+  {
+    "name": "autumn overlap chooses earlier",
+    "rule": {
+      "hour": 1,
+      "minute": 30,
+      "repeatDays": [7]
+    },
+    "now": "2026-11-01T04:00:00Z",
+    "zone": "America/New_York",
+    "expected": "2026-11-01T05:30:00Z"
+  },
+  {
+    "name": "date rollover",
+    "rule": {
+      "hour": 0,
+      "minute": 5,
+      "repeatDays": [4]
+    },
+    "now": "2026-10-28T23:59:00Z",
+    "zone": "UTC",
+    "expected": "2026-10-29T00:05:00Z"
+  }
+]

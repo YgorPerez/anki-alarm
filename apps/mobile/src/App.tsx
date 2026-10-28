@@ -1,102 +1,21 @@
-import {
-  type Collection,
-  type CollectionState,
-  type Deck,
-  type Note,
-  type Locale,
-} from "@app/core";
+import { nextRing, type Alarm, type Locale } from "@app/core";
 import {
   AtkinsonHyperlegible_400Regular,
   AtkinsonHyperlegible_700Bold,
   useFonts,
 } from "@expo-google-fonts/atkinson-hyperlegible";
+import { CollectionScreen } from "./CollectionScreen.tsx";
+import { Effect } from "effect";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Alert,
-  BackHandler,
-  KeyboardAvoidingView,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import type { ListRenderItemInfo } from "react-native";
+import { AppState, Pressable, FlatList, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { copy } from "./copy.ts";
-import { collectionStore } from "./database.ts";
+import { AlarmService, alarmController, type Ring } from "./alarms.ts";
+import { androidAlarmService, native } from "./alarm-android.ts";
+import { sqliteAlarmRepository } from "./alarm-storage.ts";
 
-type Form = { kind: "deck" | "note"; id?: string; first: string; second: string };
-const regular = { fontFamily: "AtkinsonHyperlegible_400Regular" };
-const bold = { fontFamily: "AtkinsonHyperlegible_700Bold" };
-function Button({
-  label,
-  onPress,
-  primary = false,
-  destructive = false,
-  disabled = false,
-}: {
-  label: string;
-  onPress: () => void;
-  primary?: boolean;
-  destructive?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      className={
-        primary
-          ? "min-h-12 justify-center rounded-full bg-primary px-5 py-3 active:opacity-80 disabled:opacity-40"
-          : "min-h-12 justify-center rounded-full bg-surface px-5 py-3 active:opacity-80 disabled:opacity-40"
-      }
-    >
-      <Text
-        style={regular}
-        className={
-          destructive
-            ? "text-body text-destructive"
-            : primary
-              ? "text-body text-primary-foreground"
-              : "text-body text-foreground"
-        }
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-function Field({
-  label,
-  value,
-  onChange,
-  multiline = false,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  multiline?: boolean;
-}) {
-  return (
-    <View className="gap-2">
-      <Text style={regular} className="text-label text-muted-foreground">
-        {label}
-      </Text>
-      <TextInput
-        accessibilityLabel={label}
-        value={value}
-        onChangeText={onChange}
-        multiline={multiline}
-        textAlignVertical="top"
-        style={regular}
-        className="min-h-12 rounded-lg border border-border bg-surface p-4 text-body text-foreground"
-      />
-    </View>
-  );
-}
 export function App() {
   const [fontsLoaded, fontError] = useFonts({
     AtkinsonHyperlegible_400Regular,
@@ -109,354 +28,291 @@ export function App() {
     </SafeAreaProvider>
   );
 }
+const run = <A,>(effect: Effect.Effect<A, Error, AlarmService>) =>
+  Effect.runPromise(effect.pipe(Effect.provide(androidAlarmService)));
+
+const currentTime = () => Date.now();
 function Home() {
+  const [showDecks, setShowDecks] = useState(false);
+  const [controller] = useState(() => alarmController(sqliteAlarmRepository()));
   const [locale, setLocale] = useState<Locale>("pt-BR");
-  const [state, setState] = useState<CollectionState>();
-  const [deckId, setDeckId] = useState<string>();
-  const [form, setForm] = useState<Form>();
-  const [busy, setBusy] = useState(false);
-  const locked = useRef(false);
-  const [error, setError] = useState(false);
+  const [alarms, setAlarms] = useState(() => controller.list());
+  const [ring, setRing] = useState<Ring | null>(null);
+  const [editing, setEditing] = useState<Alarm | null>(null);
+  const [error, setError] = useState("");
+  const [permissions, setPermissions] = useState(() => native.getPermissions());
   const t = copy(locale);
   const insets = useSafeAreaInsets();
-  const load = useCallback(() => {
-    void collectionStore()
-      .then((store) => store.read())
-      .then(setState)
-      .catch(() => setError(true));
-  }, []);
-  useEffect(load, [load]);
-  const goBack = useCallback(() => {
-    if (locked.current) return true;
-    if (form) {
-      Alert.alert(t("discardTitle"), t("discardBody"), [
-        { text: t("cancel"), style: "cancel" },
-        {
-          text: t("discard"),
-          style: "destructive",
-          onPress: () => {
-            setForm(undefined);
-            setError(false);
-          },
-        },
-      ]);
-      return true;
-    }
-    if (deckId) {
-      setDeckId(undefined);
-      setError(false);
-      return true;
-    }
-    return false;
-  }, [form, deckId, t]);
   useEffect(() => {
-    const handler = BackHandler.addEventListener("hardwareBackPress", goBack);
-    return () => handler.remove();
-  }, [goBack]);
-  async function change(command: (collection: Collection) => void, onSaved: () => void) {
-    if (locked.current) return;
-    locked.current = true;
-    setBusy(true);
-    setError(false);
-    try {
-      const store = await collectionStore();
-      setState(await store.change(command));
-      onSaved();
-    } catch {
-      setError(true);
-    } finally {
-      locked.current = false;
-      setBusy(false);
-    }
-  }
-  const deck = state?.decks.find((d) => d.id === deckId);
-  const notes = state?.notes.filter((n) => n.fields.deckId.value === deckId) ?? [];
-  function save() {
-    if (!form) return;
-    void change(
-      (c) => {
-        if (form.kind === "deck") {
-          if (form.id) c.renameDeck(form.id, form.first);
-          else c.createDeck(form.first);
-        } else if (form.id) c.editBasicNote(form.id, form.first, form.second);
-        else if (deckId) c.addBasicNote(deckId, form.first, form.second);
-      },
-      () => setForm(undefined),
+    const refresh = () => {
+      setPermissions(native.getPermissions());
+      void Effect.runPromise(controller.resume.pipe(Effect.provide(androidAlarmService)))
+        .then(setRing)
+        .catch(() => setError(copy(locale)("alarmError")));
+    };
+    refresh();
+    const subscription = native.addListener("onChange", refresh);
+    const appState = AppState.addEventListener("change", (state) => {
+      if (state === "active") refresh();
+    });
+    return () => {
+      subscription.remove();
+      appState.remove();
+    };
+  }, [controller, locale]);
+  const save = useCallback(
+    (alarm: Alarm) => {
+      void run(controller.save(alarm))
+        .then(() => {
+          setAlarms(controller.list());
+          setEditing(null);
+          setError("");
+        })
+        .catch(() => setError(copy(locale)("alarmError")));
+    },
+    [controller, locale],
+  );
+  const renderAlarm = useCallback(
+    ({ item }: ListRenderItemInfo<Alarm>) => (
+      <AlarmRow alarm={item} locale={locale} onEdit={setEditing} onSave={save} />
+    ),
+    [locale, save],
+  );
+  if (ring)
+    return (
+      <View
+        className="flex-1 justify-center gap-6 bg-black p-6"
+        style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
+      >
+        <Text className="text-clock font-bold text-white">
+          {new Date(ring.startedAt).toLocaleTimeString(locale, {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </Text>
+        <Text className="text-question text-white">{ring.alarm.label}</Text>
+        <Pressable
+          accessibilityRole="button"
+          className="rounded-pill bg-primary p-6"
+          onPress={() => {
+            void run(Effect.flatMap(AlarmService, (service) => service.dismiss(ring.id)))
+              .then(() => run(controller.resume))
+              .then(setRing)
+              .catch(() => setError(t("alarmError")));
+          }}
+        >
+          <Text className="text-body text-primary-foreground">{t("dismiss")}</Text>
+        </Pressable>
+        <Text className="text-body text-white">{error}</Text>
+      </View>
     );
-  }
-  function confirmDelete() {
-    if (!deckId) return;
-    Alert.alert(t("deleteTitle"), t("deleteBody"), [
-      { text: t("cancel"), style: "cancel" },
-      {
-        text: t("delete"),
-        style: "destructive",
-        onPress: () => {
-          void change(
-            (c) => c.deleteDeck(deckId),
-            () => setDeckId(undefined),
-          );
-        },
-      },
-    ]);
-  }
+  if (showDecks) return <CollectionScreen locale={locale} onExit={() => setShowDecks(false)} />;
   return (
-    <KeyboardAvoidingView
-      behavior="padding"
+    <View
       className="flex-1 bg-background"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      <ScrollView contentContainerClassName="gap-6 p-6" keyboardShouldPersistTaps="handled">
-        <View className="flex-row flex-wrap items-center justify-between gap-2">
-          {form || deck ? <Button label={t("back")} disabled={busy} onPress={goBack} /> : null}
-          <Button
-            label={t("switchLanguage")}
-            onPress={() => setLocale(locale === "en" ? "pt-BR" : "en")}
-          />
-        </View>
-        <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
-          {screenTitle(t, form, deck)}
-        </Text>
-        {error ? (
-          <Text accessibilityRole="alert" style={regular} className="text-body text-destructive">
-            {t(state ? "error" : "loadError")}
-          </Text>
-        ) : null}
-        <ScreenContent
-          state={state}
-          form={form}
-          deck={deck}
-          t={t}
-          error={error}
-          busy={busy}
-          notes={notes}
-          retry={() => {
-            setError(false);
-            load();
-          }}
-          setForm={(next) => {
-            setError(false);
-            setForm(next);
-          }}
-          save={save}
-          cancel={goBack}
-          remove={confirmDelete}
-          select={(id) => {
-            setError(false);
-            setDeckId(id);
-          }}
-        />
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-}
-type Translate = ReturnType<typeof copy>;
-function Loading({ t, error, retry }: { t: Translate; error: boolean; retry: () => void }) {
-  return (
-    <>
-      <Text style={regular} className="text-body text-muted-foreground">
-        {error ? "" : t("loading")}
-      </Text>
-      {error && <Button label={t("retry")} onPress={retry} />}
-    </>
-  );
-}
-function Editor({
-  t,
-  form,
-  setForm,
-  busy,
-  save,
-  cancel,
-}: {
-  t: Translate;
-  form: Form;
-  setForm: (form: Form) => void;
-  busy: boolean;
-  save: () => void;
-  cancel: () => void;
-}) {
-  return (
-    <View className="gap-6" pointerEvents={busy ? "none" : "auto"}>
-      {form.kind === "note" && (
-        <Text style={regular} className="text-label text-muted-foreground">
-          {t("basic")}
-        </Text>
-      )}
-      <Field
-        label={t(form.kind === "deck" ? "deckName" : "front")}
-        value={form.first}
-        onChange={(first) => setForm({ ...form, first })}
-        multiline={form.kind === "note"}
+      <FlatList
+        contentContainerStyle={{ padding: 24, gap: 20 }}
+        data={editing ? [] : alarms}
+        keyExtractor={(alarm) => alarm.id}
+        renderItem={renderAlarm}
+        ListHeaderComponent={
+          <View className="gap-4">
+            <Text className="text-title font-bold text-foreground">{t("alarms")}</Text>
+            <Pressable accessibilityRole="button" onPress={() => setShowDecks(true)}>
+              <Text className="text-body text-primary">{t("title")}</Text>
+            </Pressable>
+            {editing ? (
+              <AlarmEditor
+                alarm={editing}
+                locale={locale}
+                onSave={save}
+                onCancel={() => setEditing(null)}
+              />
+            ) : (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  className="rounded-pill bg-primary p-4"
+                  onPress={() =>
+                    setEditing({
+                      id: native.createId(),
+                      label: "",
+                      enabled: true,
+                      rule: { hour: 7, minute: 0, repeatDays: [1, 2, 3, 4, 5] },
+                      vibrate: true,
+                      rampSeconds: 30,
+                      sound: null,
+                    })
+                  }
+                >
+                  <Text className="text-body text-primary-foreground">{t("add")}</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        }
+        ListFooterComponent={
+          <View className="gap-4">
+            <Text accessibilityRole="alert" className="text-body text-attention">
+              {error}
+            </Text>
+            <Text className="text-body text-foreground">{t("permission")}</Text>
+            {(["notifications", "exactAlarm", "fullScreenIntent", "overlay", "battery"] as const)
+              .filter((kind) => !permissions[kind])
+              .map((kind) => (
+                <Pressable
+                  key={kind}
+                  accessibilityRole="button"
+                  onPress={() => native.request(kind)}
+                >
+                  <Text className="text-body text-primary">{t(kind)}</Text>
+                </Pressable>
+              ))}
+            <Text className="text-label text-muted-foreground">{t("forceStop")}</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setLocale(locale === "en" ? "pt-BR" : "en")}
+            >
+              <Text className="text-body text-primary">{t("switchLanguage")}</Text>
+            </Pressable>
+          </View>
+        }
       />
-      {form.kind === "note" && (
-        <Field
-          label={t("answer")}
-          value={form.second}
-          onChange={(second) => setForm({ ...form, second })}
-          multiline
-        />
-      )}
-      <Button
-        label={t(busy ? "saving" : "save")}
-        primary
-        disabled={busy || !form.first.trim()}
-        onPress={save}
-      />
-      <Button label={t("cancel")} disabled={busy} onPress={cancel} />
     </View>
   );
 }
-function DeckDetails({
-  t,
-  deck,
-  notes,
-  busy,
-  edit,
-  remove,
+function AlarmRow({
+  alarm,
+  locale,
+  onEdit,
+  onSave,
 }: {
-  t: Translate;
-  deck: Deck;
-  notes: Note[];
-  busy: boolean;
-  edit: (form: Form) => void;
-  remove: () => void;
+  alarm: Alarm;
+  locale: Locale;
+  onEdit: (alarm: Alarm) => void;
+  onSave: (alarm: Alarm) => void;
 }) {
+  const t = copy(locale);
   return (
-    <>
-      <Text style={regular} className="text-label text-muted-foreground">
-        {notes.length} {t("cards")}
+    <View className="flex-row items-center justify-between border-b border-border py-4">
+      <Pressable accessibilityRole="button" onPress={() => onEdit(alarm)}>
+        <Text className="text-title text-foreground">{`${String(alarm.rule.hour).padStart(2, "0")}:${String(alarm.rule.minute).padStart(2, "0")}`}</Text>
+        <Text className="text-body text-muted-foreground">{alarm.label}</Text>
+      </Pressable>
+      <Switch
+        accessibilityLabel={`${alarm.label}: ${t(alarm.enabled ? "enabled" : "disabled")}`}
+        value={alarm.enabled}
+        onValueChange={(enabled) => onSave({ ...alarm, enabled })}
+      />
+    </View>
+  );
+}
+function AlarmEditor({
+  alarm,
+  locale,
+  onSave,
+  onCancel,
+}: {
+  alarm: Alarm;
+  locale: Locale;
+  onSave: (alarm: Alarm) => void;
+  onCancel: () => void;
+}) {
+  const [label, setLabel] = useState(alarm.label);
+  const [time, setTime] = useState(
+    `${String(alarm.rule.hour).padStart(2, "0")}:${String(alarm.rule.minute).padStart(2, "0")}`,
+  );
+  const [date, setDate] = useState(alarm.rule.onceDate ?? "");
+  const [days, setDays] = useState<readonly number[]>(alarm.rule.repeatDays ?? []);
+  const [error, setError] = useState("");
+  const t = copy(locale);
+  return (
+    <View className="gap-4">
+      <TextInput
+        accessibilityLabel={t("label")}
+        placeholder={t("label")}
+        value={label}
+        onChangeText={setLabel}
+        className="rounded-lg bg-surface p-4 text-body text-foreground"
+      />
+      <TextInput
+        accessibilityLabel={t("time")}
+        placeholder={t("time")}
+        value={time}
+        onChangeText={setTime}
+        keyboardType="numbers-and-punctuation"
+        className="rounded-lg bg-surface p-4 text-body text-foreground"
+      />
+      <Text className="text-body text-foreground">{t("repeat")}</Text>
+      <View className="flex-row justify-between">
+        {[1, 2, 3, 4, 5, 6, 7].map((day) => (
+          <Pressable
+            key={day}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: days.includes(day) }}
+            onPress={() => {
+              setDate("");
+              setDays(days.includes(day) ? days.filter((d) => d !== day) : [...days, day]);
+            }}
+          >
+            <Text className={days.includes(day) ? "p-2 text-primary" : "p-2 text-muted-foreground"}>
+              {new Date(Date.UTC(2026, 9, 19 + day - 1)).toLocaleDateString(locale, {
+                weekday: "short",
+                timeZone: "UTC",
+              })}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <TextInput
+        accessibilityLabel={t("once")}
+        placeholder={t("once")}
+        value={date}
+        onChangeText={(value) => {
+          setDate(value);
+          setDays([]);
+        }}
+        className="rounded-lg bg-surface p-4 text-body text-foreground"
+      />
+      <Text accessibilityRole="alert" className="text-body text-attention">
+        {error}
       </Text>
-      <Button
-        label={t("addNote")}
-        primary
-        disabled={busy}
-        onPress={() => edit({ kind: "note", first: "", second: "" })}
-      />
-      {!notes.length && (
-        <Text style={regular} className="text-body text-muted-foreground">
-          {t("emptyDeck")}
-        </Text>
-      )}
-      {notes.map((note) => (
-        <Pressable
-          key={note.id}
-          accessibilityRole="button"
-          disabled={busy}
-          accessibilityLabel={`${t("editNote")}: ${note.fields.front.value}`}
-          onPress={() =>
-            edit({
-              kind: "note",
-              id: note.id,
-              first: note.fields.front.value,
-              second: note.fields.back.value,
-            })
+      <Pressable
+        accessibilityRole="button"
+        className="rounded-pill bg-primary p-4"
+        onPress={() => {
+          try {
+            if (
+              !/^\d{2}:\d{2}$/.test(time) ||
+              (date &&
+                (!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+                  new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date))
+            )
+              throw new Error("Invalid date");
+            const [hour, minute] = time.split(":").map(Number);
+            const rule = {
+              hour: hour!,
+              minute: minute!,
+              ...(date ? { onceDate: date } : { repeatDays: days }),
+            };
+            if (
+              nextRing(rule, currentTime(), Intl.DateTimeFormat().resolvedOptions().timeZone) ===
+              null
+            )
+              throw new Error("No next ring");
+            onSave({ ...alarm, label, rule });
+          } catch {
+            setError(t("invalid"));
           }
-          className="min-h-16 gap-2 border-b border-border py-4 active:opacity-80"
-        >
-          <Text style={bold} className="text-body text-foreground">
-            {note.fields.front.value}
-          </Text>
-          <Text style={regular} className="text-body text-answer">
-            {note.fields.back.value}
-          </Text>
-        </Pressable>
-      ))}
-      <Button
-        label={t("rename")}
-        disabled={busy}
-        onPress={() =>
-          edit({ kind: "deck", id: deck.id, first: deck.fields.name.value, second: "" })
-        }
-      />
-      <Button label={t("delete")} destructive disabled={busy} onPress={remove} />
-    </>
-  );
-}
-function DeckList({
-  t,
-  state,
-  create,
-  select,
-}: {
-  t: Translate;
-  state: CollectionState;
-  create: () => void;
-  select: (id: string) => void;
-}) {
-  return (
-    <>
-      <Button label={t("newDeck")} primary onPress={create} />
-      {!state.decks.length && (
-        <Text style={regular} className="text-body text-muted-foreground">
-          {t("empty")}
-        </Text>
-      )}
-      {state.decks.map((d) => (
-        <Pressable
-          key={d.id}
-          accessibilityRole="button"
-          onPress={() => select(d.id)}
-          className="min-h-16 flex-row flex-wrap items-center justify-between gap-2 border-b border-border py-4 active:opacity-80"
-        >
-          <Text style={regular} className="text-body text-foreground">
-            {d.fields.name.value}
-          </Text>
-          <Text style={regular} className="text-label text-muted-foreground">
-            {state.cards.filter((c) => c.fields.deckId.value === d.id).length} {t("cards")}
-          </Text>
-        </Pressable>
-      ))}
-    </>
-  );
-}
-function screenTitle(t: Translate, form: Form | undefined, deck: Deck | undefined) {
-  if (!form) return deck?.fields.name.value ?? t("title");
-  if (form.kind === "deck") return t(form.id ? "rename" : "newDeck");
-  return t(form.id ? "editNote" : "addNote");
-}
-function ScreenContent({
-  state,
-  form,
-  deck,
-  t,
-  error,
-  busy,
-  notes,
-  retry,
-  setForm,
-  save,
-  cancel,
-  remove,
-  select,
-}: {
-  state: CollectionState | undefined;
-  form: Form | undefined;
-  deck: Deck | undefined;
-  t: Translate;
-  error: boolean;
-  busy: boolean;
-  notes: Note[];
-  retry: () => void;
-  setForm: (form: Form) => void;
-  save: () => void;
-  cancel: () => void;
-  remove: () => void;
-  select: (id: string) => void;
-}) {
-  if (!state) return <Loading t={t} error={error} retry={retry} />;
-  if (form)
-    return <Editor t={t} form={form} setForm={setForm} busy={busy} save={save} cancel={cancel} />;
-  if (deck)
-    return (
-      <DeckDetails t={t} deck={deck} notes={notes} busy={busy} edit={setForm} remove={remove} />
-    );
-  return (
-    <DeckList
-      t={t}
-      state={state}
-      create={() => setForm({ kind: "deck", first: "", second: "" })}
-      select={select}
-    />
+        }}
+      >
+        <Text className="text-body text-primary-foreground">{t("save")}</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" onPress={onCancel}>
+        <Text className="text-body text-foreground">{t("cancel")}</Text>
+      </Pressable>
+    </View>
   );
 }

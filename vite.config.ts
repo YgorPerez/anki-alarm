@@ -25,11 +25,7 @@ export default defineConfig({
   test: {
     // Not the web yet: its Vite config runs SSR in workerd, which Vitest can't load. Its first
     // test brings a test config without the Cloudflare plugin. The phone has no Vite config.
-    projects: [
-      "packages/*",
-      "apps/sync",
-      { test: { name: "mobile-storage", include: ["apps/mobile/src/storage.test.ts"] } },
-    ],
+    projects: ["packages/*", "apps/sync", "apps/mobile/vitest.config.ts"],
     // A stray `.only` passes locally and must not pass CI.
     allowOnly: !process.env["CI"],
   },

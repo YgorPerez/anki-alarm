@@ -1,0 +1,5 @@
+<resources>
+  <string name="alarm_title">Alarm clock</string>
+  <string name="alarm_return">Tap to return to the alarm</string>
+  <string name="alarm_unlock">Unlock to start</string>
+</resources>
