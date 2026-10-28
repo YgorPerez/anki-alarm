@@ -11,11 +11,16 @@ Replays are safe because SQLite uses the native event ID as its primary key.
 The #40 API covers `setAlarms`, `list`, `getRing`, `dismiss`, `drainJournal`, `ack`, permission
 checks/requests and a change notification. Native state and journal live in device-protected
 SharedPreferences. Ring creation and dismissal commit state and their event in one write. Alarm
-IDs and ring/event IDs are UUIDv7. The temporary dismiss button is the replacement point for #41.
+IDs and ring/event IDs are UUIDv7.
 
-Later alarm tickets add session signals, snooze, awake checks and read aloud from
-ADR 0005. Native does not count answers. The overlap event identifies the absorbed alarm; #41 must
-use its N without replacing the active ring's deck.
+#41 adds the session signals. `sessionStarted(ringId)` sets the stored ring's phase to `session`
+and silences sound and vibration; `activity(ringId)` restarts the idle timer and silences again
+after an idle return. Both ignore a ring id that isn't the active ring. A restarted service sets
+the phase back to `ringing` and rings at full; the user taps Start again and the session keeps its
+progress, which JS reads from reviews carrying the ring id. Native does not count answers. The
+session uses the larger N of absorbed alarms and keeps the active ring's deck.
+
+Later alarm tickets add snooze, awake checks and read aloud from ADR 0005.
 
 ## Verification
 
