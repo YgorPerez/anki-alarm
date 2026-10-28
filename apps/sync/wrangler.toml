@@ -1,4 +1,19 @@
-# The sync service. D1 and R2 bindings come with sync itself (docs/adr/0001-sync-protocol.md).
+# The sync service (docs/adr/0001-sync-protocol.md, docs/adr/0007-better-auth.md). Secrets and the
+# D1 database id are the human's to set: see docs/release.md › Sync and sign-in.
 name = "app-sync"
 main = "src/worker.ts"
 compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# The Worker's public origin. Override per deployment.
+BETTER_AUTH_URL = "http://localhost:8787"
+# The web app's origin, allowed to sign in. Comma-separated.
+TRUSTED_ORIGINS = "http://localhost:3000"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "app-sync"
+# Replace with the id `wrangler d1 create app-sync` prints. Local dev and tests ignore it.
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"

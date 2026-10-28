@@ -1,8 +1,9 @@
 // The sync API: the Worker implements it with `HttpApiBuilder`, and the phone and the web call it
 // through the client `HttpApiClient` derives from it. One sync is a push, then pulls from the
 // client's cursor. See docs/adr/0001-sync-protocol.md and docs/adr/0007-better-auth.md.
-import { SYNC_KINDS } from "@app/core";
-import { Context, Schema } from "effect";
+import { SYNC_KINDS, SYNC_PROTOCOL } from "@app/core";
+import { Context, Effect, Schema } from "effect";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import {
   HttpApi,
   HttpApiClient,
@@ -138,3 +139,30 @@ export class SyncApi extends HttpApi.make("sync").add(SyncMetadataApi).add(SyncC
 
 /** The derived client, however it's built: over fetch in the apps, in memory in tests. */
 export type SyncClient = HttpApiClient.ForApi<typeof SyncApi>;
+
+/**
+ * The client over fetch. Every request carries Core's `SYNC_PROTOCOL`; `headers` adds the
+ * session (the phone's better-auth cookie). `fetch` replaces the global one, as in tests.
+ */
+export const makeSyncClient = (options: {
+  readonly baseUrl: string;
+  readonly headers?: () => Record<string, string>;
+  readonly fetch?: typeof globalThis.fetch;
+}): Effect.Effect<SyncClient> =>
+  HttpApiClient.make(SyncApi, {
+    baseUrl: options.baseUrl,
+    transformClient: HttpClient.mapRequest(
+      HttpClientRequest.setHeader(SYNC_PROTOCOL_HEADER, String(SYNC_PROTOCOL)),
+    ),
+  }).pipe(
+    Effect.provide(
+      HttpApiMiddleware.layerClient(Session, ({ next, request }) =>
+        next(HttpClientRequest.setHeaders(request, options.headers?.() ?? {})),
+      ),
+    ),
+    Effect.provide(FetchHttpClient.layer),
+    Effect.provideService(
+      FetchHttpClient.Fetch,
+      options.fetch ?? ((input, init) => globalThis.fetch(input, init)),
+    ),
+  );
