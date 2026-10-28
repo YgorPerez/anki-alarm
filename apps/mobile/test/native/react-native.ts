@@ -46,3 +46,5 @@ export const Alert = { alert: () => {} };
 export const BackHandler = {
   addEventListener: () => ({ remove: () => {} }),
 };
+
+export const useColorScheme = () => "light";
