@@ -51,7 +51,7 @@ object AlarmStore {
     if (isRinging(ctx)) { event(ctx, "absorbed", alarm.getString("id")); return }
     val ring = JSONObject().put("id", uuid7()).put("alarm", alarm).put("startedAt", System.currentTimeMillis()).put("phase", "ringing")
     event(ctx, "ringStarted", newRing = ring)
-    AlarmService.start(ctx, "scheduled ring")
+    AlarmService.start(ctx, AlarmService.REASON_SCHEDULED)
   }
   /** Sets the active ring's phase; a stale ring id changes nothing. Returns whether it matched. */
   @Synchronized fun setPhase(ctx: Context, ringId: String?, phase: String): Boolean {
