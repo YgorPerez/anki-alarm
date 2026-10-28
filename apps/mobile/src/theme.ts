@@ -1,17 +1,31 @@
 import {
   FACTORY_THEME,
+  nativeAppearance,
   parseThemeChoice,
   themeFor,
   type Hex,
   type ThemeChoice,
   type ThemeField,
 } from "@app/core";
+import { requireNativeModule } from "expo";
 import { useSyncExternalStore } from "react";
 import { Uniwind } from "uniwind";
 
-// The user's theme. It lives in memory until the phone has its database (#38), and becomes a
-// synced setting with sync (#52).
-let current = FACTORY_THEME;
+const appearance = requireNativeModule<{
+  getChoice: () => string | null;
+  save: (choice: string, light: number, dark: number) => void;
+  queueIcon: (primary: number, secondary: number) => void;
+}>("ThemeAppearance");
+
+// Local launch cache; #52 will replace this with the synced settings record as the source.
+const readChoice = (): ThemeChoice => {
+  try {
+    return parseThemeChoice(JSON.parse(appearance.getChoice() ?? "null"));
+  } catch {
+    return FACTORY_THEME;
+  }
+};
+let current = readChoice();
 const listeners = new Set<() => void>();
 
 const subscribe = (listener: () => void) => {
@@ -26,6 +40,8 @@ const subscribe = (listener: () => void) => {
  * dark one through `<ScopedTheme theme="dark">`.
  */
 const setTheme = (choice: ThemeChoice) => {
+  const { light, dark } = nativeAppearance(choice);
+  appearance.save(JSON.stringify(choice), light, dark);
   current = choice;
   for (const mode of ["light", "dark"] as const) {
     const theme = Object.entries(themeFor(choice, mode));
@@ -43,3 +59,11 @@ export const setThemeField = (field: ThemeField, value: Hex | "primary") =>
   setTheme(parseThemeChoice({ ...current, [field]: value }));
 
 export const resetTheme = () => setTheme(FACTORY_THEME);
+
+/** Called only after the launcher shortcut warning has been accepted. */
+export const queueThemeIcon = () => {
+  const { primary, secondary } = nativeAppearance(current);
+  appearance.queueIcon(primary, secondary);
+};
+
+setTheme(current);

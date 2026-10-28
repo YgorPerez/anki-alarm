@@ -69,6 +69,12 @@ const messages = {
     onTheAlarm: "No alarme",
     cardsLeft: "faltam 3",
     reset: "Voltar ao tema de fábrica",
+    splashSwatch:
+      "A abertura no Android 13+ e o ícone usam a amostra mais próxima. O ícone muda quando você sai do app.",
+    iconTitle: "Trocar o ícone?",
+    iconWarning:
+      "Seu launcher pode remover o atalho da tela inicial. Se isso acontecer, adicione o app novamente pela lista de aplicativos.",
+    applyIcon: "Aplicar cores ao ícone",
   },
   en: {
     title: "Decks",
@@ -138,6 +144,12 @@ const messages = {
     onTheAlarm: "On the alarm",
     cardsLeft: "3 left",
     reset: "Back to the factory theme",
+    splashSwatch:
+      "The Android 13+ splash and icon use the nearest swatch. The icon changes when you leave the app.",
+    iconTitle: "Change the icon?",
+    iconWarning:
+      "Your launcher may remove the home-screen shortcut. If that happens, add the app again from the app drawer.",
+    applyIcon: "Apply colors to icon",
   },
 } satisfies Messages<string>;
 type CopyKey = keyof (typeof messages)["pt-BR"];

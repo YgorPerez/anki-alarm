@@ -7,13 +7,13 @@ import {
   type ThemeField,
 } from "@app/core";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScopedTheme } from "uniwind";
 
 import { copy } from "./copy.ts";
 import { bold, regular } from "./fonts.ts";
-import { resetTheme, setThemeField, useThemeChoice } from "./theme.ts";
+import { queueThemeIcon, resetTheme, setThemeField, useThemeChoice } from "./theme.ts";
 
 type T = ReturnType<typeof copy>;
 
@@ -59,6 +59,23 @@ export function ThemeSettings({ locale, onBack }: { locale: Locale; onBack: () =
           {warnings.join(" ")}
         </Text>
         <AlarmPreview t={t} />
+        <Text style={regular} className="text-label text-muted-foreground">
+          {t("splashSwatch")}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          className="self-start rounded-full bg-surface px-5 py-3 active:opacity-80"
+          onPress={() =>
+            Alert.alert(t("iconTitle"), t("iconWarning"), [
+              { text: t("cancel"), style: "cancel" },
+              { text: t("applyIcon"), onPress: queueThemeIcon },
+            ])
+          }
+        >
+          <Text style={bold} className="text-label text-foreground">
+            {t("applyIcon")}
+          </Text>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           onPress={resetTheme}
