@@ -53,4 +53,12 @@ export type {
 export { replayCard, studyQueue, studyDayStart, renderCard } from "./study.ts";
 export type { LogEntry, MemoryState, Grade } from "./study.ts";
 export { studyStats } from "./stats.ts";
-export type { StatsOptions, StudyStats } from "./stats.ts";
+export type {
+  Bucket,
+  CardCounts,
+  RetentionPeriod,
+  RetentionRow,
+  StatsOptions,
+  StudyStats,
+  Tally,
+} from "./stats.ts";

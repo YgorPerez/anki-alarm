@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { Collection, studyStats, type LogEntry } from "./index.ts";
+import { Collection, studyStats, type Bucket, type LogEntry } from "./index.ts";
 
 const now = new Date(2026, 9, 28, 12).getTime();
 const day = 86_400_000;
@@ -16,8 +16,8 @@ function fixture() {
   c.addBasicNote(words.id, "two", "dois");
   c.addBasicNote(verbs.id, "run", "correr");
   const state = c.snapshot();
-  const [one, two, run] = state.cards.map((card) => card.id) as [string, string, string];
-  return { state, words: words.id, verbs: verbs.id, one, two, run };
+  const [one, two, run] = state.cards.map((card) => card.id);
+  return { state, words: words.id, verbs: verbs.id, one: one!, two: two!, run: run! };
 }
 let id = 0;
 const review = (cardId: string, at: number, grade: 1 | 2 | 3 | 4): LogEntry => ({
@@ -55,7 +55,13 @@ test("reviews per day count each grade by study day, skip voided answers and fol
 const snapshot = (
   cardId: string,
   at: number,
-  state: { state: 1 | 2 | 3; scheduled_days: number; due: number; stability?: number },
+  state: {
+    state: 1 | 2 | 3;
+    scheduled_days: number;
+    due: number;
+    stability?: number;
+    difficulty?: number;
+  },
 ): LogEntry => ({
   kind: "snapshot",
   id: `s${String(id++).padStart(4, "0")}`,
@@ -121,4 +127,103 @@ test("the forecast puts overdue cards on today and leaves new cards out", () => 
   expect(studyStats(state, [later], { now, days: 7 }).forecast.every((d) => d.due === 0)).toBe(
     true,
   );
+});
+
+test("true retention counts only answers to review cards, young or mature by their interval", () => {
+  const { state, one, two, run } = fixture();
+  const log = [
+    snapshot(one, now - 40 * day, { state: 2, scheduled_days: 30, due: now - 10 * day }),
+    review(one, now, 3),
+    snapshot(two, now - 10 * day, { state: 2, scheduled_days: 5, due: now - 5 * day }),
+    review(two, now - day, 1),
+    // Relearning and learning answers are not retention.
+    review(two, now - day + 600_000, 3),
+    review(run, now, 3),
+  ];
+  const rows = Object.fromEntries(
+    studyStats(state, log, { now }).retention.map((row) => [row.period, row]),
+  );
+  expect(Object.keys(rows)).toEqual(["today", "yesterday", "week", "month", "year", "all"]);
+  expect(rows.today).toEqual({
+    period: "today",
+    young: { passed: 0, failed: 0, rate: null },
+    mature: { passed: 1, failed: 0, rate: 1 },
+    total: { passed: 1, failed: 0, rate: 1 },
+  });
+  expect(rows.yesterday?.young).toEqual({ passed: 0, failed: 1, rate: 0 });
+  expect(rows.week?.total).toEqual({ passed: 1, failed: 1, rate: 0.5 });
+  expect(rows.all?.total).toEqual({ passed: 1, failed: 1, rate: 0.5 });
+});
+
+const at = (date: number, hour: number, minute = 0) =>
+  new Date(2026, 9, date, hour, minute).getTime();
+test("the hourly breakdown groups the window's answers by local hour with their success rate", () => {
+  const { state, one, two, run } = fixture();
+  const log = [
+    review(one, at(28, 7, 10), 3),
+    review(two, at(28, 7, 30), 1),
+    review(run, at(27, 22), 4),
+    review(run, at(10, 7), 1),
+  ];
+  const { hours } = studyStats(state, log, { now, days: 7 });
+  expect(hours).toHaveLength(24);
+  expect(hours[7]).toEqual({ hour: 7, again: 1, hard: 0, good: 1, easy: 0, rate: 0.5 });
+  expect(hours[22]).toEqual({ hour: 22, again: 0, hard: 0, good: 0, easy: 1, rate: 1 });
+  expect(hours[0]).toEqual({ hour: 0, again: 0, hard: 0, good: 0, easy: 0, rate: null });
+  expect(studyStats(state, log, { now, days: 30 }).hours[7]?.again).toBe(2);
+});
+
+const filled = (buckets: readonly Bucket[]) =>
+  buckets.filter((b) => b.count).map(({ from, to, count }) => [from, to, count]);
+test("intervals and FSRS memory distributions bucket the cards that have a memory state", () => {
+  const { state, one, two } = fixture();
+  const log: LogEntry[] = [
+    snapshot(one, now - 50 * day, {
+      state: 2,
+      scheduled_days: 7,
+      due: now - 43 * day,
+      stability: 1,
+      difficulty: 1,
+    }),
+    snapshot(two, now, {
+      state: 2,
+      scheduled_days: 30,
+      due: now + 30 * day,
+      stability: 400,
+      difficulty: 10,
+    }),
+  ];
+  const stats = studyStats(state, log, { now });
+  expect(filled(stats.intervals)).toEqual([
+    [7, 8, 1],
+    [22, 31, 1],
+  ]);
+  expect(stats.intervals[0]).toMatchObject({ from: 1, to: 2 });
+  expect(filled(stats.stability)).toEqual([
+    [1, 2, 1],
+    [366, null, 1],
+  ]);
+  expect(stats.stability[0]).toMatchObject({ from: 0, to: 1 });
+  // Difficulty 1 to 10 reads as 0% to 100%.
+  expect(stats.difficulty).toHaveLength(10);
+  expect(filled(stats.difficulty)).toEqual([
+    [0, 0.1, 1],
+    [0.9, 1, 1],
+  ]);
+  // FSRS-6 with default decay 0.1542: (1 + 0.9806 * 50 / 1) ** -0.1542 is about 0.55. Just
+  // reviewed is certain.
+  expect(filled(stats.retrievability)).toEqual([
+    [0.5, 0.6, 1],
+    [0.9, 1, 1],
+  ]);
+});
+
+test("the whole collection keeps answers to deleted cards in its activity but not in its counts", () => {
+  const { state, words } = fixture();
+  const log = [review("deleted", now, 3)];
+  const overall = studyStats(state, log, { now });
+  expect(overall.reviews.at(-1)?.good).toBe(1);
+  expect(overall.hours[12]?.good).toBe(1);
+  expect(overall.counts).toEqual({ new: 3, learning: 0, relearning: 0, young: 0, mature: 0 });
+  expect(studyStats(state, log, { now, deckId: words }).reviews.at(-1)?.good).toBe(0);
 });
