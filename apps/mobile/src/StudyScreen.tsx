@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   renderCard,
-  studyQueue,
+  nextStudyCard,
   type Grade,
   type Locale,
   type LogEntry,
@@ -214,12 +214,10 @@ function useStudySession(deckId: string, onExit: () => void) {
       return { ...snapshot, now, started: performance.now() };
     },
   });
-  const queue = query.data
-    ? studyQueue(query.data.collection, query.data.log, deckId, query.data.now)
-    : [];
-  // An undone card comes back first, as it was before the answer.
-  const item = queue.find((c) => c.card.id === undone) ?? queue[0];
-  const card = item?.card;
+  const next =
+    query.data &&
+    nextStudyCard(query.data.collection, query.data.log, deckId, query.data.now, undone);
+  const card = next?.card;
   const cardId = card?.id;
   const revealed = Boolean(cardId && revealedId === cardId);
   useEffect(() => {
@@ -272,14 +270,11 @@ function useStudySession(deckId: string, onExit: () => void) {
     lock.current = false;
     setBusy(false);
   }
-  const note = query.data?.collection.notes.find((n) => n.id === item?.card.fields.noteId.value);
-  const type = query.data?.collection.noteTypes.find((n) => n.id === note?.fields.noteTypeId.value);
-
   return {
     query,
     card,
-    note,
-    type,
+    note: next?.note,
+    type: next?.type,
     busy,
     error,
     revealed,

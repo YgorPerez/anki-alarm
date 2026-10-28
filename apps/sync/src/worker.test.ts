@@ -13,6 +13,8 @@ import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import { makeWorker, type Env } from "./worker.ts";
 
 const worker = makeWorker({ verifyIdToken: async () => true });
+/** The web app's origin, trusted by the Worker. */
+const WEB = "http://localhost:3000";
 let env: Env;
 let dispose: () => Promise<void>;
 
@@ -26,7 +28,7 @@ beforeAll(async () => {
     ...proxy.env,
     BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret-0123",
     BETTER_AUTH_URL: "http://localhost:8787",
-    TRUSTED_ORIGINS: "http://localhost:3000",
+    TRUSTED_ORIGINS: WEB,
     GOOGLE_CLIENT_ID: "web-client.apps.googleusercontent.com",
     GOOGLE_CLIENT_SECRET: "unused",
   };
@@ -47,12 +49,12 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(() => dispose());
 
-const call = (path: string, init?: RequestInit) =>
-  worker.fetch(new Request(`http://localhost:8787${path}`, init), env);
+const call = (path: string, init?: RequestInit, target = { worker, env }) =>
+  target.worker.fetch(new Request(`http://localhost:8787${path}`, init), target.env);
 
 const base64url = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
-/** Signs in with an ID token for `sub`, as the phone does, and returns the session cookie. */
-async function signIn(sub: string) {
+/** An unsigned Google ID token for `sub`: only an overridden or dev verifier accepts it. */
+const idToken = (sub: string) => {
   const claims = {
     iss: "https://accounts.google.com",
     aud: env.GOOGLE_CLIENT_ID,
@@ -62,12 +64,21 @@ async function signIn(sub: string) {
     name: sub,
     exp: Math.floor(Date.now() / 1000) + 600,
   };
-  const token = `${base64url({ alg: "none" })}.${base64url(claims)}.`;
-  const response = await call("/api/auth/sign-in/social", {
-    method: "POST",
-    headers: { "content-type": "application/json", origin: "http://localhost:3000" },
-    body: JSON.stringify({ provider: "google", idToken: { token } }),
-  });
+  return `${base64url({ alg: "none" })}.${base64url(claims)}.`;
+};
+const postSignIn = (sub: string, target = { worker, env }) =>
+  call(
+    "/api/auth/sign-in/social",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: WEB },
+      body: JSON.stringify({ provider: "google", idToken: { token: idToken(sub) } }),
+    },
+    target,
+  );
+/** Signs in with an ID token for `sub`, as the phone does, and returns the session cookie. */
+async function signIn(sub: string) {
+  const response = await postSignIn(sub);
   expect(response.status).toBe(200);
   const cookie = response.headers
     .getSetCookie()
@@ -321,4 +332,59 @@ test("a large file uploads whole, and one over the limit is refused", async () =
   await expect(
     run(api.media.upload({ params: { sha256 }, payload: new Uint8Array(MAX_MEDIA_BYTES + 1) })),
   ).rejects.toMatchObject({ _tag: "MediaRejected", reason: "size" });
+});
+
+test("the web's origin gets CORS with credentials on auth and sync, others get none", async () => {
+  const preflight = await call("/sync/push", {
+    method: "OPTIONS",
+    headers: {
+      origin: WEB,
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "b3, content-type, traceparent, x-sync-protocol",
+    },
+  });
+  expect(preflight.status).toBe(204);
+  expect(preflight.headers.get("access-control-allow-origin")).toBe(WEB);
+  expect(preflight.headers.get("access-control-allow-credentials")).toBe("true");
+  expect(preflight.headers.get("access-control-allow-headers")).toBe(
+    "b3, content-type, traceparent, x-sync-protocol",
+  );
+
+  const outdated = await call("/sync/metadata", { headers: { origin: WEB } });
+  expect(outdated.status).toBe(426);
+  expect(outdated.headers.get("access-control-allow-origin")).toBe(WEB);
+  const session = await call("/api/auth/get-session", { headers: { origin: WEB } });
+  expect(session.headers.get("access-control-allow-origin")).toBe(WEB);
+  expect(session.headers.get("vary")).toMatch(/origin/i);
+
+  const stranger = await call("/api/auth/get-session", {
+    headers: { origin: "https://evil.example" },
+  });
+  expect(stranger.headers.get("access-control-allow-origin")).toBeNull();
+  const strangerPreflight = await call("/sync/push", {
+    method: "OPTIONS",
+    headers: { origin: "https://evil.example", "access-control-request-method": "POST" },
+  });
+  expect(strangerPreflight.headers.get("access-control-allow-origin")).toBeNull();
+});
+
+test("over https the session cookie is cross-site, so the web on another domain sends it", async () => {
+  const secure = { worker, env: { ...env, BETTER_AUTH_URL: "https://sync.example.com" } };
+  const response = await postSignIn("fabi", secure);
+  expect(response.status).toBe(200);
+  const session = response.headers.getSetCookie().find((c) => c.includes("session_token="));
+  expect(session).toMatch(/SameSite=None/i);
+  expect(session).toMatch(/Secure/i);
+});
+
+test("dev sign-in takes unsigned ID tokens only on a localhost Worker that turns it on", async () => {
+  const real = makeWorker();
+  expect((await postSignIn("gabi", { worker: real, env })).status).not.toBe(200);
+  const dev = { worker: real, env: { ...env, DEV_SIGN_IN: "1" } };
+  expect((await postSignIn("gabi", dev)).status).toBe(200);
+  const deployed = {
+    worker: real,
+    env: { ...env, DEV_SIGN_IN: "1", BETTER_AUTH_URL: "https://sync.example.com" },
+  };
+  expect((await postSignIn("gabi", deployed)).status).not.toBe(200);
 });

@@ -229,3 +229,22 @@ export function studyQueue(
         a.card.id.localeCompare(b.card.id),
     );
 }
+
+/**
+ * The card a study session shows next, with its note and note type: a card the session just
+ * undid comes back first, as it was before the answer; otherwise the queue's head. Undefined when
+ * nothing is left to study now.
+ */
+export function nextStudyCard(
+  collection: CollectionState,
+  log: readonly LogEntry[],
+  deckId: string,
+  now: number,
+  undone?: string,
+) {
+  const queue = studyQueue(collection, log, deckId, now);
+  const item = queue.find((c) => c.card.id === undone) ?? queue[0];
+  const note = collection.notes.find((n) => n.id === item?.card.fields.noteId.value);
+  const type = collection.noteTypes.find((t) => t.id === note?.fields.noteTypeId.value);
+  return item && note && type ? { card: item.card, note, type } : undefined;
+}

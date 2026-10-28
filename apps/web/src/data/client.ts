@@ -1,5 +1,13 @@
 /* oxlint-disable unicorn/require-post-message-target-origin -- Workers and BroadcastChannels do not take a target origin. */
-import type { Message, Operation, Result } from "./protocol.ts";
+import {
+  fromFailure,
+  WRITES,
+  type Args,
+  type Kind,
+  type Message,
+  type Operation,
+  type Output,
+} from "./protocol.ts";
 
 /** One instance per tab. Web Locks owns the entire Worker lifetime, including VFS installation. */
 class WebData {
@@ -9,9 +17,10 @@ class WebData {
   private leader: string | undefined;
   private failure?: string;
   private listeners = new Set<() => void>();
+  private writeListeners = new Set<() => void>();
   private pending = new Map<
     string,
-    { resolve: (value: Result) => void; reject: (error: Error) => void }
+    { resolve: (value: unknown) => void; reject: (error: Error) => void }
   >();
   private release?: () => void;
   private abort = new AbortController();
@@ -64,8 +73,8 @@ class WebData {
     if (message.type === "request" && message.leader === this.id) this.worker?.postMessage(message);
     if (message.type === "response") {
       const pending = this.pending.get(message.id);
-      if (message.error) pending?.reject(new Error(message.error));
-      else if (message.result !== undefined) pending?.resolve(message.result);
+      if (message.ok) pending?.resolve(message.result);
+      else pending?.reject(fromFailure(message.error));
     }
   }
 
@@ -74,6 +83,7 @@ class WebData {
     for (const listener of this.listeners) listener();
   }
 
+  /** After any tab's write or a sync that changed something: refresh what's shown. */
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -81,17 +91,33 @@ class WebData {
     };
   };
 
-  async request(operation: Operation): Promise<Result> {
+  /** After this tab's own writes commit: what schedules its sync. */
+  onLocalWrite = (listener: () => void) => {
+    this.writeListeners.add(listener);
+    return () => {
+      this.writeListeners.delete(listener);
+    };
+  };
+
+  async request<K extends Kind>(kind: K, ...args: Args<K>): Promise<Output<K>> {
+    // The leader answers with the operation's own result.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const result = (await this.send({ kind, args } as Operation)) as Output<K>;
+    if (WRITES.has(kind)) for (const listener of this.writeListeners) listener();
+    return result;
+  }
+
+  private send(operation: Operation): Promise<unknown> {
     if (this.leader !== this.id) this.leader = undefined;
     const id = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       let sent = false;
-      const finish = (error?: Error, result?: Result) => {
+      const finish = (error?: Error, result?: unknown) => {
         clearInterval(discovery);
         clearTimeout(timeout);
         this.pending.delete(id);
         if (error) reject(error);
-        else resolve(result!);
+        else resolve(result);
       };
       const send = () => {
         if (this.failure) return finish(new Error(this.failure));
@@ -111,14 +137,18 @@ class WebData {
         reject: (error) => finish(error),
       });
       const discovery = setInterval(send, 100);
-      const timeout = setTimeout(() => {
-        this.leader = undefined;
-        finish(
-          new Error(
-            "Storage unavailable. The operation may have committed; reload before retrying.",
-          ),
-        );
-      }, 20_000);
+      // A sync waits on the network; everything else is local.
+      const timeout = setTimeout(
+        () => {
+          this.leader = undefined;
+          finish(
+            new Error(
+              "Storage unavailable. The operation may have committed; reload before retrying.",
+            ),
+          );
+        },
+        operation.kind === "sync" ? 120_000 : 20_000,
+      );
       send();
     });
   }

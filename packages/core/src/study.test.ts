@@ -3,6 +3,7 @@ import {
   Collection,
   replayCard,
   studyQueue,
+  nextStudyCard,
   type LogEntry,
   type Note,
   type NoteType,
@@ -224,4 +225,27 @@ test("card media stays referenced by file name and sound tags become tap-to-play
   expect(body(render(note, type, 0, "front"))).toBe(
     '<img src="cat.jpg"><audio controls preload="none" src="cat.mp3"></audio>',
   );
+});
+
+test("the next card is the queue's head with its note and type, and an undone card comes back first", () => {
+  const { state, deckId } = fixture();
+  const [first, second] = studyQueue(state, [], deckId, now).map((c) => c.card);
+  const next = nextStudyCard(state, [], deckId, now);
+  expect(next?.card.id).toBe(first!.id);
+  expect(next?.note.id).toBe(first!.fields.noteId.value);
+  expect(next?.type.id).toBe(next?.note.fields.noteTypeId.value);
+
+  expect(nextStudyCard(state, [], deckId, now, second!.id)?.card.id).toBe(second!.id);
+  // An undone card no longer in the queue (another device graded it) is skipped.
+  expect(nextStudyCard(state, [], deckId, now, "gone")?.card.id).toBe(first!.id);
+  const log: LogEntry[] = [first!, second!].map((card, i) => ({
+    kind: "review",
+    id: `r${i}`,
+    cardId: card.id,
+    at: now,
+    grade: 4,
+    durationMs: 1,
+    origin: "web",
+  }));
+  expect(nextStudyCard(state, log, deckId, now)).toBeUndefined();
 });

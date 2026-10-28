@@ -21,6 +21,11 @@ export interface Env {
   GOOGLE_CLIENT_SECRET: string;
   /** Comma-separated origins allowed to sign in besides the app's scheme: the web app. */
   TRUSTED_ORIGINS?: string;
+  /**
+   * "1" accepts unsigned Google ID tokens, for local journeys without an OAuth client. Honoured only
+   * when BETTER_AUTH_URL is localhost; never set it on a deployed Worker.
+   */
+  DEV_SIGN_IN?: string;
 }
 
 /** The phone's deep-link scheme (apps/mobile/app.config.ts). */
@@ -29,19 +34,27 @@ const APP_SCHEME = "anki-alarm://";
 /** Test hooks only: the Worker passes none. */
 export type AuthOverrides = Pick<GoogleOptions, "verifyIdToken">;
 
-export const makeAuth = (env: Env, overrides: AuthOverrides = {}) =>
+/** The web app's origins: they may sign in and call the API from the browser (CORS). */
+export const webOrigins = (env: Env) =>
+  (env.TRUSTED_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
+/** Dev sign-in: a local Worker that asked for it takes any well-formed ID token. */
+const devOverrides = (env: Env): AuthOverrides =>
+  env.DEV_SIGN_IN === "1" && LOCAL_HOSTS.has(new URL(env.BETTER_AUTH_URL).hostname)
+    ? { verifyIdToken: async () => true }
+    : {};
+
+export const makeAuth = (env: Env, overrides: AuthOverrides = devOverrides(env)) =>
   betterAuth({
     database: drizzleAdapter(drizzle(env.DB, { schema }), { provider: "sqlite", schema }),
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     basePath: "/api/auth",
-    trustedOrigins: [
-      APP_SCHEME,
-      ...(env.TRUSTED_ORIGINS ?? "")
-        .split(",")
-        .map((origin) => origin.trim())
-        .filter(Boolean),
-    ],
+    trustedOrigins: [APP_SCHEME, ...webOrigins(env)],
     socialProviders: {
       google: {
         clientId: env.GOOGLE_CLIENT_ID,
@@ -50,6 +63,11 @@ export const makeAuth = (env: Env, overrides: AuthOverrides = {}) =>
       },
     },
     plugins: [expo()],
+    // The web may live on another site than the Worker: its fetches send the session cookie only
+    // when it is SameSite=None (which needs Secure, so https). Locally both are localhost.
+    advanced: env.BETTER_AUTH_URL.startsWith("https:")
+      ? { defaultCookieAttributes: { sameSite: "none", secure: true } }
+      : {},
     telemetry: { enabled: false },
   });
 export type Auth = ReturnType<typeof makeAuth>;

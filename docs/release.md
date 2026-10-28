@@ -118,6 +118,13 @@ The sync Worker (`apps/sync`) runs better-auth on D1 with Google as the only pro
    | `GOOGLE_CLIENT_SECRET` | The web client's secret.                                                  |
    | `TRUSTED_ORIGINS`      | The web app's origin(s), comma-separated. The phone's scheme is built in. |
 
+   `TRUSTED_ORIGINS` is also the Worker's CORS list: only those origins may call `/api/auth` and
+   `/sync` from a browser with the session cookie. Over https the cookie is `SameSite=None; Secure`,
+   so the web works on another site than the Worker; browsers that block third-party cookies
+   (Safari, Firefox's strict mode) need both on one site, e.g. `app.example.com` and
+   `sync.example.com`. Never set `DEV_SIGN_IN` on a deployed Worker (it is ignored unless
+   `BETTER_AUTH_URL` is localhost).
+
 4. **GitHub environment variables** (`production`), inlined into the phone's bundle at build time;
    set the same two in the EAS **production** environment so `eas update` bundles them too:
 
@@ -126,11 +133,18 @@ The sync Worker (`apps/sync`) runs better-auth on D1 with Google as the only pro
    | `EXPO_PUBLIC_SYNC_URL`             | The Worker's public origin.                |
    | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | The web client's id (not the Android one). |
 
+The web build reads the same Worker origin as `VITE_SYNC_URL` (the release workflow passes
+`EXPO_PUBLIC_SYNC_URL`). Its sign-in is Google's redirect through the Worker, back to the page it
+started on.
+
 A build without the two variables runs fully offline and says sync is unavailable. For local work,
 put the five Worker values in `apps/sync/.dev.vars` (untracked), run
 `wrangler d1 migrations apply app-sync --local` and `wrangler dev`, and start the phone with the two
 `EXPO_PUBLIC_*` variables pointing at it. The Worker tests need none of this: they run on a local D1
-and R2.
+and R2. The web's Playwright journeys
+(`pnpm --filter @app/web test:e2e`) start their own `wrangler dev` on a fresh local D1 with
+`DEV_SIGN_IN=1`, and build the web with `VITE_DEV_SIGN_IN=1`: sign-in asks for an e-mail and sends
+an unsigned ID token, so no OAuth client is needed.
 
 Adding Google Sign-In, SecureStore, expo-network, expo-linking, expo-constants and expo-web-browser
 changed native code: the next release builds an APK, and a development client must be rebuilt.
