@@ -24,3 +24,7 @@ apps/*/.dev.vars
 /release-version.json
 /release-metadata.json
 /anki-alarm.apk
+
+# Playwright
+apps/web/test-results/
+apps/web/playwright-report/
