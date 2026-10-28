@@ -1,4 +1,11 @@
-import { studyStats, type Bucket, type Locale, type StudyStats, type Theme } from "@app/core";
+import {
+  studyStats,
+  wakeUpStats,
+  type Bucket,
+  type Locale,
+  type StudyStats,
+  type Theme,
+} from "@app/core";
 import { useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
 import { useEffect, useState, type ReactNode } from "react";
@@ -7,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { localData } from "./database.ts";
 import { CountChart, GradeChart, GradeLegend, RetentionTable } from "./StatsCharts.tsx";
 import { statsCopy, type StatsCopy } from "./stats-copy.ts";
+import { WakeUpSection } from "./WakeUpStats.tsx";
 
 const regular = { fontFamily: "AtkinsonHyperlegible_400Regular" };
 const bold = { fontFamily: "AtkinsonHyperlegible_700Bold" };
@@ -35,7 +43,14 @@ export function StatsScreen({
     networkMode: "always",
     queryFn: async () => ({
       ...(await Effect.runPromise(
-        localData((data) => Effect.all({ collection: data.collection, log: data.reviewLog })),
+        localData((data) =>
+          Effect.all({
+            collection: data.collection,
+            log: data.reviewLog,
+            alarms: data.alarms,
+            events: data.events,
+          }),
+        ),
       )),
       now: Date.now(),
     }),
@@ -82,6 +97,16 @@ export function StatsScreen({
             />
           ))}
         </View>
+        {data && !deckId ? (
+          <Section title={t("wakeUp")} hint={t("wakeUpHint")}>
+            <WakeUpSection
+              stats={wakeUpStats(data.events, data.log, { now: data.now, days })}
+              alarms={data.alarms}
+              t={t}
+              locale={locale}
+            />
+          </Section>
+        ) : null}
         {stats ? (
           <Sections stats={stats} t={t} theme={theme} locale={locale} />
         ) : query.isError ? (
