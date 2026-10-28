@@ -1,9 +1,9 @@
 /*
  * The app's factory theme, shared by the phone (uniwind) and the web (Tailwind 4 + shadcn).
- * Values come from the theme derivation (prototyped in prototypes/design, owned by Core once
- * it exists) applied to the factory choice: lilac primary, peach attention, one color per
- * grade. DESIGN.md explains each role, and tokens.test.ts keeps the files in step. A user's
- * own theme is laid over these at runtime. Shape and rules: docs/research/design-tokens.md.
+ * Values are Core's `themeFor` applied to the factory choice: lilac primary, peach attention,
+ * one color per grade. DESIGN.md explains each role, and tokens.test.ts keeps the files and
+ * Core in step. A user's own theme is laid over these at runtime. Shape and rules:
+ * docs/research/design-tokens.md.
  * No var() between tokens, no platform variants here.
  */
 @layer theme {
