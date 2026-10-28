@@ -11,8 +11,10 @@
   "dependencies": {
     "@app/core": "workspace:*",
     "@app/design-tokens": "workspace:*",
+    "effect": "^4.0.6",
     "expo": "~58.0.20",
     "expo-dev-client": "~58.0.16",
+    "expo-sqlite": "^58.0.14",
     "expo-status-bar": "~58.0.4",
     "react": "catalog:",
     "react-native": "0.88.0",

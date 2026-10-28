@@ -1,0 +1,5 @@
+<resources>
+  <string name="alarm_title">Despertador</string>
+  <string name="alarm_return">Toque para voltar ao alarme</string>
+  <string name="alarm_unlock">Desbloqueie para começar</string>
+</resources>
