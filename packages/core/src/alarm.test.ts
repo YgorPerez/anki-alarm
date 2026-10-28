@@ -53,6 +53,7 @@ describe("a new alarm", () => {
       snoozeCap: 2,
       awakeCheck: false,
       awakeCheckMinutes: 5,
+      readAloud: false,
     });
   });
 });

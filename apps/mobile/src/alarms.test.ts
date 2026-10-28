@@ -23,6 +23,7 @@ const alarm: Alarm = {
   snoozeCap: 2,
   awakeCheck: false,
   awakeCheckMinutes: 5,
+  readAloud: false,
 };
 it("saves alarms and replaces the native schedule with every enabled alarm", async () => {
   const native = memoryAlarmService();

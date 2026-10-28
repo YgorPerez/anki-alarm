@@ -2,13 +2,15 @@ import { useQuery } from "@tanstack/react-query";
 import {
   alarmSession,
   awakeCheckAfter,
+  readAloudFor,
   ringNeed,
   snoozeOffer,
   type Grade,
   type Locale,
+  type ReadAloud,
 } from "@app/core";
 import { Effect, type Layer } from "effect";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { AlarmService, Ring } from "./alarms.ts";
@@ -21,10 +23,34 @@ import {
   useReveal,
 } from "./alarm-ui.tsx";
 import { bold, GRADE_DELAY_MS, signalWith } from "./alarm-screen.ts";
+import { mediaUrl } from "./apkg.ts";
 import { copy } from "./copy.ts";
 import { localData } from "./database.ts";
 
 type Session = ReturnType<typeof alarmSession>;
+
+type Signal = ReturnType<typeof signalWith>;
+
+/**
+ * Reads a front: its own clips one after another, as Anki plays them, then TTS when none played.
+ * Gives up once not `current`.
+ */
+async function readFront(
+  signal: Signal,
+  reading: ReadAloud,
+  current: () => boolean,
+  from = 0,
+  played = false,
+): Promise<void> {
+  if (!current()) return;
+  const clip = reading.clips[from];
+  if (clip !== undefined) {
+    const ok = await signal((service) => service.playClip(mediaUrl(clip)));
+    return readFront(signal, reading, current, from + 1, played || ok);
+  }
+  if (played || !reading.text) return;
+  await signal((service) => service.speak(reading.text, reading.language));
+}
 
 /**
  * The alarm screen: Start begins the session, and N cards rated Good or Easy dismiss the ring.
@@ -271,6 +297,21 @@ function useAlarmSession(
   // When the current card appeared, on the monotonic clock: the answer's time taken.
   const shownAt = useRef(0);
   const signal = signalWith(layer);
+  // Bumped for each card shown, so a reading still under way knows it's been replaced.
+  const readingId = useRef(0);
+  /** Read aloud, when the alarm has it: the card just shown. A failure never blocks the session. */
+  const read = (next: Session["next"] | undefined) => {
+    const id = ++readingId.current;
+    if (!ring.alarm.readAloud || !next) return;
+    const reading = readAloudFor({
+      note: next.note,
+      type: next.noteType,
+      ordinal: next.card.fields.ordinal.value,
+      deckName: next.deckName,
+      language: next.language,
+    });
+    if (reading) void readFront(signal, reading, () => id === readingId.current).catch(() => {});
+  };
   const query = useQuery({
     // Each snooze raises N.
     queryKey: ["alarmSession", ring.id, current.snoozes],
@@ -300,6 +341,21 @@ function useAlarmSession(
   const cardId = session?.next?.card.id;
   const card = useReveal(cardId, gradeDelayMs);
   useBlockBack();
+  const readsAloud = ring.alarm.readAloud;
+  /** Stops a reading under way, as a snooze or leaving the screen does. */
+  const stopReading = () => {
+    readingId.current++;
+    if (readsAloud) void signal((service) => service.stopReading).catch(() => {});
+  };
+  useEffect(
+    () => () => {
+      if (!readsAloud) return;
+      // Leaving the screen stops the reading.
+      readingId.current++;
+      void signalWith(layer)((service) => service.stopReading).catch(() => {});
+    },
+    [layer, readsAloud],
+  );
 
   /** A deck with no cards can't give the awake check a card, so that dismissal skips it. */
   const finish = async (awakeCheck = true) => {
@@ -322,11 +378,15 @@ function useAlarmSession(
         setLocal({ from: ring, ring: { ...current, phase: "session", snoozedUntil: null } });
         setStarted(true);
         shownAt.current = performance.now();
-        if (session?.done) await finish();
+        // Start can come before the session first loads.
+        const loaded = session ?? (await query.refetch()).data;
+        if (loaded?.done) await finish();
+        else read(loaded?.next);
       }),
     snooze: () =>
       guarded(async () => {
         if (!offer) return;
+        stopReading();
         const next = await signal((service) => service.snooze(ring.id, offer.minutes));
         if (next) setLocal({ from: ring, ring: next });
         setStarted(false);
@@ -349,6 +409,7 @@ function useAlarmSession(
         const { data } = await query.refetch();
         shownAt.current = performance.now();
         if (data?.done) await finish();
+        else read(data?.next);
       }),
     dismiss: () => guarded(() => finish(false)),
   };

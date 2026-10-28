@@ -7,6 +7,7 @@ import { fakeSyncApi } from "@app/contracts/testing";
 import { localData } from "./database.ts";
 import { AlarmScreen } from "./AlarmScreen.tsx";
 import { memoryAlarmService, type Ring } from "./alarms.ts";
+import { mediaUrl } from "./apkg.ts";
 
 const front = () => String(screen.getByLabelText("Frente").props.source.html);
 async function revealAndGrade(grade: string) {
@@ -288,4 +289,103 @@ test("with the awake check on, the dismissal schedules it after the alarm's dela
   await fireEvent.press(await screen.findByRole("button", { name: "Desligar" }));
   await waitFor(() => expect(empty.dismissed()).toBe(true));
   expect(empty.native.awakeCheck()).toBeNull();
+});
+
+/** Rings an alarm on a new deck whose notes are `fronts`, in order. */
+async function ringWithFronts(
+  fronts: string[],
+  options: { readAloud: boolean; language?: string },
+) {
+  const name = `Acordar ${fronts.join()}`;
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck(name);
+        if (options.language) c.setDeckLanguage(deck.id, options.language);
+        for (const text of fronts) c.addBasicNote(deck.id, text, "verso");
+      }),
+    ),
+  );
+  const deck = state.decks.find((d) => d.fields.name.value === name)!;
+  const ring: Ring = {
+    id: `ring-${deck.id}`,
+    alarm: { ...newAlarm("alarm"), deckId: deck.id, need: 2, readAloud: options.readAloud },
+    startedAt: Date.now(),
+    phase: "ringing",
+    snoozes: 0,
+    snoozedUntil: null,
+  };
+  const native = memoryAlarmService();
+  const view = await render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" } } })
+      }
+    >
+      <AlarmScreen
+        ring={ring}
+        locale="pt-BR"
+        layer={native.layer}
+        gradeDelayMs={10}
+        onDismissed={() => {}}
+      />
+    </QueryClientProvider>,
+  );
+  return { native, view, start: pressStart };
+}
+const pressStart = () => fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+const reading = (signals: readonly string[]) =>
+  signals.filter((s) => /^(?:speak|playClip|stopReading)/.test(s));
+
+test("read aloud plays a card's own audio, else speaks its front in the deck's language", async () => {
+  const { native, view, start } = await ringWithFronts(["gato [sound:miau.mp3]", "casa"], {
+    readAloud: true,
+    language: "en-US",
+  });
+  try {
+    await screen.findByRole("button", { name: "Começar" });
+    expect(reading(native.signals())).toEqual([]);
+    await start();
+    await waitFor(() =>
+      expect(reading(native.signals())).toEqual([`playClip:${mediaUrl("miau.mp3")}`]),
+    );
+
+    await revealAndGrade("Bom");
+    await waitFor(() => expect(native.signals()).toContain("speak:en-US:casa"));
+    expect(reading(native.signals()).filter((s) => s.startsWith("speak"))).toEqual([
+      "speak:en-US:casa",
+    ]);
+  } finally {
+    await view.unmount();
+  }
+  // Leaving the screen stops whatever is still being read.
+  expect(reading(native.signals()).at(-1)).toBe("stopReading");
+});
+
+test("read aloud speaks the front when the card's audio can't play", async () => {
+  const { native, view, start } = await ringWithFronts(["pato [sound:quack.mp3]"], {
+    readAloud: true,
+  });
+  try {
+    native.unplayable(mediaUrl("quack.mp3"));
+    await start();
+    await waitFor(() => expect(native.signals()).toContain("speak:pt-BR:pato"));
+  } finally {
+    await view.unmount();
+  }
+});
+
+test("an alarm without read aloud reads nothing", async () => {
+  const { native, view, start } = await ringWithFronts(["boi [sound:muu.mp3]", "vaca"], {
+    readAloud: false,
+  });
+  try {
+    await start();
+    await screen.findByLabelText("Frente");
+    await revealAndGrade("Bom");
+    await screen.findByText("1 de 2 certos · faltam 1");
+  } finally {
+    await view.unmount();
+  }
+  expect(reading(native.signals())).toEqual([]);
 });

@@ -14,7 +14,17 @@ export interface RenderInput {
 
 /** A card side as an HTML document, from Anki's template syntax, with media resolved. */
 export function renderCard(input: RenderInput) {
-  const { note, type, ordinal, side, dark } = input;
+  const { type, ordinal, side, dark } = input;
+  const body = renderSide(input, side);
+  return `<!doctype html><html class="${dark ? "nightMode night_mode" : ""}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: file:; media-src data: file:; font-src data: file:; style-src 'unsafe-inline'"><style>body{margin:24px;background:${dark ? "#000" : "#fff"};color:${dark ? "#fff" : "#16131d"};font:28px/1.4 sans-serif;overflow-wrap:anywhere}img{max-width:100%}audio{display:block;margin:12px auto}${type.fields.css.value}</style></head><body class="card card${ordinal + 1}">${resolveMedia(body, input.media ?? encodeURIComponent)}</body></html>`;
+}
+
+/** A card side's HTML before media are resolved: `[sound:…]` tags are still in it. */
+export function renderSide(
+  input: Omit<RenderInput, "side" | "dark" | "media">,
+  side: "front" | "back",
+) {
+  const { note, type, ordinal } = input;
   const cloze = type.fields.kind.value === "cloze";
   const template =
     type.fields.templates.value[cloze ? 0 : ordinal] ?? type.fields.templates.value[0];
@@ -37,8 +47,7 @@ export function renderCard(input: RenderInput) {
   const front = render(parse(template?.front ?? ""), context);
   context.side = "back";
   context.special.set("FrontSide", front);
-  const body = side === "front" ? front : render(parse(template?.back ?? ""), context);
-  return `<!doctype html><html class="${dark ? "nightMode night_mode" : ""}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: file:; media-src data: file:; font-src data: file:; style-src 'unsafe-inline'"><style>body{margin:24px;background:${dark ? "#000" : "#fff"};color:${dark ? "#fff" : "#16131d"};font:28px/1.4 sans-serif;overflow-wrap:anywhere}img{max-width:100%}audio{display:block;margin:12px auto}${type.fields.css.value}</style></head><body class="card card${ordinal + 1}">${resolveMedia(body, input.media ?? encodeURIComponent)}</body></html>`;
+  return side === "front" ? front : render(parse(template?.back ?? ""), context);
 }
 
 interface Context {
@@ -132,7 +141,7 @@ const ruby = (value: string, replace: (base: string, reading: string) => string)
   value.replace(/ ?([^ >]+?)\[(.+?)\]/g, (_, base: string, reading: string) =>
     replace(base, reading),
   );
-const plain = (html: string) =>
+export const plain = (html: string) =>
   html
     .replace(/<[^>]*>/g, "")
     .replaceAll("&nbsp;", " ")

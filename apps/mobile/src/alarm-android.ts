@@ -5,6 +5,8 @@ import { decodeAlarms, decodeAwakeCheck, decodeRing, decodeEvents } from "./alar
 
 const attempt = <T>(run: () => T) =>
   Effect.try({ try: run, catch: (error) => new Error(String(error)) });
+const settled = <T>(run: () => Promise<T>) =>
+  Effect.tryPromise({ try: run, catch: (error) => new Error(String(error)) });
 export const androidAlarmService = Layer.succeed(AlarmService, {
   getPermissions: attempt(() => native.getPermissions()),
   request: (kind) => attempt(() => native.request(kind)),
@@ -28,5 +30,8 @@ export const androidAlarmService = Layer.succeed(AlarmService, {
     attempt(() => {
       native.awakeCheckPassed(id);
     }),
+  speak: (text, language) => settled(() => native.speak(text, language)),
+  playClip: (uri) => settled(() => native.playClip(uri)),
+  stopReading: attempt(() => native.stopReading()),
 });
 export { native };

@@ -42,7 +42,14 @@ the pending check. JS shows the prompt only once `shownAt` is set.
 
 The service runs one `RingPolicy` per ring; its `Start` says how the ring began: `FRESH` (due, or a
 snooze ended: ramps), `TAKEOVER` (a new service after a kill or reboot: full, journals
-`serviceRestarted`) or `ANSWER_NOW` (silent session). Later alarm tickets add read aloud from ADR 0005.
+`serviceRestarted`) or `ANSWER_NOW` (silent session).
+
+#48 adds read aloud. `speak(text, language)` and `playClip(uri)` play on the alarm stream
+(`ReadAloud.kt`), so they're heard in silent and Do Not Disturb. Each resolves when its reading ends,
+is replaced by the next or is stopped (`stopReading`); `playClip` resolves false when the file can't
+play, and JS then speaks the front instead. While one reads, the ring stays silent and the idle
+timer waits; it restarts when the reading ends (RingPolicy `readingStarted`/`readingEnded`). Leaving the screen long enough to bring the ring
+back stops the reading. A missing TTS voice for the deck's language uses the engine's default.
 
 ## Verification
 

@@ -96,4 +96,30 @@ class RingPolicyTest {
     assertEquals(listOf(Fired.LEFT), p.advance(32_000))
     assertTrue(p.wayBack)
   }
+
+  @Test fun aReadingKeepsTheSessionSilentAndHoldsTheIdleTime() {
+    val p = policy().apply { start(0, RingPolicy.Start.FRESH); screenShown(0); sessionStarted(0) }
+    p.readingStarted(5_000)
+    p.activity(10_000)
+    assertEquals(emptyList<Fired>(), p.advance(60_000))
+    assertEquals(Sound.SILENT, p.sound)
+    p.readingEnded(60_000)
+    assertEquals(listOf(Fired.IDLE), p.advance(80_000))
+  }
+
+  @Test fun leavingDuringAReadingBringsTheSoundBackAndEndsIt() {
+    val p = policy().apply { start(0, RingPolicy.Start.FRESH); screenShown(0); sessionStarted(0) }
+    p.readingStarted(1_000)
+    p.screenLeft(2_000)
+    assertEquals(listOf(Fired.LEFT), p.advance(12_000))
+    assertEquals(Sound.FULL, p.sound)
+    assertFalse(p.reading)
+  }
+
+  @Test fun aReadingOutsideASessionChangesNothing() {
+    val p = policy().apply { start(0, RingPolicy.Start.FRESH) }
+    p.readingStarted(0)
+    assertEquals(Sound.RAMP, p.sound)
+    assertFalse(p.reading)
+  }
 }

@@ -1,6 +1,7 @@
 import { AlarmSoundSettings } from "./AlarmSoundSettings.tsx";
 import { AlarmDeckSettings } from "./AlarmDeckSettings.tsx";
 import { AlarmSnoozeSettings } from "./AlarmSnoozeSettings.tsx";
+import { AlarmReadAloudSettings } from "./AlarmReadAloudSettings.tsx";
 import { AlarmScreen } from "./AlarmScreen.tsx";
 import { AwakeCheckScreen } from "./AwakeCheckScreen.tsx";
 import { AlarmAwakeCheckSettings } from "./AlarmAwakeCheckSettings.tsx";
@@ -440,6 +441,7 @@ function AlarmEditor({
       <AlarmSoundSettings alarm={options} locale={locale} onChange={setOptions} />
       <AlarmSnoozeSettings alarm={options} locale={locale} onChange={setOptions} />
       <AlarmAwakeCheckSettings alarm={options} locale={locale} onChange={setOptions} />
+      <AlarmReadAloudSettings alarm={options} locale={locale} onChange={setOptions} />
       <Text accessibilityRole="alert" className="text-body text-attention">
         {error}
       </Text>

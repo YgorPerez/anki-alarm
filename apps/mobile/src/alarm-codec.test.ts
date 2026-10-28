@@ -53,3 +53,9 @@ it("reads native's awake check, before and after its prompt shows", () => {
   ).toMatchObject({ shownAt: 9 });
   expect(decodeAwakeCheck("null")).toBeNull();
 });
+
+it("keeps read aloud through native, off for older alarms", () => {
+  expect(ringAlarm(JSON.stringify({ ...newAlarm("a"), readAloud: true })).readAloud).toBe(true);
+  const { readAloud: _readAloud, ...legacy } = newAlarm("a");
+  expect(ringAlarm(JSON.stringify(legacy)).readAloud).toBe(false);
+});

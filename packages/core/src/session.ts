@@ -2,6 +2,7 @@
 import { Rating, State, type Grade } from "ts-fsrs";
 import type { Alarm } from "./alarm.ts";
 import type { Card, CollectionState } from "./collection.ts";
+import { deckLanguage } from "./read-aloud.ts";
 import { newPosition, replayCard, type LogEntry } from "./study.ts";
 
 /**
@@ -152,7 +153,16 @@ export function alarmSession({ collection, log, deckId, need, ringId, now }: Ala
     right,
     need,
     done,
-    next: pick && note && noteType ? { ...pick, note, noteType, deckName } : null,
+    next:
+      pick && note && noteType
+        ? {
+            ...pick,
+            note,
+            noteType,
+            deckName,
+            language: deckLanguage(collection, pick.card.fields.deckId.value),
+          }
+        : null,
   };
 }
 

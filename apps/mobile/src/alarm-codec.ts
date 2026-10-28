@@ -26,6 +26,8 @@ const alarm = Schema.Struct({
   // And none before #47 has an awake check.
   awakeCheck: Schema.optional(Schema.Unknown),
   awakeCheckMinutes: Schema.optional(Schema.Unknown),
+  // Alarms saved before #48 don't read aloud.
+  readAloud: Schema.optional(Schema.Unknown),
 });
 const event = Schema.Struct({
   id: Schema.String,

@@ -30,6 +30,8 @@ export interface Alarm {
   awakeCheck: boolean;
   /** Minutes from dismissal to the awake check's prompt. */
   awakeCheckMinutes: number;
+  /** Reads each card's front aloud in the session: its own audio, else TTS. */
+  readAloud: boolean;
 }
 
 /** The sounds shipped in the app. Native plays each from `res/raw/alarm_<id>`. */
@@ -77,6 +79,7 @@ export const newAlarm = (id: string): Alarm => ({
   snoozeCap: 2,
   awakeCheck: false,
   awakeCheckMinutes: 5,
+  readAloud: false,
 });
 
 /** The largest N the editor offers. */
@@ -105,7 +108,8 @@ type Upgraded =
   | "snoozeMinutes"
   | "snoozeCap"
   | "awakeCheck"
-  | "awakeCheckMinutes";
+  | "awakeCheckMinutes"
+  | "readAloud";
 type StoredAlarm = Omit<Alarm, Upgraded> & Partial<Record<Upgraded, unknown>>;
 
 /** A whole number kept within `min..max`; anything else is the fallback. */
@@ -124,6 +128,7 @@ export function readAlarm({
   snoozeCap,
   awakeCheck,
   awakeCheckMinutes,
+  readAloud,
   ...alarm
 }: StoredAlarm): Alarm {
   const defaults = newAlarm(alarm.id);
@@ -142,6 +147,7 @@ export function readAlarm({
       MAX_AWAKE_CHECK_MINUTES,
       defaults.awakeCheckMinutes,
     ),
+    readAloud: readAloud === true,
   };
 }
 
@@ -194,6 +200,7 @@ export function alarmFromRecord(record: AlarmRecord): Alarm {
     snoozeCap: record.fields.snoozeCap?.value,
     awakeCheck: record.fields.awakeCheck?.value,
     awakeCheckMinutes: record.fields.awakeCheckMinutes?.value,
+    readAloud: record.fields.readAloud?.value,
   });
 }
 

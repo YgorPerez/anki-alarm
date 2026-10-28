@@ -9,6 +9,7 @@ import {
   type AnkiDroidSource,
 } from "./ankidroid.ts";
 import { cardId, importId, uuid7 } from "./ids.ts";
+import { isLanguageTag } from "./read-aloud.ts";
 import { studyDayStart, type LogEntry } from "./study.ts";
 
 /** FSRS-6's default weights, which every new preset starts from. */
@@ -33,6 +34,8 @@ export type Deck = RecordFields<{
   desiredRetention: number | null;
   /** The phone that linked this deck from AnkiDroid; another phone can take over. */
   linkedBy?: string;
+  /** The BCP 47 tag read aloud speaks this deck's cards in. Absent: its parent's, or pt-BR. */
+  language?: string;
 }> &
   AnkiIdentity;
 export type Preset = RecordFields<{
@@ -323,6 +326,13 @@ export class Collection {
     if (!deck || !name.trim()) throw new Error("Invalid deck");
     if (deck.fields.name.value !== name.trim())
       deck.fields.name = { value: name.trim(), hlc: this.tick() };
+  }
+  /** The BCP 47 tag read aloud speaks the deck's cards in; subdecks without one inherit it. */
+  setDeckLanguage(id: string, language: string) {
+    const deck = this.state.decks.find((d) => d.id === id);
+    if (!deck || !isLanguageTag(language)) throw new Error("Invalid deck language");
+    if (deck.fields.language?.value !== language)
+      deck.fields.language = { value: language, hlc: this.tick() };
   }
   /** Adds a note to Basic, the app's own note type, creating it on first use. */
   addBasicNote(deckId: string, front: string, back: string): Note {

@@ -25,6 +25,9 @@ class RingPolicy(private val leaveMs: Long, private val idleMs: Long) {
     private set
   private var leftAt: Long? = null
   private var idleFrom: Long? = null
+  /** Read aloud is playing: the session stays silent and the idle time waits for it. */
+  var reading = false
+    private set
 
   fun start(now: Long, how: Start) {
     sound = if (how == Start.FRESH) Sound.RAMP else Sound.FULL
@@ -32,6 +35,7 @@ class RingPolicy(private val leaveMs: Long, private val idleMs: Long) {
     wayBack = false
     leftAt = null
     idleFrom = null
+    reading = false
     if (how == Start.ANSWER_NOW) sessionStarted(now)
   }
 
@@ -56,6 +60,20 @@ class RingPolicy(private val leaveMs: Long, private val idleMs: Long) {
     if (inSession) quiet(now)
   }
 
+  /** Read aloud began: silent, with the idle time held until it ends. Only in a session. */
+  fun readingStarted(now: Long) {
+    if (!inSession) return
+    reading = true
+    quiet(now)
+  }
+
+  /** Read aloud ended or was stopped: the idle time starts over. */
+  fun readingEnded(now: Long) {
+    if (!reading) return
+    reading = false
+    idleFrom = now
+  }
+
   fun nextDeadline(): Long? = listOfNotNull(idleDeadline(), leaveDeadline()).minOrNull()
 
   /** Applies every timer due by [now], in order, and returns the ones that fired. */
@@ -63,7 +81,9 @@ class RingPolicy(private val leaveMs: Long, private val idleMs: Long) {
     val due = listOfNotNull(idleDeadline()?.let { it to Fired.IDLE }, leaveDeadline()?.let { it to Fired.LEFT })
       .filter { it.first <= now }.sortedBy { it.first }.map { it.second }
     for (fired in due) {
+      // The sound coming back ends any reading: read aloud only plays over silence.
       sound = Sound.FULL
+      reading = false
       when (fired) {
         Fired.IDLE -> idleFrom = null
         Fired.LEFT -> { leftAt = null; wayBack = true }
@@ -74,7 +94,7 @@ class RingPolicy(private val leaveMs: Long, private val idleMs: Long) {
 
   private fun quiet(now: Long) {
     sound = Sound.SILENT
-    idleFrom = now
+    idleFrom = if (reading) null else now
   }
 
   private fun idleDeadline() = idleFrom?.plus(idleMs)

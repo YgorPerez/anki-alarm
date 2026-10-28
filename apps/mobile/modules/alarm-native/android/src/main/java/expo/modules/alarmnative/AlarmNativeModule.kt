@@ -24,7 +24,7 @@ class AlarmNativeModule : Module() {
     Events("onChange")
     Function("createId") { AlarmStore.uuid7() }
     OnCreate { current = this@AlarmNativeModule; AlarmService.ensureChannel(context) }
-    OnDestroy { current = null; picking?.second?.resolve(null); picking = null; Sounds.stopPreview() }
+    OnDestroy { current = null; picking?.second?.resolve(null); picking = null; Sounds.stopPreview(); ReadAloud.release() }
     // Resolves with the picked sound's JSON, or null when the picker is cancelled.
     AsyncFunction("pickSound") { kind: String, currentUri: String?, promise: Promise ->
       val activity = appContext.currentActivity ?: return@AsyncFunction promise.resolve(null)
@@ -90,6 +90,14 @@ class AlarmNativeModule : Module() {
     Function("getAwakeCheck") { AwakeCheck.pending(context)?.toString() }
     // The check's card was answered, any grade. Ignores a check that isn't the pending one.
     Function("awakeCheckPassed") { checkId: String -> AwakeCheck.passed(context, checkId) }
+    // Read aloud: each resolves when its reading ends, is replaced or is stopped.
+    AsyncFunction("speak") { text: String, language: String, promise: Promise ->
+      ReadAloud.speak(context, text, language) { promise.resolve(null) }
+    }.runOnQueue(Queues.MAIN)
+    AsyncFunction("playClip") { uri: String, promise: Promise ->
+      ReadAloud.playClip(context, uri) { played -> promise.resolve(played) }
+    }.runOnQueue(Queues.MAIN)
+    Function("stopReading") { android.os.Handler(android.os.Looper.getMainLooper()).post { ReadAloud.stop() } }
     Function("getPermissions") { AlarmReliability.permissions(context) }
     Function("isOnboardingComplete") { context.getSharedPreferences("onboarding", Context.MODE_PRIVATE).getBoolean("complete", false) }
     Function("completeOnboarding") { context.getSharedPreferences("onboarding", Context.MODE_PRIVATE).edit().putBoolean("complete", true).commit() }

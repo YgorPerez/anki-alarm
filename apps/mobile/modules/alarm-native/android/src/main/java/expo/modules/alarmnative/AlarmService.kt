@@ -363,7 +363,12 @@ class AlarmService : Service() {
       log("sound ${p.sound}")
       when (p.sound) {
         RingPolicy.Sound.RAMP -> { setTarget(1f, ramp = true); vibrate() }
-        RingPolicy.Sound.FULL -> { setTarget(1f, ramp = false); vibrate() }
+        RingPolicy.Sound.FULL -> {
+          setTarget(1f, ramp = false)
+          vibrate()
+          // The ring coming back ends any reading.
+          ReadAloud.stop()
+        }
         RingPolicy.Sound.SILENT -> {
           setTarget(0f, ramp = false)
           vibrator?.cancel()
@@ -417,6 +422,9 @@ class AlarmService : Service() {
   // An answer or tap: silence again if idle brought the sound back, and restart the idle timer.
   fun onActivity() = signal { activity(it) }
 
+  // Read aloud began or ended. While it reads, the ring stays silent and the idle timer waits.
+  fun onReading(reading: Boolean) = signal { if (reading) readingStarted(it) else readingEnded(it) }
+
   fun dismiss() {
     AlarmStore.finish(this)
     AlarmScheduler.cancelSnooze(this)
@@ -441,6 +449,7 @@ class AlarmService : Service() {
   }
 
   private fun stopEverything() {
+    ReadAloud.release()
     handler.removeCallbacksAndMessages(null)
     player?.run {
       try { stop() } catch (_: Exception) {}

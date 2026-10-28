@@ -63,6 +63,15 @@ interface AlarmPort {
   getAwakeCheck: Effect.Effect<AwakeCheck | null, Error>;
   /** The check's card was answered. Ignores a check that isn't the pending one. */
   awakeCheckPassed: (checkId: string) => Effect.Effect<void, Error>;
+  /**
+   * Read aloud: TTS on the alarm stream, so it's heard in silent and Do Not Disturb. Ends when the
+   * speech does or is stopped. Native keeps the ring silent and its idle timer held meanwhile.
+   */
+  speak: (text: string, language: string) => Effect.Effect<void, Error>;
+  /** Plays a card's audio file on the alarm stream. False when it couldn't play. */
+  playClip: (uri: string) => Effect.Effect<boolean, Error>;
+  /** Stops any speech or clip; the promises they returned settle. */
+  stopReading: Effect.Effect<void, Error>;
 }
 export class AlarmService extends Context.Service<AlarmService, AlarmPort>()("AlarmService") {}
 
@@ -120,6 +129,7 @@ export function memoryAlarmService() {
   let events: AlarmEvent[] = [];
   let complete = false;
   const signals: string[] = [];
+  const unplayable = new Set<string>();
   let permissions: AlarmPermissions = {
     manufacturer: "unknown",
     sdk: 35,
@@ -196,13 +206,29 @@ export function memoryAlarmService() {
         signals.push(`awakeCheckPassed:${id}`);
         if (check?.id === id) check = null;
       }),
+    speak: (text, language) =>
+      Effect.sync(() => {
+        signals.push(`speak:${language}:${text}`);
+      }),
+    playClip: (uri) =>
+      Effect.sync(() => {
+        signals.push(`playClip:${uri}`);
+        return !unplayable.has(uri);
+      }),
+    stopReading: Effect.sync(() => {
+      signals.push("stopReading");
+    }),
   };
   return {
     permissions: (next: Partial<AlarmPermissions>) => {
       permissions = { ...permissions, ...next };
     },
     layer: Layer.succeed(AlarmService, service),
-    /** The signals JS sent native, in order, as `kind:ringId`. */
+    /** Makes `playClip` fail for a file, as native does for a missing or broken one. */
+    unplayable: (uri: string) => {
+      unplayable.add(uri);
+    },
+    /** The signals JS sent native, in order, as `kind:ringId` (reading: `speak:lang:text`). */
     signals: () => [...signals],
     ring: () => ring,
     /** The snooze timer fires: the ring rings again under the same id. */

@@ -223,7 +223,8 @@ session** is a special mode of it on the phone.
 
 When on, each card's front is read after it appears: the card's own audio if it has some, the
 device's TTS otherwise, in the language of the deck (pt-BR by default). The alarm sound stays off
-while it reads.
+while it reads. The language is a deck property, set from the alarm editor; a subdeck without one
+reads in its parent's.
 
 ### Snooze
 
