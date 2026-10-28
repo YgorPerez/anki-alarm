@@ -45,16 +45,24 @@ type Signal = <A>(
   send: (service: AlarmService["Service"]) => Effect.Effect<A, Error>,
 ) => Promise<A>;
 
-/** Reads a front: its own clips in turn, then TTS when none played. Gives up once not `current`. */
-async function readFront(signal: Signal, reading: ReadAloud, current: () => boolean) {
-  let played = false;
-  for (const clip of reading.clips) {
-    if (!current()) return;
-    // One clip after another, as Anki plays them.
-    // oxlint-disable-next-line no-await-in-loop
-    played = (await signal((service) => service.playClip(mediaUrl(clip)))) || played;
+/**
+ * Reads a front: its own clips one after another, as Anki plays them, then TTS when none played.
+ * Gives up once not `current`.
+ */
+async function readFront(
+  signal: Signal,
+  reading: ReadAloud,
+  current: () => boolean,
+  from = 0,
+  played = false,
+): Promise<void> {
+  if (!current()) return;
+  const clip = reading.clips[from];
+  if (clip !== undefined) {
+    const ok = await signal((service) => service.playClip(mediaUrl(clip)));
+    return readFront(signal, reading, current, from + 1, played || ok);
   }
-  if (played || !reading.text || !current()) return;
+  if (played || !reading.text) return;
   await signal((service) => service.speak(reading.text, reading.language));
 }
 

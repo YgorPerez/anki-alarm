@@ -357,6 +357,8 @@ class AlarmService : Service() {
 
   // Left the screen or went idle: full sound and vibration again.
   private fun loud() {
+    // The ring coming back ends any reading: read aloud only plays over silence.
+    ReadAloud.stop()
     setTarget(1f, ramp = false)
     if (vibrator == null && setting("vibrate") == 1 && setting("silent") == 0) startVibration()
   }
@@ -393,6 +395,15 @@ class AlarmService : Service() {
     restartIdle()
   }
 
+  // Read aloud began or ended. While it reads, the ring stays silent and the idle timer waits.
+  fun onReading(reading: Boolean) {
+    if (!sessionStarted) return
+    if (reading) {
+      quiet()
+      handler.removeCallbacks(idleRunnable)
+    } else restartIdle()
+  }
+
   fun dismiss() {
     AlarmStore.finish(this)
     AlarmScheduler.cancelWatchdog(this)
@@ -404,6 +415,7 @@ class AlarmService : Service() {
   }
 
   private fun stopEverything() {
+    ReadAloud.release()
     handler.removeCallbacksAndMessages(null)
     player?.run {
       try { stop() } catch (_: Exception) {}

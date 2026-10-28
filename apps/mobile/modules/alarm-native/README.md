@@ -20,7 +20,14 @@ the phase back to `ringing` and rings at full; the user taps Start again and the
 progress, which JS reads from reviews carrying the ring id. Native does not count answers. The
 session uses the larger N of absorbed alarms and keeps the active ring's deck.
 
-Later alarm tickets add snooze, awake checks and read aloud from ADR 0005.
+#48 adds read aloud. `speak(text, language)` and `playClip(uri)` play on the alarm stream
+(`ReadAloud.kt`), so they're heard in silent and Do Not Disturb. Each resolves when its reading ends,
+is replaced by the next or is stopped (`stopReading`); `playClip` resolves false when the file can't
+play, and JS then speaks the front instead. While one reads, the ring stays silent and the idle
+timer waits; it restarts when the reading ends. Leaving the screen long enough to bring the ring
+back stops the reading. A missing TTS voice for the deck's language uses the engine's default.
+
+Later alarm tickets add snooze and awake checks from ADR 0005.
 
 ## Verification
 
