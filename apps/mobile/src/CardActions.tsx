@@ -11,12 +11,16 @@ const days = (text: string) => {
   return value <= 36_500 ? value : undefined;
 };
 
-/** Forget and Set due date for each card of a note. Both append to the review log. */
+/**
+ * Forget and Set due date for each card of a note. Both append to the review log. AnkiDroid's API
+ * can't write either, so on a linked deck they stay in the app, and the screen says so (ADR 0003).
+ */
 export function CardActions({
   cards,
   memory,
   locale,
   busy,
+  linked = false,
   onForget,
   onSetDueDate,
 }: {
@@ -24,11 +28,17 @@ export function CardActions({
   memory: (cardId: string) => MemoryState | undefined;
   locale: Locale;
   busy: boolean;
+  linked?: boolean;
   onForget: (cardId: string) => void;
   onSetDueDate: (cardId: string, days: number) => void;
 }) {
   return (
     <View className="gap-8">
+      {linked && (
+        <Text style={regular} className="text-body text-muted-foreground">
+          {editingCopy(locale)("linkedOnly")}
+        </Text>
+      )}
       {cards.map((card) => (
         <CardRow
           key={card.id}

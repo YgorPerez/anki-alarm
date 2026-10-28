@@ -134,7 +134,7 @@ type SnapshotState = Extract<LogEntry, { kind: "snapshot" }>["state"];
  * AnkiDroid's state of a reviewed card, as a snapshot at its last review (ADR 0003). New cards
  * have none. Without FSRS memory (SM-2 collections) the interval stands in for stability.
  */
-export function ankiDroidSnapshot(
+function ankiDroidSnapshot(
   card: AnkiDroidCard,
   learningSteps: readonly number[],
   now: number,
@@ -309,21 +309,3 @@ const learningStepsOf = (state: CollectionState, deckId: string) => {
   const preset = state.presets.find((p) => p.id === deck?.fields.presetId.value);
   return preset?.fields.learningSteps.value ?? [];
 };
-
-/**
- * The AnkiDroid decks a phone reads for its linked decks: each linked deck whose parent isn't
- * linked too, since reading a deck brings its subdecks.
- */
-export function ankiDroidRoots(
-  state: CollectionState,
-  deviceId: string,
-): { deckId: string; ankiId: number }[] {
-  const owned = ownedDecks(state, deviceId);
-  const names = new Set(owned.map((d) => d.fields.name.value));
-  return owned
-    .filter((d) => {
-      const parts = d.fields.name.value.split("::");
-      return !parts.slice(1).some((_, i) => names.has(parts.slice(0, i + 1).join("::")));
-    })
-    .flatMap((d) => (d.anki ? [{ deckId: d.id, ankiId: d.anki.id }] : []));
-}

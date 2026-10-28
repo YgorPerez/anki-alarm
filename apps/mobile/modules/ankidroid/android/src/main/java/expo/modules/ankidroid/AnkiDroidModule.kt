@@ -62,6 +62,17 @@ class AnkiDroidModule : Module() {
     AsyncFunction("readDeck") { deckId: Double, promise: Promise ->
       provider(promise) { AnkiDroidReader(context.contentResolver).read(deckId.toLong()).toString() }
     }
+
+    AsyncFunction("cards") { noteIds: List<Double>, promise: Promise ->
+      provider(promise) { AnkiDroidReader(context.contentResolver).cards(noteIds.map { it.toLong() }).toString() }
+    }
+
+    /** Sync back: one answer, then the card as AnkiDroid has it afterwards ("null" when it's gone). */
+    AsyncFunction("answer") { noteId: Double, ord: Int, ease: Int, timeTakenMs: Double, promise: Promise ->
+      provider(promise) {
+        AnkiDroidReader(context.contentResolver).answer(noteId.toLong(), ord, ease, timeTakenMs.toLong())?.toString() ?: "null"
+      }
+    }
   }
 
   private fun granted() = context.checkSelfPermission(AnkiDroidReader.PERMISSION) == PackageManager.PERMISSION_GRANTED

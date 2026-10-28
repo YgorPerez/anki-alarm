@@ -29,6 +29,22 @@ const messages = {
     mediaError: "Não foi possível ler esse arquivo. Escolha um .apkg exportado do AnkiDroid.",
     open: "Abrir baralho",
     linkedLabel: "Vinculado ao AnkiDroid",
+    otherPhone:
+      "Este baralho está vinculado ao AnkiDroid em outro celular. Para puxar e enviar daqui, vincule-o de novo neste celular.",
+    pull: "Puxar do AnkiDroid",
+    pulling: "Enviando revisões e puxando do AnkiDroid…",
+    pulled:
+      "Do AnkiDroid: {added} notas novas, {edited} editadas, {snapshots} cartões com estado novo. {sent} revisões enviadas.",
+    pullError: "Não foi possível puxar do AnkiDroid. Tente novamente.",
+    syncBack: "Enviar revisões ao AnkiDroid",
+    syncingBack: "Enviando revisões ao AnkiDroid…",
+    sentBack: "{sent} revisões enviadas ao AnkiDroid.",
+    held: "{held} revisões esperam: o cartão está suspenso ou enterrado no AnkiDroid.",
+    syncBackError:
+      "Não foi possível enviar ao AnkiDroid. As revisões que faltaram vão na próxima vez.",
+    syncBackNote:
+      "O AnkiDroid registra cada revisão na hora do envio, com o tempo de resposta limitado pelo baralho dele.",
+    auto: "Enviar ao AnkiDroid depois de cada alarme",
   },
   en: {
     title: "AnkiDroid",
@@ -58,6 +74,21 @@ const messages = {
     mediaError: "Couldn't read that file. Choose an .apkg exported from AnkiDroid.",
     open: "Open deck",
     linkedLabel: "Linked to AnkiDroid",
+    otherPhone:
+      "This deck is linked to AnkiDroid on another phone. To pull and send from here, link it again on this phone.",
+    pull: "Pull from AnkiDroid",
+    pulling: "Sending reviews and pulling from AnkiDroid…",
+    pulled:
+      "From AnkiDroid: {added} new notes, {edited} edited, {snapshots} cards with a new state. {sent} reviews sent.",
+    pullError: "Couldn't pull from AnkiDroid. Try again.",
+    syncBack: "Send reviews to AnkiDroid",
+    syncingBack: "Sending reviews to AnkiDroid…",
+    sentBack: "{sent} reviews sent to AnkiDroid.",
+    held: "{held} reviews are waiting: the card is suspended or buried in AnkiDroid.",
+    syncBackError: "Couldn't send to AnkiDroid. The reviews left go next time.",
+    syncBackNote:
+      "AnkiDroid records each review at the time it's sent, with the answer time capped by its deck.",
+    auto: "Send to AnkiDroid after each alarm",
   },
 } satisfies Messages<string>;
 export const ankiDroidCopy = (locale: Locale) =>

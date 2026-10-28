@@ -9,7 +9,6 @@ import {
   studyQueue,
   syncBackPlan,
   syncBackQueue,
-  ankiDroidRoots,
   type AnkiDroidSource,
   type LogEntry,
 } from "./index.ts";
@@ -396,12 +395,4 @@ test("linking reports the decks this phone took over, so their earlier reviews a
   const other = new Collection(environment("phone-b"), state);
   expect(other.linkAnkiDroid(source()).claimed).toEqual(state.decks.map((d) => d.id));
   expect(new Collection(environment(), state).linkAnkiDroid(source()).claimed).toEqual([]);
-});
-
-test("a phone's linked decks group into the AnkiDroid decks it reads", () => {
-  const { state } = linked();
-  expect(ankiDroidRoots(state, "phone-a")).toEqual([
-    { deckId: importId("deck", 1700000000001), ankiId: 1700000000001 },
-  ]);
-  expect(ankiDroidRoots(state, "phone-b")).toEqual([]);
 });

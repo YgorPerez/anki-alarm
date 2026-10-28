@@ -1,4 +1,4 @@
-import type { AnkiDroidDeck, AnkiDroidSource } from "@app/core";
+import type { AnkiDroidCard, AnkiDroidDeck, AnkiDroidSource } from "@app/core";
 import { Effect } from "effect";
 import native from "../modules/ankidroid/index.ts";
 import { pickAndImportApkgMedia } from "./apkg.ts";
@@ -25,6 +25,9 @@ export const androidAnkiDroid: AnkiDroidApi = {
   requestPermission: attempt(() => native.requestPermission()),
   decks: provider<AnkiDroidDeck[]>(() => native.decks()),
   readDeck: (deckId) => provider<AnkiDroidSource>(() => native.readDeck(deckId)),
+  cards: (noteIds) => provider<AnkiDroidCard[]>(() => native.cards([...noteIds])),
+  answer: ({ noteId, ord, ease, timeTakenMs }) =>
+    provider<AnkiDroidCard | null>(() => native.answer(noteId, ord, ease, timeTakenMs)),
   importMedia: Effect.tryPromise({
     try: pickAndImportApkgMedia,
     catch: (error) => new Error(String(error)),

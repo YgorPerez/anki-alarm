@@ -37,6 +37,8 @@ const messages = {
     dueDays: "Vence daqui a quantos dias (0 = hoje)",
     invalidDays: "Use um número inteiro de 0 a 36500.",
     dueNeedsReview: "Disponível depois da primeira revisão.",
+    linkedOnly:
+      "Esquecer e Definir vencimento ficam só no app: o AnkiDroid não recebe essas mudanças. A próxima revisão deste cartão no AnkiDroid as substitui.",
     undo: "Desfazer",
   },
   en: {
@@ -75,6 +77,8 @@ const messages = {
     dueDays: "Due in how many days (0 = today)",
     invalidDays: "Use a whole number from 0 to 36500.",
     dueNeedsReview: "Available after the first review.",
+    linkedOnly:
+      "Forget and Set due date stay in the app: AnkiDroid doesn't get these changes. This card's next review in AnkiDroid replaces them.",
     undo: "Undo",
   },
 } satisfies Messages<string>;

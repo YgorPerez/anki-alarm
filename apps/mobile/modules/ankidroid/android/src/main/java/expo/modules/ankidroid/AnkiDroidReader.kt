@@ -1,6 +1,7 @@
 package expo.modules.ankidroid
 
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.database.Cursor
 import android.net.Uri
 import org.json.JSONArray
@@ -55,22 +56,7 @@ class AnkiDroidReader(private val resolver: ContentResolver, authority: String =
     for (deck in decks) {
       // `did:` matches a deck by id; cards are deduplicated in case it also matches subdecks.
       query(Uri.withAppendedPath(base, "cards"), CARD_COLUMNS, "did:${deck.getLong("id")}") { c ->
-        cards[c.getLong(0)] = JSONObject()
-          .put("id", c.getLong(0))
-          .put("noteId", c.getLong(1))
-          .put("ord", c.getInt(2))
-          .put("deckId", c.getLong(3))
-          .put("originalDeckId", c.getLong(4))
-          .put("reps", c.getInt(5))
-          .put("lapses", c.getInt(6))
-          .put("type", c.getInt(7))
-          .put("queue", c.getInt(8))
-          .put("due", c.getLong(9))
-          .put("interval", c.getInt(10))
-          .put("left", c.getInt(11))
-          .put("stability", c.doubleOrNull(12) ?: JSONObject.NULL)
-          .put("difficulty", c.doubleOrNull(13) ?: JSONObject.NULL)
-          .put("lastReviewSecs", c.longOrNull(14) ?: JSONObject.NULL)
+        cards[c.getLong(0)] = card(c)
       }
     }
 
@@ -119,6 +105,50 @@ class AnkiDroidReader(private val resolver: ContentResolver, authority: String =
       .put("notes", notes)
       .put("cards", JSONArray(cards.values))
   }
+
+  /** Every card of these notes, with scheduling, as Core's `AnkiDroidCard`. */
+  fun cards(noteIds: List<Long>): JSONArray {
+    val cards = JSONArray()
+    for (chunk in noteIds.distinct().chunked(CHUNK)) {
+      query(Uri.withAppendedPath(base, "cards"), CARD_COLUMNS, "nid:${chunk.joinToString(",")}") { c -> cards.put(card(c)) }
+    }
+    return cards
+  }
+
+  /**
+   * Answers a card through AnkiDroid's scheduler, which writes a real revlog row stamped now, and
+   * reads the card back. AnkiDroid returns success even when the answer failed: callers check reps.
+   * null when AnkiDroid has no such card.
+   */
+  fun answer(noteId: Long, ord: Int, ease: Int, timeTakenMs: Long): JSONObject? {
+    val values = ContentValues().apply {
+      put("note_id", noteId)
+      put("ord", ord)
+      put("answer_ease", ease)
+      // Without it AnkiDroid times the answer from its own timer start.
+      put("time_taken", timeTakenMs)
+    }
+    resolver.update(Uri.withAppendedPath(base, "schedule"), values, null, null)
+    val cards = cards(listOf(noteId))
+    return (0 until cards.length()).map { cards.getJSONObject(it) }.firstOrNull { it.getInt("ord") == ord }
+  }
+
+  private fun card(c: Cursor) = JSONObject()
+    .put("id", c.getLong(0))
+    .put("noteId", c.getLong(1))
+    .put("ord", c.getInt(2))
+    .put("deckId", c.getLong(3))
+    .put("originalDeckId", c.getLong(4))
+    .put("reps", c.getInt(5))
+    .put("lapses", c.getInt(6))
+    .put("type", c.getInt(7))
+    .put("queue", c.getInt(8))
+    .put("due", c.getLong(9))
+    .put("interval", c.getInt(10))
+    .put("left", c.getInt(11))
+    .put("stability", c.doubleOrNull(12) ?: JSONObject.NULL)
+    .put("difficulty", c.doubleOrNull(13) ?: JSONObject.NULL)
+    .put("lastReviewSecs", c.longOrNull(14) ?: JSONObject.NULL)
 
   private fun query(uri: Uri, columns: Array<String>, selection: String? = null, row: (Cursor) -> Unit) {
     // A null cursor is how the provider answers an empty search.
