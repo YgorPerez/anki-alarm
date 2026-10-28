@@ -203,8 +203,24 @@ awake check passes and failures.
 
 ## Design
 
-To be decided with the Impeccable skill: a `DESIGN.md` with one set of tokens, used by the phone
-(uniwind CSS variables) and the web (shadcn CSS variables).
+`DESIGN.md` holds the visual system; `PRODUCT.md` the product context it serves. Decided in #3.
+
+- **Look:** a plain black page with the card's words at full size. Lilac primary for action (Good,
+  Start, progress), peach for attention (cards left, snooze cost, a card that came back), one hue
+  per grade (Again rose, Hard yellow, Easy teal; Good is solid primary), the same in study and
+  stats. Atkinson Hyperlegible on both apps.
+- **Alarm screen:** always dark, one fixed layout: clock, progress segments, the card with no box,
+  four grade pills at the thumb, snooze as a link apart from them. Cards render in Anki's night
+  mode.
+- **Light and dark:** the app follows the system or the user's choice; light mode is white with a
+  deeper lilac.
+- **Theme:** Settings › Theme recolors the backgrounds, primary, secondary and each grade, from
+  swatches or a free picker. Core derives every token, fixes contrast to WCAG AA and warns about
+  look-alike colors. The choice syncs, and the alarm, splash and app icon follow it. See
+  `docs/adr/0004-configurable-theme.md`.
+- **Tokens:** `packages/design-tokens` (`tokens.css` for both apps, `web.css` for the web), in the
+  shape from `docs/research/design-tokens.md`, with a test that keeps them in step with DESIGN.md.
+- The throwaway prototype is `prototypes/design/index.html`.
 
 ## Out of scope for the first release
 

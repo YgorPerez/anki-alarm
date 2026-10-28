@@ -1,0 +1,95 @@
+{
+ "title": "Padrão + visual do Feed",
+ "question": "Quatro organizações da tela do alarme no visual do Feed. Qual segue?",
+ "options": [
+  {
+   "kind": "grounded",
+   "palette": [
+    "#000000",
+    "#0a0a0a",
+    "#ffffff",
+    "#ff5c5c"
+   ],
+   "materials": [
+    "preto puro",
+    "tipo branco grande",
+    "pílulas com contorno"
+   ],
+   "htmlFrame": "390x844",
+   "id": "h1",
+   "label": "Padrão em preto",
+   "thesis": "A estrutura do despertador de sempre, no visual do Feed: relógio grande, segmentos, cartão sem caixa.",
+   "viewport": "Relógio no topo, segmentos e 2 de 5, cartão solto, quatro notas em linha, adiar como link.",
+   "risk": "Seguro; a identidade vem só do preto e do tipo.",
+   "html": ".impeccable/mocks/decision/hybrid-1-padrao-preto.html"
+  },
+  {
+   "kind": "grounded",
+   "palette": [
+    "#000000",
+    "#0a0a0a",
+    "#ffffff",
+    "#ff5c5c"
+   ],
+   "materials": [
+    "preto puro",
+    "tipo branco grande",
+    "pílulas com contorno"
+   ],
+   "htmlFrame": "390x844",
+   "id": "h2",
+   "label": "Cartão grande",
+   "thesis": "O cartão manda: texto maior, notas em grade 2×2 com alvos enormes para quem está meio dormindo.",
+   "viewport": "Segmentos e hora numa linha, cartão grande, notas 2×2, adiar no rodapé.",
+   "risk": "A grade 2×2 sai da fileira de notas que quem usa Anki conhece.",
+   "html": ".impeccable/mocks/decision/hybrid-2-cartao-grande.html"
+  },
+  {
+   "kind": "grounded",
+   "palette": [
+    "#000000",
+    "#0a0a0a",
+    "#ffffff",
+    "#ff5c5c"
+   ],
+   "materials": [
+    "preto puro",
+    "tipo branco grande",
+    "pílulas com contorno"
+   ],
+   "htmlFrame": "390x844",
+   "id": "h3",
+   "label": "Contador",
+   "thesis": "O número que importa é o que falta: um 3 enorme no topo, e o Bom mais largo porque é a resposta mais comum.",
+   "viewport": "Faltam 3 gigante à esquerda, hora à direita, segmentos, cartão, notas com Bom largo, adiar.",
+   "risk": "Bom largo pode puxar o dedo para o Bom quando a resposta era De novo.",
+   "html": ".impeccable/mocks/decision/hybrid-3-contador.html"
+  },
+  {
+   "kind": "grounded",
+   "palette": [
+    "#000000",
+    "#0a0a0a",
+    "#ffffff",
+    "#ff5c5c"
+   ],
+   "materials": [
+    "preto puro",
+    "tipo branco grande",
+    "pílulas com contorno"
+   ],
+   "htmlFrame": "390x844",
+   "id": "h4",
+   "label": "Polegar",
+   "thesis": "Tudo que se toca fica embaixo, perto do polegar; em cima só o cartão.",
+   "viewport": "Cartão no topo, doca embaixo com progresso, hora, notas e adiar.",
+   "risk": "A hora perde destaque; fica mais tela de estudo que de despertador.",
+   "html": ".impeccable/mocks/decision/hybrid-4-polegar.html"
+  }
+ ],
+ "reroll": true,
+ "buildPath": {
+  "value": "code"
+ },
+ "steer": true
+}

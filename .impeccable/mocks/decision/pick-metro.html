@@ -1,0 +1,34 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0}
+body{width:390px;height:844px;overflow:hidden;background:#0b1220;color:#f2f4f7;font-family:"Atkinson Hyperlegible",sans-serif}
+.bar{background:#0455a1;padding:46px 20px 14px;display:flex;align-items:center;gap:12px}
+.num{width:40px;height:40px;border-radius:50%;background:#fff;color:#0455a1;font-weight:700;font-size:22px;display:flex;align-items:center;justify-content:center}
+.bar h1{font-size:20px;font-weight:700}.bar p{font-size:14px;opacity:.85}
+.time{margin-left:auto;font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
+.line{position:relative;margin:26px 28px 6px;height:28px}
+.track{position:absolute;left:0;right:0;top:12px;height:5px;background:#24324a;border-radius:3px}
+.done{position:absolute;left:0;width:25%;top:12px;height:5px;background:#3fa9f5;border-radius:3px}
+.st{position:absolute;top:5px;width:19px;height:19px;border-radius:50%;background:#0b1220;border:4px solid #24324a}
+.st.ok{border-color:#3fa9f5;background:#3fa9f5}.st.now{border-color:#fff;width:23px;height:23px;top:3px}
+.legend{display:flex;justify-content:space-between;margin:0 20px;font-size:13px;color:#8b98ad}
+.legend b{color:#f2f4f7}
+.card{margin:18px 20px;padding:22px 20px;background:#121c2e;border-radius:12px;height:320px;border-left:6px solid #0455a1}
+.q{font-size:24px;line-height:1.35;font-weight:700}.hr{height:1px;background:#24324a;margin:18px 0}
+.a{font-size:22px;line-height:1.4;color:#c9d2e0}
+.grades{position:absolute;left:20px;right:20px;top:640px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.g{height:64px;border-radius:12px;background:#18243a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:17px}
+.g small{font-weight:400;font-size:13px;color:#8b98ad}
+.g.r{color:#ff6b5e}.g.ok{background:#3fa9f5;color:#06213a}.g.ok small{color:#0b3a63}
+.snooze{position:absolute;left:20px;right:20px;top:766px;height:52px;border-radius:12px;border:1.5px solid #24324a;display:flex;align-items:center;justify-content:center;color:#8b98ad;font-size:15px}
+</style></head><body>
+<div class="bar"><div class="num">1</div><div><h1>Anatomia</h1><p>Membro superior</p></div><div class="time">06:12</div></div>
+<div class="line"><div class="track"></div><div class="done"></div>
+<div class="st ok" style="left:-2px"></div><div class="st ok" style="left:23%"></div><div class="st now" style="left:calc(50% - 11px)"></div><div class="st" style="left:calc(75% - 9px)"></div><div class="st" style="right:-2px"></div></div>
+<div class="legend"><span><b>2 de 5</b> certos</span><span>Faltam <b>3 estações</b></span></div>
+<div class="card"><div class="q">Qual nervo inerva o músculo deltoide?</div><div class="hr"></div>
+<div class="a">Nervo axilar (C5–C6), ramo do fascículo posterior do plexo braquial.</div></div>
+<div class="grades"><div class="g r">De novo<small>&lt;1 min</small></div><div class="g">Difícil<small>6 min</small></div><div class="g ok">Bom<small>3 dias</small></div><div class="g">Fácil<small>9 dias</small></div></div>
+<div class="snooze">Adiar 9 min · +2 cartões</div>
+</body></html>

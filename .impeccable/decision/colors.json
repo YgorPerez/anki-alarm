@@ -1,0 +1,94 @@
+{
+ "title": "Feed com cor",
+ "question": "O visual do Feed com cor, como o 4 tinha. Qual uso de cor segue?",
+ "options": [
+  {
+   "id": "c1",
+   "kind": "grounded",
+   "label": "Pastéis do padrão",
+   "thesis": "As pílulas pastel do 4 sobre o preto do Feed: cada nota tem sua cor.",
+   "viewport": "Estrutura do 1; notas em vermelho, laranja, verde e azul pastel; adiar em lilás.",
+   "risk": "Quatro cores competindo às 6 h.",
+   "palette": [
+    "#000000",
+    "#f2b8b5",
+    "#ffd8a8",
+    "#b8f2c4",
+    "#a8d4ff"
+   ],
+   "materials": [
+    "preto do Feed",
+    "tipo branco grande"
+   ],
+   "html": ".impeccable/mocks/decision/color-1-pasteis.html",
+   "htmlFrame": "390x844"
+  },
+  {
+   "id": "c2",
+   "kind": "grounded",
+   "label": "Lilás",
+   "thesis": "Uma cor só, lilás, faz o trabalho: hora, progresso, Bom e adiar.",
+   "viewport": "Estrutura do 1; contorno nas notas, De novo em vermelho, Bom em lilás sólido.",
+   "risk": "Pouca cor; a identidade depende do lilás.",
+   "palette": [
+    "#000000",
+    "#c9b6ff",
+    "#ff8a80",
+    "#ffffff"
+   ],
+   "materials": [
+    "preto do Feed",
+    "tipo branco grande"
+   ],
+   "html": ".impeccable/mocks/decision/color-2-lilas.html",
+   "htmlFrame": "390x844"
+  },
+  {
+   "id": "c3",
+   "kind": "grounded",
+   "label": "Saturadas",
+   "thesis": "As cores do Anki, cheias e fortes: vermelho, âmbar, verde e azul.",
+   "viewport": "Estrutura do 1; botões retangulares saturados; progresso em verde.",
+   "risk": "Forte demais num quarto escuro.",
+   "palette": [
+    "#000000",
+    "#e5484d",
+    "#f59e0b",
+    "#22c55e",
+    "#3b82f6"
+   ],
+   "materials": [
+    "preto do Feed",
+    "tipo branco grande"
+   ],
+   "html": ".impeccable/mocks/decision/color-3-saturadas.html",
+   "htmlFrame": "390x844"
+  },
+  {
+   "id": "c4",
+   "kind": "grounded",
+   "label": "Amanhecer",
+   "thesis": "A tela começa noite e amanhece a cada cartão certo: os segmentos vão do azul-noite ao laranja.",
+   "viewport": "Estrutura do 1 sobre um fundo azul-noite que esquenta embaixo; Bom em laranja de nascer do sol.",
+   "risk": "O degradê precisa ficar sutil para não virar papel de parede.",
+   "palette": [
+    "#05070f",
+    "#0b1230",
+    "#2a1840",
+    "#ffb36b",
+    "#ffe2c4"
+   ],
+   "materials": [
+    "preto do Feed",
+    "tipo branco grande"
+   ],
+   "html": ".impeccable/mocks/decision/color-4-amanhecer.html",
+   "htmlFrame": "390x844"
+  }
+ ],
+ "reroll": true,
+ "buildPath": {
+  "value": "code"
+ },
+ "steer": true
+}

@@ -1,0 +1,137 @@
+/*
+ * The app's factory theme, shared by the phone (uniwind) and the web (Tailwind 4 + shadcn).
+ * Values come from the theme derivation (prototyped in prototypes/design, owned by Core once
+ * it exists) applied to the factory choice: lilac primary, peach attention, one color per
+ * grade. DESIGN.md explains each role, and tokens.test.ts keeps the files in step. A user's
+ * own theme is laid over these at runtime. Shape and rules: docs/research/design-tokens.md.
+ * No var() between tokens, no platform variants here.
+ */
+@layer theme {
+  :root {
+    @variant light {
+      --color-background: #ffffff;
+      --color-foreground: #16131d;
+      --color-card: #ffffff;
+      --color-card-foreground: #16131d;
+      --color-popover: #ffffff;
+      --color-popover-foreground: #16131d;
+      --color-primary: #8169b8;
+      --color-primary-foreground: #ffffff;
+      --color-secondary: #f3f3f4;
+      --color-secondary-foreground: #16131d;
+      --color-muted: #f3f3f4;
+      --color-muted-foreground: #76747a;
+      --color-accent: #f5f2ff;
+      --color-accent-foreground: #16131d;
+      --color-destructive: #c62828;
+      --color-border: #e3e3e4;
+      --color-input: #e3e3e4;
+      --color-ring: #8169b8;
+      --color-chart-1: #c8496c;
+      --color-chart-2: #8b7400;
+      --color-chart-3: #8169b8;
+      --color-chart-4: #078476;
+      --color-chart-5: #aa5832;
+      --color-sidebar: #ffffff;
+      --color-sidebar-foreground: #16131d;
+      --color-sidebar-primary: #8169b8;
+      --color-sidebar-primary-foreground: #ffffff;
+      --color-sidebar-accent: #f5f2ff;
+      --color-sidebar-accent-foreground: #16131d;
+      --color-sidebar-border: #e3e3e4;
+      --color-sidebar-ring: #8169b8;
+      --color-surface: #f3f3f4;
+      --color-answer: #3b3941;
+      --color-track: #dededf;
+      --color-primary-tint: #f5f2ff;
+      --color-primary-ink: #8169b8;
+      --color-attention: #aa5832;
+      --color-attention-tint: #fff1eb;
+      --color-good: #8169b8;
+      --color-good-foreground: #ffffff;
+      --color-again: #b93a5f;
+      --color-again-tint: #ffe4eb;
+      --color-again-ink: #c8496c;
+      --color-hard: #887100;
+      --color-hard-tint: #fff9e0;
+      --color-hard-ink: #8b7400;
+      --color-easy: #097e70;
+      --color-easy-tint: #e5f9f5;
+      --color-easy-ink: #078476;
+    }
+    @variant dark {
+      --color-background: #000000;
+      --color-foreground: #ffffff;
+      --color-card: #000000;
+      --color-card-foreground: #ffffff;
+      --color-popover: #1c1c1c;
+      --color-popover-foreground: #ffffff;
+      --color-primary: #c9b6ff;
+      --color-primary-foreground: #120d1c;
+      --color-secondary: #1c1c1c;
+      --color-secondary-foreground: #ffffff;
+      --color-muted: #1c1c1c;
+      --color-muted-foreground: #8c8c8c;
+      --color-accent: #282433;
+      --color-accent-foreground: #ffffff;
+      --color-destructive: #ff6b6b;
+      --color-border: #292929;
+      --color-input: #292929;
+      --color-ring: #c9b6ff;
+      --color-chart-1: #ff7a9a;
+      --color-chart-2: #ffe066;
+      --color-chart-3: #c9b6ff;
+      --color-chart-4: #7fe0cf;
+      --color-chart-5: #ffb89a;
+      --color-sidebar: #000000;
+      --color-sidebar-foreground: #ffffff;
+      --color-sidebar-primary: #c9b6ff;
+      --color-sidebar-primary-foreground: #120d1c;
+      --color-sidebar-accent: #282433;
+      --color-sidebar-accent-foreground: #ffffff;
+      --color-sidebar-border: #292929;
+      --color-sidebar-ring: #c9b6ff;
+      --color-surface: #1c1c1c;
+      --color-answer: #d6d6d6;
+      --color-track: #333333;
+      --color-primary-tint: #282433;
+      --color-primary-ink: #c9b6ff;
+      --color-attention: #ffb89a;
+      --color-attention-tint: #2e211c;
+      --color-good: #c9b6ff;
+      --color-good-foreground: #120d1c;
+      --color-again: #ff7a9a;
+      --color-again-tint: #33181f;
+      --color-again-ink: #ff7a9a;
+      --color-hard: #ffe066;
+      --color-hard-tint: #332d14;
+      --color-hard-ink: #ffe066;
+      --color-easy: #7fe0cf;
+      --color-easy-tint: #192d29;
+      --color-easy-ink: #7fe0cf;
+    }
+  }
+}
+
+@theme {
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  /* The alarm screen's scale, plus the app's body steps. Sizes scale with the system font size. */
+  --text-clock: 68px;
+  --text-clock--line-height: 76px;
+  --text-question: 28px;
+  --text-question--line-height: 35px;
+  --text-answer: 23px;
+  --text-answer--line-height: 32px;
+  --text-title: 30px;
+  --text-title--line-height: 36px;
+  --text-body: 17px;
+  --text-body--line-height: 24px;
+  --text-label: 15px;
+  --text-label--line-height: 20px;
+  --text-caption: 13px;
+  --text-caption--line-height: 18px;
+}

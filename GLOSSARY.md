@@ -68,5 +68,10 @@ review. Replay adopts it. It has no grade.
 
 **Sync back.** Sending reviews done in the app to AnkiDroid as answers.
 
+**Theme.** The colors a user picks: a background for light mode and one for dark, a primary (action:
+Good, progress), a secondary (warning: cards left, snooze) and one color per grade. It syncs, and
+the alarm screen, the splash and the app icon follow it.
+_Avoid_: skin, palette (that's the set of swatches to pick from)
+
 **Void.** A log entry that cancels one earlier entry (a review, reset or set due date), written by
 Undo. Replay skips voided entries.

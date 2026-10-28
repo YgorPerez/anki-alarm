@@ -1,0 +1,77 @@
+{
+ "title": "Lilás com mais cor",
+ "question": "O Lilás com cor a mais e notas com fundo. Qual segue?",
+ "options": [
+  {
+   "id": "l1",
+   "kind": "grounded",
+   "label": "Lilás + tons por nota",
+   "thesis": "O lilás continua dono da tela, e cada nota ganha sua cor num fundo escuro tingido; só o Bom é sólido.",
+   "viewport": "Estrutura do Padrão em preto; De novo rosado, Difícil âmbar, Bom lilás sólido, Fácil verde-água.",
+   "risk": "Quatro matizes; o Bom precisa continuar sendo o único sólido.",
+   "palette": [
+    "#000000",
+    "#c9b6ff",
+    "#ff9b93",
+    "#ffcf7a",
+    "#7fe0cf"
+   ],
+   "materials": [
+    "preto do Feed",
+    "tipo branco grande",
+    "notas com fundo"
+   ],
+   "html": ".impeccable/mocks/decision/lilas-1-tons.html",
+   "htmlFrame": "390x844"
+  },
+  {
+   "id": "l2",
+   "kind": "grounded",
+   "label": "Lilás + pêssego",
+   "thesis": "Um par: lilás para agir (Bom, progresso) e pêssego para avisar (faltam, adiar), num preto levemente violeta.",
+   "viewport": "Hora branca com traço pêssego, segmentos lilás e pêssego, notas em superfície escura, Bom lilás.",
+   "risk": "Pêssego e De novo vermelho precisam ficar distintos.",
+   "palette": [
+    "#0a0812",
+    "#c9b6ff",
+    "#ffb89a",
+    "#1c1828",
+    "#ff8f87"
+   ],
+   "materials": [
+    "preto do Feed",
+    "tipo branco grande",
+    "notas com fundo"
+   ],
+   "html": ".impeccable/mocks/decision/lilas-2-pessego.html",
+   "htmlFrame": "390x844"
+  },
+  {
+   "id": "l3",
+   "kind": "grounded",
+   "label": "Família lilás",
+   "thesis": "As quatro notas em tons vizinhos do lilás: rosa, malva, lilás e pervinca, todas sólidas.",
+   "viewport": "Estrutura do Padrão em preto num preto violeta; notas sólidas em tons análogos.",
+   "risk": "Notas parecidas demais entre si; a distinção vem da posição e do texto.",
+   "palette": [
+    "#09070f",
+    "#ff8fb1",
+    "#d9a6e8",
+    "#c9b6ff",
+    "#a9b8ff"
+   ],
+   "materials": [
+    "preto do Feed",
+    "tipo branco grande",
+    "notas com fundo"
+   ],
+   "html": ".impeccable/mocks/decision/lilas-3-familia.html",
+   "htmlFrame": "390x844"
+  }
+ ],
+ "reroll": true,
+ "buildPath": {
+  "value": "code"
+ },
+ "steer": true
+}

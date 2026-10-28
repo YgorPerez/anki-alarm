@@ -1,0 +1,116 @@
+/*
+ * Web-only adapter for tokens.css (import it after tokens.css). It holds no values: the
+ * light/dark variants uniwind generates on the phone, the registration Tailwind needs to
+ * make bg-background etc., and shadcn's own variable names for components that read them.
+ */
+
+/* A .light/.dark class on <html> wins, otherwise the OS setting. */
+@custom-variant dark {
+  &:where(.dark, .dark *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:not(:where(.light, .light *, .dark, .dark *)) {
+      @slot;
+    }
+  }
+}
+@custom-variant light {
+  &:where(.light, .light *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: light) {
+    &:not(:where(.light, .light *, .dark, .dark *)) {
+      @slot;
+    }
+  }
+}
+
+/* Register every color with Tailwind (uniwind does this itself on the phone). */
+@theme {
+  --color-background: unset;
+  --color-foreground: unset;
+  --color-card: unset;
+  --color-card-foreground: unset;
+  --color-popover: unset;
+  --color-popover-foreground: unset;
+  --color-primary: unset;
+  --color-primary-foreground: unset;
+  --color-secondary: unset;
+  --color-secondary-foreground: unset;
+  --color-muted: unset;
+  --color-muted-foreground: unset;
+  --color-accent: unset;
+  --color-accent-foreground: unset;
+  --color-destructive: unset;
+  --color-border: unset;
+  --color-input: unset;
+  --color-ring: unset;
+  --color-chart-1: unset;
+  --color-chart-2: unset;
+  --color-chart-3: unset;
+  --color-chart-4: unset;
+  --color-chart-5: unset;
+  --color-sidebar: unset;
+  --color-sidebar-foreground: unset;
+  --color-sidebar-primary: unset;
+  --color-sidebar-primary-foreground: unset;
+  --color-sidebar-accent: unset;
+  --color-sidebar-accent-foreground: unset;
+  --color-sidebar-border: unset;
+  --color-sidebar-ring: unset;
+  --color-surface: unset;
+  --color-answer: unset;
+  --color-track: unset;
+  --color-primary-tint: unset;
+  --color-primary-ink: unset;
+  --color-attention: unset;
+  --color-attention-tint: unset;
+  --color-good: unset;
+  --color-good-foreground: unset;
+  --color-again: unset;
+  --color-again-tint: unset;
+  --color-again-ink: unset;
+  --color-hard: unset;
+  --color-hard-tint: unset;
+  --color-hard-ink: unset;
+  --color-easy: unset;
+  --color-easy-tint: unset;
+  --color-easy-ink: unset;
+}
+
+/* shadcn's names, for base components that read var(--primary) directly. */
+:root {
+  --background: var(--color-background);
+  --foreground: var(--color-foreground);
+  --card: var(--color-card);
+  --card-foreground: var(--color-card-foreground);
+  --popover: var(--color-popover);
+  --popover-foreground: var(--color-popover-foreground);
+  --primary: var(--color-primary);
+  --primary-foreground: var(--color-primary-foreground);
+  --secondary: var(--color-secondary);
+  --secondary-foreground: var(--color-secondary-foreground);
+  --muted: var(--color-muted);
+  --muted-foreground: var(--color-muted-foreground);
+  --accent: var(--color-accent);
+  --accent-foreground: var(--color-accent-foreground);
+  --destructive: var(--color-destructive);
+  --border: var(--color-border);
+  --input: var(--color-input);
+  --ring: var(--color-ring);
+  --chart-1: var(--color-chart-1);
+  --chart-2: var(--color-chart-2);
+  --chart-3: var(--color-chart-3);
+  --chart-4: var(--color-chart-4);
+  --chart-5: var(--color-chart-5);
+  --sidebar: var(--color-sidebar);
+  --sidebar-foreground: var(--color-sidebar-foreground);
+  --sidebar-primary: var(--color-sidebar-primary);
+  --sidebar-primary-foreground: var(--color-sidebar-primary-foreground);
+  --sidebar-accent: var(--color-sidebar-accent);
+  --sidebar-accent-foreground: var(--color-sidebar-accent-foreground);
+  --sidebar-border: var(--color-sidebar-border);
+  --sidebar-ring: var(--color-sidebar-ring);
+  --radius: var(--radius-lg);
+}

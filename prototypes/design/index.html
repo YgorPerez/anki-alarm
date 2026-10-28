@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Protótipo de design: alarme e tema</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+/* Throwaway prototype (ticket #3). Every color below is a --color-* token in
+   the shape of packages/design-tokens; the panel derives them like Core's
+   theme will, from the user's choices. */
+:root { --phone-zoom: .62; }
+* { box-sizing: border-box; margin: 0; }
+html { background: #111014; color: #ece9f2; font-family: "Atkinson Hyperlegible", system-ui, sans-serif; }
+::selection { background: #c9b6ff; color: #160d33; }
+body { padding: 24px; }
+h1 { font-size: 22px; }
+.lede { color: #a8a3b3; margin: 6px 0 20px; max-width: 70ch; line-height: 1.45; }
+
+/* Theme panel */
+.panel { display: grid; gap: 10px; background: #1b1a20; border-radius: 16px; padding: 16px; margin-bottom: 24px; max-width: 980px; }
+.prow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.prow > b { width: 130px; font-size: 14px; }
+.sw { width: 36px; height: 36px; border-radius: 50%; border: 1px solid #ffffff33; cursor: pointer; padding: 0; }
+.sw[aria-checked="true"] { outline: 2px solid #fff; outline-offset: 2px; }
+.prow input[type=color] { width: 36px; height: 36px; border: 0; background: none; padding: 0; cursor: pointer; }
+.warn { color: #ffb89a; font-size: 14px; min-height: 1.2em; }
+.panel button.reset { justify-self: start; background: none; color: #c9b6ff; border: 1px solid #c9b6ff66; border-radius: 999px; padding: 8px 16px; font: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid #c9b6ff; outline-offset: 3px; }
+
+/* Screens */
+.screens { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+figure { width: calc(390px * var(--phone-zoom)); }
+figcaption { font-size: 13px; color: #a8a3b3; margin-top: 8px; line-height: 1.35; }
+figcaption b { color: #ece9f2; display: block; }
+.frame { width: calc(390px * var(--phone-zoom)); height: calc(844px * var(--phone-zoom)); overflow: hidden; border-radius: 18px; border: 1px solid #ffffff22; }
+.phone { width: 390px; height: 844px; zoom: var(--phone-zoom); position: relative; overflow: hidden;
+  background: var(--color-background); color: var(--color-foreground); font-family: "Atkinson Hyperlegible", sans-serif; }
+
+/* Alarm screen pieces (dark only) */
+.clock { text-align: center; padding-top: 50px; font-size: 68px; font-weight: 700; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.path { text-align: center; font-size: 15px; margin-top: 2px; color: var(--color-muted-foreground); }
+.seg { display: flex; gap: 4px; margin: 22px 24px 0; }
+.seg i { flex: 1; height: 5px; border-radius: 3px; background: var(--color-track); }
+.seg i.on { background: var(--color-primary); }
+.left { margin: 8px 24px 0; font-size: 15px; color: var(--color-muted-foreground); }
+.left b { color: var(--color-attention); font-weight: 700; }
+.face { margin: 30px 24px 0; }
+.q { font-size: 28px; line-height: 1.25; font-weight: 700; }
+.rule { height: 1px; background: var(--color-border); margin: 22px 0; }
+.a { font-size: 23px; line-height: 1.38; color: var(--color-answer); }
+.chip { display: inline-block; font-size: 14px; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 12px;
+  background: var(--color-attention-tint); color: var(--color-attention); }
+.grades { position: absolute; left: 16px; right: 16px; top: 676px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.g { height: 64px; border-radius: 999px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 700; font-size: 17px; }
+.g small { font-weight: 400; font-size: 13px; opacity: .85; }
+.g.again { background: var(--color-again-tint); color: var(--color-again); }
+.g.hard { background: var(--color-hard-tint); color: var(--color-hard); }
+.g.good { background: var(--color-good); color: var(--color-good-foreground); }
+.g.easy { background: var(--color-easy-tint); color: var(--color-easy); }
+.wide { position: absolute; left: 16px; right: 16px; top: 676px; height: 64px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 19px; }
+.wide.neutral { background: var(--color-surface); color: var(--color-foreground); }
+.wide.primary { background: var(--color-primary); color: var(--color-primary-foreground); }
+.snz { position: absolute; left: 0; right: 0; top: 776px; text-align: center; font-size: 15px; text-decoration: underline; text-underline-offset: 4px; color: var(--color-muted-foreground); }
+.snz b { color: var(--color-attention); font-weight: 400; }
+.center { position: absolute; left: 24px; right: 24px; top: 250px; text-align: center; }
+.big { font-size: 64px; font-weight: 700; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.say { font-size: 24px; font-weight: 700; margin-top: 10px; }
+.sub2 { font-size: 17px; color: var(--color-muted-foreground); margin-top: 10px; line-height: 1.4; }
+.sub2 b { color: var(--color-attention); font-weight: 400; }
+.drain { margin: 22px 24px 0; height: 5px; border-radius: 3px; background: var(--color-track); }
+.drain i { display: block; height: 5px; width: 80%; border-radius: 3px; background: var(--color-attention); }
+
+/* App screens (light or dark) */
+.bar { padding: 46px 20px 12px; display: flex; align-items: baseline; justify-content: space-between; }
+.bar h2 { font-size: 30px; font-weight: 700; }
+.bar span { color: var(--color-muted-foreground); font-size: 15px; }
+.today { margin: 6px 20px 18px; padding: 16px; border-radius: 20px; background: var(--color-surface); display: flex; justify-content: space-between; align-items: center; }
+.today b { font-size: 17px; display: block; }
+.today small { color: var(--color-muted-foreground); font-size: 15px; }
+.btn { border-radius: 999px; padding: 12px 18px; font-weight: 700; font-size: 16px; background: var(--color-primary); color: var(--color-primary-foreground); }
+.deck { display: flex; align-items: center; min-height: 64px; padding: 0 20px; border-bottom: 1px solid var(--color-border); gap: 12px; }
+.deck .n { flex: 1; font-size: 18px; }
+.deck .n small { display: block; font-size: 14px; color: var(--color-muted-foreground); }
+.deck.sub .n { padding-left: 20px; }
+.ct { font-size: 15px; font-variant-numeric: tabular-nums; min-width: 28px; text-align: right; }
+.ct.new { color: var(--color-easy-ink); }
+.ct.lrn { color: var(--color-again-ink); }
+.ct.due { color: var(--color-primary-ink); font-weight: 700; }
+.ct.zero { color: var(--color-muted-foreground); opacity: .5; }
+.link { color: var(--color-attention); font-size: 14px; }
+.nav { position: absolute; left: 0; right: 0; bottom: 0; height: 80px; border-top: 1px solid var(--color-border); display: grid; grid-template-columns: repeat(4, 1fr); background: var(--color-background); }
+.nav div { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 13px; color: var(--color-muted-foreground); }
+.nav div.on { color: var(--color-foreground); font-weight: 700; }
+.nav div i { width: 56px; height: 28px; border-radius: 999px; display: block; }
+.nav div.on i { background: var(--color-primary-tint); }
+.nav svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; margin-top: -26px; }
+</style>
+</head>
+<body>
+<h1>Protótipo de design: alarme e tema</h1>
+<p class="lede">Direção Lilás + tons por nota. Troque as cores no painel: as telas usam só variáveis <code>--color-*</code>, derivadas como o Core vai derivar (contraste AA corrigido, aviso quando duas cores se parecem). O alarme é sempre escuro; a lista de baralhos aparece no claro e no escuro.</p>
+
+<section class="panel" aria-label="Tema">
+  <div id="rows"></div>
+  <p class="warn" id="warn" role="status"></p>
+  <button class="reset" id="reset" type="button">Voltar ao tema de fábrica</button>
+</section>
+
+<div class="screens">
+  <figure><div class="frame"><div class="phone dark">
+    <div class="clock">06:00</div><div class="path">Despertador · Anatomia</div>
+    <div class="center" style="top:300px"><div class="say">Responda 5 cartões para desligar.</div><div class="sub2">O som baixa enquanto você responde.</div></div>
+    <div class="wide primary">Começar</div>
+    <div class="snz">Adiar 9 min · <b>+2 cartões</b></div>
+  </div></div><figcaption><b>Tocando</b>A sessão só começa no Começar.</figcaption></figure>
+
+  <figure><div class="frame"><div class="phone dark">
+    <div class="clock">06:12</div><div class="path">Anatomia › Membro superior</div>
+    <div class="seg"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div>
+    <div class="left">2 de 5 certos · <b>faltam 3</b></div>
+    <div class="face"><div class="q">Qual nervo inerva o músculo deltoide?</div></div>
+    <div class="wide neutral">Mostrar resposta</div>
+    <div class="snz">Adiar 9 min · <b>+2 cartões</b></div>
+  </div></div><figcaption><b>Frente</b>Uma ação só: revelar.</figcaption></figure>
+
+  <figure><div class="frame"><div class="phone dark">
+    <div class="clock">06:12</div><div class="path">Anatomia › Membro superior</div>
+    <div class="seg"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div>
+    <div class="left">2 de 5 certos · <b>faltam 3</b></div>
+    <div class="face"><div class="q">Qual nervo inerva o músculo deltoide?</div><div class="rule"></div><div class="a">Nervo axilar (C5–C6), ramo do fascículo posterior do plexo braquial.</div></div>
+    <div class="grades"><div class="g again">De novo<small>&lt;1 min</small></div><div class="g hard">Difícil<small>6 min</small></div><div class="g good">Bom<small>3 dias</small></div><div class="g easy">Fácil<small>9 dias</small></div></div>
+    <div class="snz">Adiar 9 min · <b>+2 cartões</b></div>
+  </div></div><figcaption><b>Verso</b>As notas aparecem segundos depois da revelação.</figcaption></figure>
+
+  <figure><div class="frame"><div class="phone dark">
+    <div class="clock">06:14</div><div class="path">Anatomia › Membro superior</div>
+    <div class="seg"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div>
+    <div class="left">3 de 5 certos · <b>faltam 2</b></div>
+    <div class="face"><span class="chip">Voltou: você errou há 2 min</span><div class="q">Quais músculos formam o manguito rotador?</div></div>
+    <div class="wide neutral">Mostrar resposta</div>
+    <div class="snz">Adiar 9 min · <b>+2 cartões</b></div>
+  </div></div><figcaption><b>De novo voltando</b>O aviso fica até a resposta.</figcaption></figure>
+
+  <figure><div class="frame"><div class="phone dark">
+    <div class="center"><div class="big">06:21</div><div class="say">Adiado.</div><div class="sub2">Vai tocar de novo às 06:21 com <b>7 cartões</b>.<br>Mais 1 adiamento possível.</div></div>
+    <div class="wide neutral">Responder agora</div>
+  </div></div><figcaption><b>Adiado</b>O custo do adiar em secundária.</figcaption></figure>
+
+  <figure><div class="frame"><div class="phone dark">
+    <div class="seg" style="margin-top:60px"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
+    <div class="center"><div class="big">5 de 5</div><div class="say">Alarme desligado.</div><div class="sub2">Checagem de acordado às 06:23.</div></div>
+    <div class="wide neutral">Fechar</div>
+  </div></div><figcaption><b>Concluído</b>Seco, sem festa.</figcaption></figure>
+
+  <figure><div class="frame"><div class="phone dark">
+    <div class="clock">06:23</div><div class="path">Checagem de acordado</div>
+    <div class="drain"><i></i></div>
+    <div class="left"><b>48 s</b> para responder</div>
+    <div class="face"><div class="q">Qual artéria passa pelo espaço quadrangular?</div></div>
+    <div class="wide neutral">Mostrar resposta</div>
+  </div></div><figcaption><b>Checagem de acordado</b>Sem resposta em 60 s, o alarme volta.</figcaption></figure>
+
+  <figure><div class="frame"><div class="phone app light" id="decks-light"></div></div><figcaption><b>Baralhos, claro</b>Os tokens fora do alarme.</figcaption></figure>
+  <figure><div class="frame"><div class="phone app dark" id="decks-dark"></div></div><figcaption><b>Baralhos, escuro</b>O mesmo tema, fundo escuro escolhido.</figcaption></figure>
+</div>
+
+<template id="decks">
+  <div class="bar"><h2>Baralhos</h2><span>Hoje, 14:05</span></div>
+  <div class="today"><div><b>47 cartões para hoje</b><small>Próximo alarme amanhã, 06:00</small></div><div class="btn">Estudar</div></div>
+  <div class="deck"><div class="n">Anatomia<small>Vinculado ao AnkiDroid</small></div><div class="ct new">5</div><div class="ct lrn">2</div><div class="ct due">31</div></div>
+  <div class="deck sub"><div class="n">Membro superior</div><div class="ct new">5</div><div class="ct lrn">2</div><div class="ct due">18</div></div>
+  <div class="deck sub"><div class="n">Membro inferior</div><div class="ct zero">0</div><div class="ct zero">0</div><div class="ct due">13</div></div>
+  <div class="deck"><div class="n">Alemão A2<small><span class="link">Limite diário atingido</span></small></div><div class="ct zero">0</div><div class="ct zero">0</div><div class="ct due">9</div></div>
+  <div class="deck"><div class="n">Farmacologia</div><div class="ct new">20</div><div class="ct zero">0</div><div class="ct zero">0</div></div>
+  <div class="nav">
+    <div class="on"><i></i><svg viewBox="0 0 24 24"><rect x="4" y="5" width="13" height="15" rx="2"/><path d="M8 3h11a1 1 0 0 1 1 1v13"/></svg>Baralhos</div>
+    <div><i></i><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 10v3l2 2M5 4 3 6M19 4l2 2"/></svg>Alarmes</div>
+    <div><i></i><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Estatísticas</div>
+    <div><i></i><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Ajustes</div>
+  </div>
+</template>
+
+<script>
+// ---- The user's choices and their swatches (Core's presets) ----
+const PRESETS = {
+  darkBg:   { label: "Fundo escuro", def: "#000000", swatches: ["#000000", "#0a0812", "#0b1220", "#121212"] },
+  lightBg:  { label: "Fundo claro",  def: "#ffffff", swatches: ["#ffffff", "#f7f5fb", "#f6f4ef", "#f2f5f8"] },
+  primary:  { label: "Primária",     def: "#c9b6ff", swatches: ["#c9b6ff", "#7fd4ff", "#8be3a0", "#ffd166", "#ff9ec7"] },
+  secondary:{ label: "Secundária",   def: "#ffb89a", swatches: ["#ffb89a", "#ffd166", "#7fe0cf", "#ff9ec7"] },
+  again:    { label: "De novo",      def: "#ff7a9a", swatches: ["#ff7a9a", "#ff6b6b", "#ff9ec7"] },
+  hard:     { label: "Difícil",      def: "#ffe066", swatches: ["#ffe066", "#ffcf7a", "#e6d27a"] },
+  good:     { label: "Bom",          def: "primary", swatches: ["primary", "#8be3a0", "#7fd4ff"] },
+  easy:     { label: "Fácil",        def: "#7fe0cf", swatches: ["#7fe0cf", "#7fd4ff", "#b6e37f"] },
+};
+const choice = Object.fromEntries(Object.entries(PRESETS).map(([k, p]) => [k, p.def]));
+
+// ---- Color math (what Core's theme module will own) ----
+const hexToRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+const lin = v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+const delin = v => v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055;
+const hex = c => "#" + c.map(v => Math.round(v * 255).toString(16).padStart(2, "0")).join("");
+const lum = h => { const [r, g, b] = hexToRgb(h).map(lin); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+const toOklch = h => {
+  const [r, g, b] = hexToRgb(h).map(lin);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b), m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b), s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+  return [L, Math.hypot(A, B), Math.atan2(B, A)];
+};
+const fromOklch = ([L, C, H]) => {
+  for (let c = C; c >= 0; c -= 0.002) {
+    const A = c * Math.cos(H), B = c * Math.sin(H);
+    const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3, m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3, s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
+    const rgb = [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s];
+    if (rgb.every(v => v >= -1e-4 && v <= 1.0001)) return hex(rgb.map(v => delin(Math.min(1, Math.max(0, v)))));
+  }
+  return hex([L, L, L]);
+};
+const mixOk = (a, b, t) => { const [x, y] = [toOklch(a), toOklch(b)]; // mix in oklab
+  const ab = q => [q[0], q[1] * Math.cos(q[2]), q[1] * Math.sin(q[2])]; const [p, q] = [ab(x), ab(y)];
+  const r = p.map((v, i) => v * (1 - t) + q[i] * t); return fromOklch([r[0], Math.hypot(r[1], r[2]), Math.atan2(r[2], r[1])]); };
+const mixRgb = (a, b, t) => hex(hexToRgb(a).map((v, i) => v * (1 - t) + hexToRgb(b)[i] * t));
+const isDark = bg => lum(bg) < 0.2;
+// Move lightness only (hue and chroma kept) until `c` reaches `min` against `bg`.
+const readable = (c, bg, min = 4.5) => {
+  if (contrast(c, bg) >= min) return c;
+  const [L, C0, H] = toOklch(c), C = isDark(bg) || C0 < 0.03 ? C0 : Math.max(C0, 0.12), dir = isDark(bg) ? 1 : -1;
+  for (let l = L; l >= 0 && l <= 1; l += dir * 0.005) { const x = fromOklch([l, C, H]); if (contrast(x, bg) >= min) return x; }
+  return isDark(bg) ? "#ffffff" : "#000000";
+};
+const onFill = f => contrast(f, "#ffffff") >= 4.5 ? "#ffffff" : "#120d1c";
+function themeFor(c, bg) {
+  const dark = isDark(bg), fg = dark ? "#ffffff" : "#16131d", good = c.good === "primary" ? c.primary : c.good;
+  // Solid fills: as chosen on dark; on light, deepened until white ink reads on them.
+  const fill = x => dark ? x : readable(x, "#ffffff", 4.5);
+  const t = { background: bg, foreground: fg,
+    "muted-foreground": readable(mixRgb(fg, bg, 0.45), bg), answer: mixRgb(fg, bg, 0.16),
+    border: mixRgb(fg, bg, dark ? 0.84 : 0.88), track: mixRgb(fg, bg, dark ? 0.8 : 0.86), surface: mixRgb(fg, bg, dark ? 0.89 : 0.95),
+    primary: fill(c.primary), "primary-tint": mixRgb(c.primary, bg, dark ? 0.8 : 0.82), "primary-ink": readable(c.primary, bg),
+    "attention-tint": mixRgb(c.secondary, bg, dark ? 0.82 : 0.8),
+    good: fill(good) };
+  // Attention reads on its own tint (chips), which also clears it on the ground.
+  t.attention = readable(c.secondary, t["attention-tint"]);
+  t["primary-foreground"] = onFill(t.primary); t["good-foreground"] = onFill(t.good);
+  for (const g of ["again", "hard", "easy"]) { const tint = mixRgb(c[g], bg, 0.8); t[g + "-tint"] = tint; t[g] = readable(c[g], tint); t[g + "-ink"] = readable(c[g], bg); }
+  return t;
+}
+const distance = (a, b) => { const p = toOklch(a), q = toOklch(b);
+  return Math.hypot(p[0] - q[0], p[1] * Math.cos(p[2]) - q[1] * Math.cos(q[2]), p[1] * Math.sin(p[2]) - q[1] * Math.sin(q[2])); };
+
+function warnings(c) {
+  const good = c.good === "primary" ? c.primary : c.good;
+  const named = [["De novo", c.again], ["Difícil", c.hard], ["Bom", good], ["Fácil", c.easy], ["a primária", c.primary], ["a secundária", c.secondary]];
+  const out = [];
+  for (let i = 0; i < named.length; i++) for (let j = i + 1; j < named.length; j++) {
+    if (named[i][0] === "Bom" && named[j][0] === "a primária" && c.good === "primary") continue;
+    if (distance(named[i][1], named[j][1]) < 0.09) out.push(`${named[i][0]} e ${named[j][0]} estão parecidos.`);
+  }
+  return out.join(" ");
+}
+
+function apply() {
+  const sets = [[".phone.dark", themeFor(choice, choice.darkBg)], [".phone.light", themeFor(choice, choice.lightBg)]];
+  for (const [sel, t] of sets)
+    document.querySelectorAll(sel).forEach(el => { for (const [k, v] of Object.entries(t)) el.style.setProperty("--color-" + k, v); });
+  document.getElementById("warn").textContent = warnings(choice);
+  document.querySelectorAll('.sw[data-value="primary"]').forEach(b => b.style.setProperty("--p", choice.primary));
+  document.querySelectorAll(".sw").forEach(b => b.setAttribute("aria-checked", String(choice[b.dataset.key] === b.dataset.value)));
+}
+
+// ---- Panel ----
+const rows = document.getElementById("rows");
+for (const [key, p] of Object.entries(PRESETS)) {
+  const row = document.createElement("div");
+  row.className = "prow"; row.setAttribute("role", "radiogroup"); row.setAttribute("aria-label", p.label);
+  row.innerHTML = `<b>${p.label}</b>`;
+  for (const v of p.swatches) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "sw"; b.setAttribute("role", "radio");
+    b.dataset.key = key; b.dataset.value = v;
+    b.title = v === "primary" ? "Igual à primária" : v;
+    b.style.background = v === "primary" ? "conic-gradient(var(--p) 0 50%, #ffffff22 0)" : v;
+    if (v === "primary") b.style.setProperty("--p", choice.primary);
+    b.onclick = () => { choice[key] = v; apply(); };
+    row.append(b);
+  }
+  const pick = document.createElement("input");
+  pick.type = "color"; pick.title = "Cor livre"; pick.setAttribute("aria-label", p.label + ": cor livre");
+  pick.oninput = () => { choice[key] = pick.value; apply(); };
+  row.append(pick);
+  rows.append(row);
+}
+document.getElementById("reset").onclick = () => { for (const [k, p] of Object.entries(PRESETS)) choice[k] = p.def; apply(); };
+
+const tpl = document.getElementById("decks");
+document.getElementById("decks-light").append(tpl.content.cloneNode(true));
+document.getElementById("decks-dark").append(tpl.content.cloneNode(true));
+apply();
+</script>
+</body>
+</html>
