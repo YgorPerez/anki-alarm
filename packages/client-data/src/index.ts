@@ -17,6 +17,7 @@ import {
   type Collection,
   type CollectionState,
   type Alarm,
+  type AnkiDroidSource,
 } from "@app/core";
 
 export interface AlarmEvent {
@@ -41,6 +42,11 @@ interface Data {
   changeCollection: (
     command: (collection: Collection) => void,
   ) => Effect.Effect<CollectionState, Error>;
+  /**
+   * Imports an AnkiDroid deck as a linked deck owned by this phone, with a snapshot for each
+   * reviewed card, in one transaction. Linking again updates it. Resolves with the deck's id.
+   */
+  linkAnkiDroidDeck: (source: AnkiDroidSource) => Effect.Effect<string, Error>;
   alarms: Effect.Effect<Alarm[], Error>;
   saveAlarm: (alarm: Alarm) => Effect.Effect<void, Error>;
   ingestEvents: (events: readonly AlarmEvent[]) => Effect.Effect<void, Error>;
@@ -139,6 +145,23 @@ async function open(driver: SQLiteConnection): Promise<Data> {
         }),
       ),
     collection: serial(store.read),
+    linkAnkiDroidDeck: (source) =>
+      serial(async () => {
+        const { result } = await store.transact(
+          (c) => c.linkAnkiDroid(source),
+          async ({ snapshots }) => {
+            const known = new Set((await readLog()).map((e) => e.id));
+            for (const entry of snapshots) {
+              if (known.has(entry.id)) continue;
+              await collectionDb.insert(reviewLog).values({ id: entry.id, body: entry });
+              await collectionDb
+                .insert(outbox)
+                .values({ kind: "reviewLog", recordId: entry.id, body: entry });
+            }
+          },
+        );
+        return result.deckId;
+      }),
     changeCollection: (command) => serial(() => store.change(command)),
     alarms: serial(async () =>
       (

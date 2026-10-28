@@ -1,6 +1,7 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only freshly filtered/mapped arrays are sorted. */
 import { createEmptyCard, fsrs, State, type Card as MemoryState, type Grade } from "ts-fsrs";
 import type { CollectionState, Note, NoteType, Preset } from "./collection.ts";
+import { renderTemplate } from "./template.ts";
 export type { MemoryState, Grade };
 type Entry = { id: string; cardId: string; at: number };
 export type LogEntry = Entry &
@@ -134,17 +135,31 @@ export function studyQueue(
         a.card.id.localeCompare(b.card.id),
     );
 }
-export function renderCard(note: Note, type: NoteType, side: "front" | "back", dark: boolean) {
+export function renderCard(
+  note: Note,
+  type: NoteType,
+  ordinal: number,
+  side: "front" | "back",
+  dark: boolean,
+  deckName = "",
+) {
+  const templates = type.fields.templates.value;
+  const template = type.fields.cloze.value ? templates[0] : templates[ordinal];
+  if (!template) throw new Error("Card template missing");
   const fields: Record<string, string> = {
-    Front: note.fields.front.value,
-    Back: note.fields.back.value,
+    Tags: note.fields.tags.value.join(" "),
+    Deck: deckName,
+    Subdeck: deckName.split("::").at(-1) ?? "",
+    Card: template.name,
+    Type: type.fields.name.value,
   };
-  const expand = (template: string) =>
-    template.replace(/{{(Front|Back)}}/g, (_, name: string) => fields[name] ?? "");
-  const front = expand(type.fields.frontTemplate.value);
+  type.fields.fieldNames.value.forEach((name, i) => {
+    fields[name] = note.values[i]?.value ?? "";
+  });
+  const front = renderTemplate(template.front, { fields, ordinal, side: "front" });
   const body =
     side === "front"
       ? front
-      : expand(type.fields.backTemplate.value.replaceAll("{{FrontSide}}", front));
+      : renderTemplate(template.back, { fields: { ...fields, FrontSide: front }, ordinal, side });
   return `<!doctype html><html class="${dark ? "nightMode night_mode" : ""}"><head><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: file:; media-src data: file:; style-src 'unsafe-inline'"><style>body{margin:24px;background:${dark ? "#000" : "#fff"};color:${dark ? "#fff" : "#16131d"};font:28px/1.4 sans-serif;overflow-wrap:anywhere}img{max-width:100%}${type.fields.css.value}</style></head><body class="card">${body}</body></html>`;
 }

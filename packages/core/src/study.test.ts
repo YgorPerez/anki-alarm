@@ -1,5 +1,12 @@
 import { expect, test } from "vite-plus/test";
-import { Collection, replayCard, studyQueue, type LogEntry } from "./index.ts";
+import {
+  Collection,
+  replayCard,
+  studyQueue,
+  type LogEntry,
+  type Note,
+  type NoteType,
+} from "./index.ts";
 const now = new Date(2026, 9, 28, 12).getTime();
 function fixture() {
   let n = 0;
@@ -129,14 +136,83 @@ test("Basic rendering keeps the back hidden until reveal and includes author CSS
   const note = state.notes[0]!;
   const type = state.noteTypes[0]!;
   type.fields.css.value = ".card{font-size:32px}";
-  expect(renderCard(note, type, "front", true)).toContain("nightMode night_mode");
-  expect(renderCard(note, type, "front", true)).not.toContain("um");
-  expect(renderCard(note, type, "back", true)).toContain('one<hr id="answer">um');
-  expect(renderCard(note, type, "back", true)).toContain(".card{font-size:32px}");
+  expect(renderCard(note, type, 0, "front", true)).toContain("nightMode night_mode");
+  expect(renderCard(note, type, 0, "front", true)).not.toContain("um");
+  expect(renderCard(note, type, 0, "back", true)).toContain('one<hr id="answer">um');
+  expect(renderCard(note, type, 0, "back", true)).toContain(".card{font-size:32px}");
 });
 
 test("reset puts a card after the untouched new cards", () => {
   const { state, deckId, cardId } = fixture();
   const log: LogEntry[] = [{ kind: "reset", id: "reset", cardId, at: now + 1 }];
   expect(studyQueue(state, log, deckId, now + 2).at(-1)?.card.id).toBe(cardId);
+});
+
+const hlc = { wallMs: 1, counter: 0, deviceId: "a" };
+const f = <T>(value: T) => ({ value, hlc });
+function imported(
+  fieldNames: string[],
+  templates: [string, string][],
+  values: string[],
+  cloze = false,
+) {
+  const type: NoteType = {
+    id: "t",
+    fields: {
+      name: f("Imported"),
+      fieldNames: f(fieldNames),
+      templates: f(templates.map(([front, back], i) => ({ name: `Card ${i + 1}`, front, back }))),
+      css: f(""),
+      cloze: f(cloze),
+    },
+  };
+  const note: Note = {
+    id: "n",
+    fields: { deckId: f("d"), noteTypeId: f("t"), tags: f(["verb", "leech"]) },
+    values: values.map(f),
+  };
+  return { type, note };
+}
+const body = (html: string) => html.slice(html.indexOf('<body class="card">') + 19, -14);
+
+test("imported templates pick the card's template and expand sections, filters and tags", () => {
+  const { note, type } = imported(
+    ["Word", "Meaning", "Extra"],
+    [
+      ["{{Word}}{{#Extra}} ({{Extra}}){{/Extra}}", "{{FrontSide}}<hr>{{Meaning}}"],
+      ["{{text:Meaning}}{{^Extra}}!{{/Extra}}", "{{FrontSide}}={{Word}} {{Tags}}"],
+    ],
+    ["casa", "<b>house</b>", ""],
+  );
+  expect(body(renderCard(note, type, 0, "front", false))).toBe("casa");
+  expect(body(renderCard(note, type, 0, "back", false))).toBe("casa<hr><b>house</b>");
+  expect(body(renderCard(note, type, 1, "front", false))).toBe("house!");
+  expect(body(renderCard(note, type, 1, "back", false))).toBe("house!=casa verb leech");
+});
+
+test("cloze cards hide only their own number and reveal it on the back", () => {
+  const { note, type } = imported(
+    ["Text", "Back Extra"],
+    [["{{cloze:Text}}", "{{cloze:Text}}<br>{{Back Extra}}"]],
+    ["{{c1::Brasília}} is the capital of {{c2::Brazil::country}}", "note"],
+    true,
+  );
+  expect(body(renderCard(note, type, 0, "front", false))).toBe(
+    '<span class="cloze">[...]</span> is the capital of Brazil',
+  );
+  expect(body(renderCard(note, type, 1, "front", false))).toBe(
+    'Brasília is the capital of <span class="cloze">[country]</span>',
+  );
+  expect(body(renderCard(note, type, 1, "back", false))).toBe(
+    'Brasília is the capital of <span class="cloze">Brazil</span><br>note',
+  );
+});
+
+test("card media stays referenced by file name and sound tags are left out of the page", () => {
+  const { note, type } = imported(
+    ["Front", "Back"],
+    [["{{Front}}", "{{Back}}"]],
+    ['<img src="cat.jpg">[sound:cat.mp3]', ""],
+  );
+  expect(body(renderCard(note, type, 0, "front", false))).toBe('<img src="cat.jpg">');
 });

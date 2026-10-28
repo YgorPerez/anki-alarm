@@ -47,13 +47,17 @@ export async function openCollectionStore(
     tombstones: (await db.select().from(tombstones)).map((r) => r.body),
   });
   let queue: Promise<unknown> = Promise.resolve();
-  const change = (command: (collection: Collection) => void): Promise<CollectionState> => {
+  /** Runs a command and, in the same transaction, `after` with its result. */
+  const transact = <A>(
+    command: (collection: Collection) => A,
+    after: (result: A) => Promise<void> = async () => {},
+  ): Promise<{ state: CollectionState; result: A }> => {
     const operation = queue.then(async () => {
       await db.run(sql`BEGIN IMMEDIATE`);
       try {
         const before = await read();
         const collection = new Collection(environment, before);
-        command(collection);
+        const result = command(collection);
         const state = collection.snapshot();
         // Replace the local snapshot atomically. Tombstones are retained in every snapshot.
         // A failed statement must stop subsequent writes before rollback.
@@ -78,8 +82,9 @@ export async function openCollectionStore(
               );
           }
         }
+        await after(result);
         await db.run(sql`COMMIT`);
-        return state;
+        return { state, result };
       } catch (error) {
         await db.run(sql`ROLLBACK`);
         throw error;
@@ -88,5 +93,7 @@ export async function openCollectionStore(
     queue = operation.catch(() => {});
     return operation;
   };
-  return { read, change, deviceId: device.value };
+  const change = async (command: (collection: Collection) => void) =>
+    (await transact(command)).state;
+  return { read, change, transact, deviceId: device.value };
 }

@@ -1,0 +1,98 @@
+{
+  "decks": [
+    {
+      "id": 1,
+      "name": "Default",
+      "options": "{\"id\":1,\"name\":\"Default\",\"new\":{\"perDay\":20,\"delays\":[1,10]},\"rev\":{\"perDay\":200},\"desiredRetention\":0.9}",
+      "filtered": false
+    },
+    {
+      "id": 1700000000001,
+      "name": "Japonês",
+      "options": "{\"id\":1,\"name\":\"Default\",\"new\":{\"perDay\":20,\"delays\":[1,10]},\"rev\":{\"perDay\":200},\"desiredRetention\":0.9}",
+      "filtered": false
+    }
+  ],
+  "source": {
+    "deckId": 1700000000001,
+    "decks": [
+      {
+        "id": 1700000000001,
+        "name": "Japonês",
+        "options": "{\"id\":1,\"name\":\"Default\",\"new\":{\"perDay\":20,\"delays\":[1,10]},\"rev\":{\"perDay\":200},\"desiredRetention\":0.9}",
+        "filtered": false
+      }
+    ],
+    "noteTypes": [
+      {
+        "id": 1600000000000,
+        "name": "Basic",
+        "fieldNames": "Front\u001fBack",
+        "css": ".card{text-align:center}",
+        "cloze": false,
+        "templates": [
+          {
+            "ord": 0,
+            "name": "Card 1",
+            "front": "{{Front}}",
+            "back": "{{FrontSide}}<hr id=answer>{{Back}}"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "id": 501,
+        "guid": "neko",
+        "noteTypeId": 1600000000000,
+        "mod": 1760000000,
+        "tags": "",
+        "fields": "<img src=\"neko.jpg\">猫\u001fgato"
+      },
+      {
+        "id": 502,
+        "guid": "inu",
+        "noteTypeId": 1600000000000,
+        "mod": 1760000000,
+        "tags": "",
+        "fields": "犬\u001fcachorro"
+      }
+    ],
+    "cards": [
+      {
+        "id": 9001,
+        "noteId": 501,
+        "ord": 0,
+        "deckId": 1700000000001,
+        "originalDeckId": 0,
+        "reps": 0,
+        "lapses": 0,
+        "type": 0,
+        "queue": 0,
+        "due": 1,
+        "interval": 0,
+        "left": 0,
+        "stability": null,
+        "difficulty": null,
+        "lastReviewSecs": null
+      },
+      {
+        "id": 9002,
+        "noteId": 502,
+        "ord": 0,
+        "deckId": 1700000000001,
+        "originalDeckId": 0,
+        "reps": 3,
+        "lapses": 0,
+        "type": 2,
+        "queue": 2,
+        "due": 20000,
+        "interval": 4,
+        "left": 0,
+        "stability": 5.1,
+        "difficulty": 4.8,
+        "lastReviewSecs": 1760000000
+      }
+    ]
+  }
+}

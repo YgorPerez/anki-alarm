@@ -20,23 +20,42 @@ export function uuid7(now: number, random: Uint8Array): string {
   return format(bytes);
 }
 
-/** RFC 9562 UUIDv5: note UUID as namespace, decimal zero-based template ordinal as name. */
-export function cardId(noteId: string, ordinal: number): string {
-  if (
-    !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(noteId) ||
-    !Number.isSafeInteger(ordinal) ||
-    ordinal < 0
-  )
-    throw new Error("Invalid card identity");
-  const namespace = noteId
+const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+/** RFC 9562 UUIDv5. */
+function uuid5(namespace: string, name: string): string {
+  const bytes = namespace
     .replaceAll("-", "")
     .match(/../g)!
     .map((b) => Number.parseInt(b, 16));
-  const input = new Uint8Array([...namespace, ...new TextEncoder().encode(String(ordinal))]);
-  const digest = sha1(input).slice(0, 16);
+  const digest = sha1(new Uint8Array([...bytes, ...new TextEncoder().encode(name)])).slice(0, 16);
   digest[6] = (digest[6]! & 15) | 0x50;
   digest[8] = (digest[8]! & 63) | 0x80;
   return format(digest);
+}
+
+/** RFC 9562 UUIDv5: note UUID as namespace, decimal zero-based template ordinal as name. */
+export function cardId(noteId: string, ordinal: number): string {
+  if (!UUID.test(noteId) || !Number.isSafeInteger(ordinal) || ordinal < 0)
+    throw new Error("Invalid card identity");
+  return uuid5(noteId, String(ordinal));
+}
+
+const IMPORT_NAMESPACE = "6f1f9a42-4c55-5a4e-9b8b-2f6d0a1c7e10";
+export type ImportKind = "note" | "noteType" | "deck" | "preset" | "review" | "snapshot";
+/**
+ * The id an imported record takes from its Anki identity (ADR 0001): note from guid, note type
+ * from Anki note type id, deck from Anki deck id, preset from Anki options id, review from revlog
+ * id. `.apkg` import and AnkiDroid linking share it, so both give one record. Anki's Default deck
+ * and Default options have id 1 in every collection, so pass their name and it is used instead.
+ */
+export function importId(kind: ImportKind, identity: string | number, name?: string): string {
+  if (identity === "" || (typeof identity === "number" && !Number.isSafeInteger(identity)))
+    throw new Error("Invalid import identity");
+  const key =
+    (kind === "deck" || kind === "preset") && identity === 1 && name !== undefined
+      ? `${kind}Name:${name}`
+      : `${kind}:${identity}`;
+  return uuid5(IMPORT_NAMESPACE, key);
 }
 
 // SHA-1 is required by UUIDv5, not used for passwords or security decisions.

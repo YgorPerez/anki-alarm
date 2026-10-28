@@ -214,3 +214,60 @@ test("study answers survive reopen and outbox failure rolls back the review", as
     for (const db of databases.values()) db.close();
   }
 });
+
+import fixture from "../../core/fixtures/ankidroid-deck.json" with { type: "json" };
+test("linking an AnkiDroid deck stores it with its snapshots in one transaction, once", async () => {
+  const databases = new Map<string, DatabaseSync>();
+  let fail = false;
+  let n = 0;
+  const connect = (name: string): ExecuteSql => {
+    const db = databases.get(name) ?? new DatabaseSync(":memory:");
+    databases.set(name, db);
+    return async (query, params, method) => {
+      if (fail && query.includes('insert into "review_log"')) throw new Error("disk full");
+      const stmt = db.prepare(query);
+      if (method === "run") {
+        stmt.run(...params);
+        return { rows: [] };
+      }
+      stmt.setReturnArrays(true);
+      return { rows: stmt.all(...params) };
+    };
+  };
+  const open = () =>
+    Effect.runPromise(
+      ClientData.pipe(
+        Effect.provide(
+          clientDataLayer({
+            connect,
+            now: () => 1770000000000,
+            random: () => new Uint8Array(16).fill(n++),
+          }),
+        ),
+      ),
+    );
+  try {
+    const data = await open();
+    fail = true;
+    await expect(Effect.runPromise(data.linkAnkiDroidDeck(fixture.source))).rejects.toThrow(
+      "Failed query",
+    );
+    expect((await Effect.runPromise(data.collection)).decks).toEqual([]);
+    fail = false;
+    const deckId = await Effect.runPromise(data.linkAnkiDroidDeck(fixture.source));
+    await Effect.runPromise(data.linkAnkiDroidDeck(fixture.source));
+    const reopened = await open();
+    const state = await Effect.runPromise(reopened.collection);
+    const deviceId = state.decks[0]!.fields.name.hlc.deviceId;
+    expect(state.decks.map((d) => [d.id, d.fields.linkedBy?.value])).toEqual([[deckId, deviceId]]);
+    expect(state.cards.map((c) => c.anki?.cardId)).toEqual([9001, 9002]);
+    const log = await Effect.runPromise(reopened.reviewLog);
+    expect(log).toEqual([expect.objectContaining({ kind: "snapshot", at: 1760000000000 })]);
+    const pending = await Effect.runPromise(reopened.pendingChanges);
+    expect(pending.filter((c) => c.kind === "reviewLog").map((c) => c.recordId)).toEqual([
+      log[0]!.id,
+    ]);
+  } finally {
+    for (const db of databases.values()) db.close();
+  }
+});
