@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/no-await-in-loop -- Media files are written one at a time. */
 import type { ImportSummary } from "@app/client-data";
 import {
   readApkg,
@@ -9,19 +8,12 @@ import {
   type ApkgWriteHost,
 } from "@app/core";
 import { Effect } from "effect";
-import { Directory, File, Paths } from "expo-file-system";
+import { Directory, File } from "expo-file-system";
 import { deserializeDatabaseAsync, openDatabaseAsync } from "expo-sqlite";
 import { unzipSync, zipSync } from "fflate";
 import { decompress } from "fzstd";
 import { localData } from "./database.ts";
-
-/** Card media, by Anki file name. Cards load them from here. */
-const mediaDirectory = () => new Directory(Paths.document, "media");
-export function mediaUrl(name: string) {
-  const base = mediaDirectory().uri;
-  return `${base.endsWith("/") ? base : `${base}/`}${encodeURIComponent(name)}`;
-}
-export const mediaBaseUrl = () => mediaUrl("");
+import { phoneMediaFiles } from "./media.ts";
 
 /** Asks for a package and imports it. Undefined when the user cancels the picker. */
 export async function pickAndImportApkg(): Promise<ImportSummary | undefined> {
@@ -126,20 +118,13 @@ function writeHost(): ApkgWriteHost {
         },
       };
     },
-    media: async (name) => {
-      const file = new File(mediaDirectory(), name);
-      return file.exists ? file.bytes() : undefined;
-    },
+    media: async (name) => (await phoneMediaFiles.read(name)) ?? undefined,
   };
 }
 
-/** Writes media files by name, one at a time: each is decompressed only while it is written. */
-async function storeMedia(media: readonly ApkgMedia[]) {
-  const directory = mediaDirectory();
-  directory.create({ intermediates: true, idempotent: true });
-  for (const file of media) {
-    const target = new File(directory, file.name);
-    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- One file in memory at a time.
-    await target.write(await file.bytes());
-  }
-}
+/**
+ * Stores media files by name and records their hashes for sync. ClientData reads, hashes and writes
+ * them one at a time, so only one decompressed file is in memory.
+ */
+const storeMedia = (media: readonly ApkgMedia[]) =>
+  Effect.runPromise(localData((data) => data.storeMedia(media)));

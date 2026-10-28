@@ -9,6 +9,7 @@ import type {
   Alarm,
   AlarmRecord,
   LogEntry,
+  MediaRecord,
 } from "@app/core";
 import type { AlarmEvent } from "./index.ts";
 // JSON bodies preserve each field's independent HLC. Ids remain indexed SQLite keys.
@@ -63,6 +64,17 @@ export const outbox = sqliteTable("outbox", {
 export const reviewLog = sqliteTable("review_log", {
   id: text().primaryKey(),
   body: text({ mode: "json" }).$type<LogEntry>().notNull(),
+});
+
+/** Synced media records: the SHA-256 each media file name holds for the account. */
+export const media = sqliteTable("media", {
+  id: text().primaryKey(),
+  body: text({ mode: "json" }).$type<MediaRecord>().notNull(),
+});
+/** The media files this device holds, by name, and the hash of what it holds. Never synced. */
+export const mediaLocal = sqliteTable("media_local", {
+  name: text().primaryKey(),
+  sha256: text().notNull(),
 });
 
 export const alarmRecords = sqliteTable("alarm_records", {

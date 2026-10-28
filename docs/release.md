@@ -99,6 +99,9 @@ The sync Worker (`apps/sync`) runs better-auth on D1 with Google as the only pro
    `apps/sync/wrangler.toml` (`database_id`, now a placeholder). The release workflow applies
    `apps/sync/migrations` with `wrangler d1 migrations apply app-sync --remote` before each deploy;
    the API token needs D1 edit permission.
+   **R2.** `pnpm --filter @app/sync exec wrangler r2 bucket create app-sync-media` (the `MEDIA`
+   binding in `wrangler.toml`). Media files live there under their SHA-256, once for every user,
+   and are never deleted in this release. The deploy token needs R2 edit permission too.
 2. **Google Cloud.** In one project's OAuth consent screen, create:
    - a **Web application** client. Its id is the audience of every ID token, the phone's included.
      Add the redirect URI `https://<sync host>/api/auth/callback/google` (the web's redirect sign-in).
@@ -126,7 +129,8 @@ The sync Worker (`apps/sync`) runs better-auth on D1 with Google as the only pro
 A build without the two variables runs fully offline and says sync is unavailable. For local work,
 put the five Worker values in `apps/sync/.dev.vars` (untracked), run
 `wrangler d1 migrations apply app-sync --local` and `wrangler dev`, and start the phone with the two
-`EXPO_PUBLIC_*` variables pointing at it. The Worker tests need none of this: they run on a local D1.
+`EXPO_PUBLIC_*` variables pointing at it. The Worker tests need none of this: they run on a local D1
+and R2.
 
 Adding Google Sign-In, SecureStore, expo-network, expo-linking, expo-constants and expo-web-browser
 changed native code: the next release builds an APK, and a development client must be rebuilt.

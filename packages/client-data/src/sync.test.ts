@@ -5,7 +5,13 @@ import { fakeSyncApi, memorySyncServer, type FakeSyncApi } from "@app/contracts/
 import { Effect } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
 import ankiDroid from "../../core/fixtures/ankidroid-deck.json" with { type: "json" };
-import { ClientData, clientDataLayer, type ExecuteSql } from "./index.ts";
+import {
+  ClientData,
+  clientDataLayer,
+  MediaStorageRefused,
+  memoryMediaFiles,
+  type ExecuteSql,
+} from "./index.ts";
 
 /** One device: its own two SQLite databases and clock. */
 async function device(name: string, clock = { now: 1_000 }) {
@@ -25,18 +31,22 @@ async function device(name: string, clock = { now: 1_000 }) {
     };
   };
   let n = 0;
+  const files = memoryMediaFiles();
   const data = await Effect.runPromise(
     ClientData.pipe(
       Effect.provide(
-        clientDataLayer({
-          connect,
-          now: () => clock.now,
-          random: () => new Uint8Array(16).fill(n++).map((b, i) => (i === 15 ? name.length : b)),
-        }),
+        clientDataLayer(
+          {
+            connect,
+            now: () => clock.now,
+            random: () => new Uint8Array(16).fill(n++).map((b, i) => (i === 15 ? name.length : b)),
+          },
+          files,
+        ),
       ),
     ),
   );
-  return { data, run, clock };
+  return { data, run, clock, files };
 }
 const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect);
 
@@ -261,4 +271,164 @@ test("local writes notify subscribers after they commit", async () => {
   unsubscribe();
   await phone.run(phone.data.setTheme({ primary: "#8be3a0" }));
   expect(calls).toBe(2);
+});
+
+const bytes = (text: string) => new TextEncoder().encode(text);
+const file = (name: string, text: string) => ({ name, bytes: async () => bytes(text) });
+/** The phone stores a picture and a sound and adds a note that uses each. */
+async function withMedia(phone: Awaited<ReturnType<typeof device>>, deckId: string) {
+  await phone.run(
+    phone.data.storeMedia([file("casa.jpg", "a picture"), file("casa.mp3", "a sound")]),
+  );
+  return phone.run(
+    phone.data.changeCollection((c) => {
+      c.addBasicNote(deckId, '<img src="casa.jpg">', "house");
+      c.addBasicNote(deckId, "[sound:casa.mp3]", "sound");
+    }),
+  );
+}
+
+test("media uploads before the notes that use it, and the other device downloads every file", async () => {
+  const { server, api, phone, web, sync, deck } = await pair();
+  await withMedia(phone, deck.id);
+
+  const result = await phone.run(phone.data.sync(api.client));
+  expect(result.media).toMatchObject({ uploaded: 2, heldBack: 0 });
+  expect(server.files()).toHaveLength(2);
+  // Both files were in R2 before the push that carried their records and notes.
+  expect(api.calls.uploads).toHaveLength(2);
+
+  const pulled = await web.run(web.data.sync(api.client));
+  expect(pulled.media).toMatchObject({ downloaded: 2, missing: 0, storageRefused: false });
+  expect(pulled.changed).toContain("media");
+  expect(web.files.files.get("casa.jpg")).toEqual(bytes("a picture"));
+  expect(web.files.files.get("casa.mp3")).toEqual(bytes("a sound"));
+
+  // Nothing new: no upload, no download.
+  await sync(phone, web);
+  expect(api.calls.uploads).toHaveLength(2);
+  expect(api.calls.downloads).toHaveLength(2);
+});
+
+test("a file the server already has, from anyone, isn't uploaded again", async () => {
+  const { server, api, phone, web, deck } = await pair();
+  await web.run(web.data.storeMedia([file("other-name.jpg", "a picture")]));
+  await web.run(web.data.sync(api.client));
+  expect(api.calls.uploads).toHaveLength(1);
+  await withMedia(phone, deck.id);
+  await phone.run(phone.data.sync(api.client));
+  expect(api.calls.uploads).toHaveLength(2);
+  expect(server.files()).toHaveLength(2);
+});
+
+test("a failed upload holds back only the records that use that file, until it succeeds", async () => {
+  const server = memorySyncServer();
+  let failing = true;
+  const flaky = await fakeSyncApi({
+    ...server,
+    upload: (sha256, content, user) =>
+      failing && new TextDecoder().decode(content) === "a picture"
+        ? Effect.die(new Error("network"))
+        : server.upload(sha256, content, user),
+  });
+  apis.push(flaky);
+  const phone = await device("phone");
+  const web = await device("web");
+  const deckId = (await phone.run(phone.data.changeCollection((c) => void c.createDeck("Words"))))
+    .decks[0]!.id;
+  for (const side of [phone, web]) await side.run(side.data.adoptAccount("user-1"));
+  await phone.run(phone.data.sync(flaky.client));
+  const state = await withMedia(phone, deckId);
+  await phone.run(phone.data.changeCollection((c) => void c.createDeck("Plain")));
+
+  const result = await phone.run(phone.data.sync(flaky.client));
+  expect(result.media).toMatchObject({ uploaded: 1, heldBack: 3 });
+  const stored = server.stored("user-1");
+  const pictureNote = state.notes.find((n) => n.values[0]?.value.includes("casa.jpg"))!;
+  expect(stored.some((c) => c.kind === "notes" && c.record.id === pictureNote.id)).toBe(false);
+  expect(stored.some((c) => c.kind === "decks" && c.record.fields["name"]?.value === "Plain")).toBe(
+    true,
+  );
+  expect(
+    stored.filter((c) => c.kind === "notes").map((c) => c.kind === "notes" && c.record.id),
+  ).toHaveLength(1);
+  const pending = await phone.run(phone.data.pendingChanges);
+  expect(new Set(pending.map((p) => p.kind))).toEqual(new Set(["cards", "media", "notes"]));
+
+  failing = false;
+  expect((await phone.run(phone.data.sync(flaky.client))).media).toMatchObject({
+    uploaded: 1,
+    heldBack: 0,
+  });
+  expect(await phone.run(phone.data.pendingChanges)).toEqual([]);
+  await web.run(web.data.sync(flaky.client));
+  expect(web.files.files.get("casa.jpg")).toEqual(bytes("a picture"));
+});
+
+test("the first sync into an account uploads media stored before it, and holds back on failure", async () => {
+  const server = memorySyncServer();
+  const failing = await fakeSyncApi({
+    ...server,
+    upload: () => Effect.die(new Error("offline")),
+  });
+  apis.push(failing);
+  const phone = await device("phone");
+  const deckId = (await phone.run(phone.data.changeCollection((c) => void c.createDeck("Words"))))
+    .decks[0]!.id;
+  await withMedia(phone, deckId);
+  await phone.run(phone.data.adoptAccount("user-1"));
+
+  expect((await phone.run(phone.data.sync(failing.client))).media.heldBack).toBe(6);
+  expect(server.stored("user-1").some((c) => c.kind === "notes")).toBe(false);
+  expect(server.stored("user-1").some((c) => c.kind === "decks")).toBe(true);
+
+  const api = await connect(server);
+  expect((await phone.run(phone.data.sync(api.client))).media).toMatchObject({
+    uploaded: 2,
+    heldBack: 0,
+  });
+  expect(server.stored("user-1").filter((c) => c.kind === "notes")).toHaveLength(2);
+});
+
+test("a file replaced on one device reaches the other", async () => {
+  const { api, phone, web, deck } = await pair();
+  await withMedia(phone, deck.id);
+  await phone.run(phone.data.sync(api.client));
+  await web.run(web.data.sync(api.client));
+  phone.clock.now = 5_000;
+  await phone.run(phone.data.storeMedia([file("casa.jpg", "a better picture")]));
+  await phone.run(phone.data.sync(api.client));
+  expect((await web.run(web.data.sync(api.client))).media.downloaded).toBe(1);
+  expect(web.files.files.get("casa.jpg")).toEqual(bytes("a better picture"));
+});
+
+test("when storage is refused the sync says so and the files stay missing", async () => {
+  const { api, phone, web, deck } = await pair();
+  await withMedia(phone, deck.id);
+  await phone.run(phone.data.sync(api.client));
+  web.files.refuse = true;
+
+  const result = await web.run(web.data.sync(api.client));
+  expect(result.media).toMatchObject({ downloaded: 0, missing: 2, storageRefused: true });
+  expect(await web.run(web.data.missingMedia)).toEqual(["casa.jpg", "casa.mp3"]);
+
+  web.files.refuse = false;
+  await web.run(web.data.sync(api.client));
+  expect(await web.run(web.data.missingMedia)).toEqual([]);
+});
+
+test("storing media writes the file and records its hash; the same bytes again queue nothing", async () => {
+  const phone = await device("phone");
+  expect(await phone.run(phone.data.storeMedia([file("casa.jpg", "a picture")]))).toBe(1);
+  expect(phone.files.files.get("casa.jpg")).toEqual(bytes("a picture"));
+  const before = (await phone.run(phone.data.pendingChanges)).length;
+  await phone.run(phone.data.storeMedia([file("casa.jpg", "a picture")]));
+  expect(await phone.run(phone.data.pendingChanges)).toHaveLength(before);
+  await expect(phone.run(phone.data.storeMedia([file("../x", "no")]))).rejects.toThrow(
+    "Unsafe media file name",
+  );
+  phone.files.refuse = true;
+  await expect(phone.run(phone.data.storeMedia([file("b.jpg", "refused")]))).rejects.toBeInstanceOf(
+    MediaStorageRefused,
+  );
 });

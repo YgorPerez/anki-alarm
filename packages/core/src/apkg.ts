@@ -1,4 +1,5 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh copies are sorted. */
+import { safeMediaName } from "./media.ts";
 import { Message } from "./protobuf.ts";
 
 /**
@@ -168,14 +169,9 @@ function mediaEntries(map: Uint8Array, latest: boolean) {
 }
 /** Media names are bare file names, NFC like Anki's. Anything else is a corrupt package. */
 function mediaName(name: string) {
-  const normal = name.normalize("NFC");
-  if (!safeMediaName(normal)) throw new Error(`Unsafe media file name: ${JSON.stringify(name)}`);
-  return normal;
-}
-/** A bare file name: no path, no control characters. */
-export function safeMediaName(name: string) {
-  // oxlint-disable-next-line no-control-regex -- control characters are what this rejects.
-  return Boolean(name) && name !== "." && name !== ".." && !/[/\\\u0000-\u001f]/.test(name);
+  const safe = safeMediaName(name);
+  if (safe === undefined) throw new Error(`Unsafe media file name: ${JSON.stringify(name)}`);
+  return safe;
 }
 
 type Row = Record<string, unknown>;

@@ -42,3 +42,23 @@ whether to ask first. `sync` fails with `UpdateRequired` on a protocol mismatch 
 device's single settings record whatever id the account's record has. Alarms sync as
 `alarm_records` (one HLC per property); `alarms` keeps the shape native reads.
 Native journal events stay device-local and never sync.
+
+## Media
+
+Pass the app's media files as the second argument: `clientDataLayer(driver, media)`. The phone
+gives its `Paths.document/media` folder (`apps/mobile/src/media.ts`), the web gives OPFS through
+`opfsMediaFiles()` from `@app/client-data/web`; without one, files stay in memory (tests). Files
+are kept by name, as fields reference them. `storeMedia(files)` writes each file and records its
+SHA-256 in a media record (synced, one slot per name, from Core's `stampMedia`) and in the local
+`media_local` table; store media before the records that use it. The same bytes again queue
+nothing.
+
+Each sync asks the Worker which of the pushed media records' files it lacks, uploads those, and
+then pushes. When an upload fails, Core's `mediaPushPlan` holds back that media record, the notes
+that reference its name and their cards: they stay in the outbox (after a full upload they are
+queued again) and the rest is pushed. After the pull, every file a note references whose local
+copy is absent or stale is downloaded and checked against its hash. `SyncResult.media` says how
+many files moved, how many changes were held back, how many files are still missing, and whether
+the device refused storage (`MediaStorageRefused`: the web's OPFS full, private or absent, the
+phone's disk full), which the UI should say. `missingMedia` lists the files still missing. Nothing
+is garbage-collected.

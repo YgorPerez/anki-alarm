@@ -24,6 +24,9 @@ Decks nest.
 **Linked deck.** A deck imported from AnkiDroid that keeps AnkiDroid's note and card ids, so it can
 be pulled and synced back.
 
+**Media record.** The synced pairing of a media file name, as fields reference it, with the SHA-256
+of its bytes. The file itself is stored once, under that hash.
+
 **Memory state.** A card's FSRS stability, difficulty, due date and learning step. Derived by
 replaying its review log entries, never stored as the truth.
 

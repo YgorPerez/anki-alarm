@@ -2,11 +2,18 @@
 // Core's merge, and writes the winners with the account's next sequence numbers in one batch. The
 // batch only applies if the account's sequence is still the one it read, so two pushes for one
 // account never interleave: the loser re-reads and merges again.
-import { resolveChange, syncSlot, type SyncChange } from "@app/core";
+import {
+  mediaFromRecord,
+  mediaReferences,
+  resolveChange,
+  syncSlot,
+  type SyncChange,
+} from "@app/core";
 import type { Change, PullResult } from "@app/contracts";
 import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
+import { storedFiles } from "./media.ts";
 import { syncAccounts, syncRecords } from "./schema.ts";
 
 /** The contract checks a change's envelope; Core's types describe its records. */
@@ -24,6 +31,24 @@ export function syncStore(d1: D1Database) {
   const db = drizzle(d1);
   const ensureAccount = (userId: string) =>
     db.insert(syncAccounts).values({ userId }).onConflictDoNothing();
+
+  /** Drops media records whose file isn't in R2: the server never points at a missing file. */
+  async function withFiles(changes: readonly Change[]) {
+    const hashes = [
+      ...new Set(
+        changes.flatMap((change) =>
+          change.kind === "media" ? [mediaFromRecord(change.record)?.sha256 ?? ""] : [],
+        ),
+      ),
+    ].filter(Boolean);
+    if (hashes.length === 0) return changes;
+    const stored = await storedFiles(db, hashes);
+    return changes.filter((change) => {
+      if (change.kind !== "media") return true;
+      const file = mediaFromRecord(change.record);
+      return file !== undefined && stored.has(file.sha256);
+    });
+  }
 
   async function pushOnce(userId: string, changes: readonly Change[]) {
     const [account] = await db
@@ -66,6 +91,12 @@ export function syncStore(d1: D1Database) {
       chunks.at(-1)!.push({ kind, id, sequence, body });
       size += body.length;
     }
+    const guard = "EXISTS (SELECT 1 FROM sync_accounts WHERE user_id = ?1 AND push_id = ?3)";
+    const media = mediaIndex([...winners.values()].map((winner) => winner.change));
+    const indexed = (statement: string, entries: readonly unknown[]) =>
+      entries.length === 0
+        ? []
+        : [d1.prepare(statement).bind(userId, JSON.stringify(entries), pushId)];
     // Raw D1: drizzle's batch can't carry these guarded statements.
     const [moved] = await d1.batch([
       d1
@@ -86,6 +117,25 @@ export function syncStore(d1: D1Database) {
           )
           .bind(userId, JSON.stringify(chunk), pushId),
       ),
+      ...indexed(
+        `DELETE FROM note_media WHERE user_id = ?1
+        AND note_id IN (SELECT value FROM json_each(?2)) AND ${guard}`,
+        media.notes,
+      ),
+      ...indexed(
+        `INSERT INTO note_media (user_id, note_id, name)
+        SELECT ?1, json_extract(value, '$.noteId'), json_extract(value, '$.name')
+        FROM json_each(?2) WHERE ${guard}
+        ON CONFLICT DO NOTHING`,
+        media.references,
+      ),
+      ...indexed(
+        `INSERT INTO media_names (user_id, name, sha256)
+        SELECT ?1, json_extract(value, '$.name'), json_extract(value, '$.sha256')
+        FROM json_each(?2) WHERE ${guard}
+        ON CONFLICT (user_id, name) DO UPDATE SET sha256 = excluded.sha256`,
+        media.names,
+      ),
     ]);
     return { accepted: winners.size, applied: moved?.meta.changes === 1 };
   }
@@ -97,7 +147,7 @@ export function syncStore(d1: D1Database) {
       for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
         // A concurrent push for the same account moved its sequence: merge again on top of it.
         // oxlint-disable-next-line eslint/no-await-in-loop -- Each retry depends on the last.
-        const result = await pushOnce(userId, changes);
+        const result = await pushOnce(userId, await withFiles(changes));
         if (result.applied) return result.accepted;
       }
       throw new Error("Too many concurrent pushes for one account");
@@ -125,3 +175,27 @@ export function syncStore(d1: D1Database) {
   };
 }
 export type SyncStore = ReturnType<typeof syncStore>;
+
+/**
+ * What a push's winners change in the media index: the notes whose references are rewritten (every
+ * note winner, and deleted notes), the names they reference now, and the media records' hashes.
+ */
+function mediaIndex(winners: readonly SyncChange[]) {
+  const notes: string[] = [];
+  const references: { noteId: string; name: string }[] = [];
+  const names: { name: string; sha256: string }[] = [];
+  for (const change of winners) {
+    if (change.kind === "tombstone" && change.tombstone.kind === "notes")
+      notes.push(change.tombstone.id);
+    if (change.kind === "notes") {
+      notes.push(change.record.id);
+      for (const name of mediaReferences((change.record.values ?? []).map((v) => v.value)))
+        references.push({ noteId: change.record.id, name });
+    }
+    if (change.kind === "media") {
+      const file = mediaFromRecord(change.record);
+      if (file) names.push({ name: file.name, sha256: file.sha256 });
+    }
+  }
+  return { notes, references, names };
+}

@@ -1,6 +1,7 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh copies are sorted. */
 /* oxlint-disable eslint/no-await-in-loop -- Statements run in order, one media file at a time. */
-import { APP_ID_KEY, safeMediaName } from "./apkg.ts";
+import { APP_ID_KEY } from "./apkg.ts";
+import { mediaReferences, safeMediaName } from "./media.ts";
 import type { Card, CollectionState, Deck, Field, NoteType, Preset } from "./collection.ts";
 import { importId, sha1, type ImportKind } from "./ids.ts";
 import {
@@ -12,7 +13,6 @@ import {
   type LogEntry,
   type MemoryState,
 } from "./study.ts";
-import { mediaNames } from "./template.ts";
 
 /**
  * What the app gives Core to write an `.apkg`: an empty SQLite database to run Core's statements
@@ -77,7 +77,7 @@ export async function writeApkg(
   const map: Record<string, string> = {};
   for (const name of rows.media) {
     // A note could name any path; only bare file names in the media folder go in.
-    const bytes = safeMediaName(name) ? await host.media(name) : undefined;
+    const bytes = safeMediaName(name) === name ? await host.media(name) : undefined;
     if (!bytes) continue;
     const entry = String(Object.keys(map).length);
     map[entry] = name;
@@ -342,10 +342,10 @@ function collectionRows({ collection, log, deckId, now }: ApkgExportInput) {
   );
   const media = new Set<string>();
   for (const note of notes)
-    for (const v of note.values) for (const m of mediaNames(v.value)) media.add(m);
+    for (const m of mediaReferences(note.values.map((v) => v.value))) media.add(m);
   for (const type of types)
-    for (const t of type.fields.templates.value)
-      for (const m of mediaNames(`${t.front}${t.back}`)) media.add(m);
+    for (const m of mediaReferences(type.fields.templates.value.flatMap((t) => [t.front, t.back])))
+      media.add(m);
   const first = deckAnki.get(root.id)!.id;
   const conf = {
     ...CONF,

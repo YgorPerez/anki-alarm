@@ -137,3 +137,11 @@ export type {
   WakeUpStats,
   WakeUpTally,
 } from "./wakeup.ts";
+export {
+  mediaFromRecord,
+  mediaPushPlan,
+  mediaReferences,
+  safeMediaName,
+  stampMedia,
+} from "./media.ts";
+export type { MediaFile, MediaRecord } from "./media.ts";

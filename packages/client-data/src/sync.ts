@@ -1,8 +1,15 @@
 /* oxlint-disable eslint/no-await-in-loop -- SQLite transactions apply changes in order. */
 // The push/pull engine of ADR 0001. One sync is metadata, a push of the outbox, then pulls from
-// the stored cursor until the Worker has nothing more. Core decides every merge.
+// the stored cursor until the Worker has nothing more. Core decides every merge. Media files the
+// push needs upload first; after the pull, every file the notes use is downloaded.
 import {
   alarmFromRecord,
+  mediaFromRecord,
+  mediaPushPlan,
+  mediaReferences,
+  importId,
+  safeMediaName,
+  stampMedia,
   readAlarm,
   parseRecord,
   resolveChange,
@@ -11,17 +18,21 @@ import {
   type AlarmRecord,
   type CollectionEnvironment,
   type SyncChange,
+  type MediaRecord,
   type Tombstone,
 } from "@app/core";
 import { MAX_CHANGES, UpdateRequired, type Change, type SyncClient } from "@app/contracts";
 import { eq, sql } from "drizzle-orm";
 import type { SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
-import { Data, Effect } from "effect";
+import { Cause, Data, Effect, Exit } from "effect";
+import { MediaStorageRefused, type MediaFiles } from "./media.ts";
 import {
   alarmRecords,
   alarms,
   cards,
   decks,
+  media as mediaTable,
+  mediaLocal,
   metadata,
   noteTypes,
   notes,
@@ -35,6 +46,7 @@ import {
 /** What one sync did, so the app refreshes what changed (theme, alarms, decks). */
 export interface SyncResult {
   pushed: number;
+  media: MediaSyncResult;
   pulled: number;
   /** The kinds of the pulled changes that changed something here. */
   changed: string[];
@@ -52,6 +64,24 @@ const isRecordTable = (kind: string): kind is RecordTable => kind in recordTable
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion
 const toCore = (change: Change) => change as SyncChange;
 
+/** What one sync did with media files. */
+export interface MediaSyncResult {
+  /** Files uploaded before the push. */
+  uploaded: number;
+  /** Changes left in the outbox because a file they use didn't upload. */
+  heldBack: number;
+  /** Files downloaded after the pull. */
+  downloaded: number;
+  /** Files the notes use that this device still lacks. */
+  missing: number;
+  /** The device refused to store a file. Say so; the files stay missing until it stores again. */
+  storageRefused: boolean;
+}
+
+/** How many media files move at once. */
+const MEDIA_CONCURRENCY = 4;
+const failure = (error: unknown) => (error instanceof Error ? error : new Error(String(error)));
+
 export interface EngineDeps {
   collectionDb: SqliteRemoteDatabase;
   alarmDb: SqliteRemoteDatabase;
@@ -61,8 +91,16 @@ export interface EngineDeps {
   inCollection: <A>(operation: () => Promise<A>) => Promise<A>;
   inAlarms: <A>(operation: () => Promise<A>) => Promise<A>;
   env: CollectionEnvironment;
+  media: MediaFiles;
 }
 
+/** Runs a media step; a failure of any kind, defects included, is its result, not the sync's. */
+const attempt = <A, E>(effect: Effect.Effect<A, E>) =>
+  Effect.map(Effect.exit(effect), (exit) =>
+    Exit.isSuccess(exit)
+      ? { ok: true as const, value: exit.value }
+      : { ok: false as const, cause: exit.cause },
+  );
 export function syncEngine({
   collectionDb,
   alarmDb,
@@ -70,6 +108,7 @@ export function syncEngine({
   inCollection,
   inAlarms,
   env,
+  media,
 }: EngineDeps) {
   const readMeta = async (id: string) =>
     (await collectionDb.select().from(metadata).where(eq(metadata.id, id)))[0]?.value;
@@ -102,6 +141,8 @@ export function syncEngine({
       changes.push({ kind: "tombstone", tombstone: row.body });
     for (const row of await collectionDb.select().from(settings))
       changes.push({ kind: "settings", record: row.body });
+    for (const row of await collectionDb.select().from(mediaTable))
+      changes.push({ kind: "media", record: row.body });
     for (const row of await collectionDb.select().from(reviewLog))
       changes.push({ kind: "reviewLog", entry: row.body });
     for (const row of await alarmDb.select({ id: alarms.id }).from(alarms)) {
@@ -130,7 +171,7 @@ export function syncEngine({
     // oxlint-disable typescript/no-unsafe-type-assertion
     if (kind === "tombstones") return { kind: "tombstone", tombstone: body as Tombstone };
     if (kind === "reviewLog") return { kind: "reviewLog", entry: body as never };
-    if (kind === "settings") return { kind, record: body as never };
+    if (kind === "settings" || kind === "media") return { kind, record: body as never };
     // oxlint-enable typescript/no-unsafe-type-assertion
     if (kind === "alarms") {
       const record = await alarmRecord(id);
@@ -139,11 +180,33 @@ export function syncEngine({
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     return isRecordTable(kind) ? { kind, record: body as never } : null;
   };
-  const acknowledge = (marks: { collection: number; alarms: number }, full: boolean) =>
+  /**
+   * Clears what was pushed. Held-back changes (only collection records: notes, their cards and media)
+   * stay queued; after a full upload they are queued again, since they came from the tables.
+   */
+  const acknowledge = (
+    marks: { collection: number; alarms: number },
+    full: boolean,
+    held: readonly Change[],
+  ) =>
     serial(async () => {
+      const kept = held.flatMap((change) =>
+        change.kind === "tombstone" || change.kind === "reviewLog"
+          ? []
+          : [{ kind: change.kind, recordId: change.record.id, body: change.record }],
+      );
+      const keys = JSON.stringify(kept.map((k) => `${k.kind}:${k.recordId}`));
       await inCollection(async () => {
-        await collectionDb.delete(outbox).where(sql`${outbox.sequence} <= ${marks.collection}`);
-        if (full) await collectionDb.delete(metadata).where(eq(metadata.id, "syncFullUpload"));
+        await collectionDb
+          .delete(outbox)
+          .where(
+            sql`${outbox.sequence} <= ${marks.collection} AND (${outbox.kind} || ':' || ${outbox.recordId}) NOT IN (SELECT value FROM json_each(${keys}))`,
+          );
+        if (full) {
+          for (let i = 0; i < kept.length; i += 200)
+            await collectionDb.insert(outbox).values(kept.slice(i, i + 200));
+          await collectionDb.delete(metadata).where(eq(metadata.id, "syncFullUpload"));
+        }
       });
       await alarmDb.delete(outbox).where(sql`${outbox.sequence} <= ${marks.alarms}`);
     });
@@ -163,6 +226,12 @@ export function syncEngine({
     if (change.kind === "alarms") {
       const record = await alarmRecord(change.record.id);
       return record && { kind: "alarms", record };
+    }
+    if (change.kind === "media") {
+      const row = (
+        await collectionDb.select().from(mediaTable).where(eq(mediaTable.id, change.record.id))
+      )[0];
+      return row && { kind: "media", record: row.body };
     }
     const id = change.kind === "tombstone" ? change.tombstone.id : change.record.id;
     const kind = change.kind === "tombstone" ? change.tombstone.kind : change.kind;
@@ -202,6 +271,14 @@ export function syncEngine({
         .insert(alarms)
         .values({ id: alarm.id, data: alarm })
         .onConflictDoUpdate({ target: alarms.id, set: { data: alarm } });
+    } else if (change.kind === "media") {
+      // Media records are written only by stampMedia and its merges.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      const body = change.record as MediaRecord;
+      await collectionDb
+        .insert(mediaTable)
+        .values({ id: body.id, body })
+        .onConflictDoUpdate({ target: mediaTable.id, set: { body } });
     } else if (change.kind === "tombstone") {
       const { tombstone } = change;
       await collectionDb
@@ -221,6 +298,114 @@ export function syncEngine({
         .onConflictDoUpdate({ target: table.id, set: { body } });
     }
   };
+  const files = {
+    read: (name: string) => Effect.tryPromise({ try: () => media.read(name), catch: (e) => e }),
+    write: (name: string, bytes: Uint8Array) =>
+      Effect.tryPromise({ try: () => media.write(name, bytes), catch: (e) => e }),
+    sha256: (bytes: Uint8Array) =>
+      Effect.tryPromise({ try: () => media.sha256(bytes), catch: (e) => e }),
+  };
+
+  /** Uploads the files the push's media records point at and the Worker lacks. */
+  const uploadMedia = (client: SyncClient, outgoing: readonly Change[]) =>
+    Effect.gen(function* () {
+      const { uploads } = mediaPushPlan(outgoing.map(toCore), new Set());
+      const names = new Map(uploads.map((u) => [u.sha256, u.name]));
+      const hashes = [...names.keys()];
+      const missing: string[] = [];
+      for (let i = 0; i < hashes.length; i += MAX_CHANGES) {
+        const page = yield* client.media.missing({
+          payload: { hashes: hashes.slice(i, i + MAX_CHANGES) },
+        });
+        missing.push(...page.missing);
+      }
+      const failed = new Set<string>();
+      let uploaded = 0;
+      yield* Effect.forEach(
+        missing,
+        (sha256) =>
+          attempt(
+            Effect.gen(function* () {
+              const bytes = yield* files.read(names.get(sha256)!);
+              // The file changed or went away since it was recorded: the next store re-records it.
+              const same = bytes !== null && (yield* files.sha256(bytes)) === sha256;
+              yield* same && bytes
+                ? client.media.upload({ params: { sha256 }, payload: bytes })
+                : Effect.fail("changed");
+            }),
+          ).pipe(
+            Effect.map((result) => {
+              if (result.ok) uploaded += 1;
+              else failed.add(sha256);
+            }),
+          ),
+        { concurrency: MEDIA_CONCURRENCY, discard: true },
+      );
+      const plan = mediaPushPlan(outgoing.map(toCore), failed);
+      const held = new Set<unknown>(plan.held);
+      return {
+        uploaded,
+        push: outgoing.filter((change) => !held.has(change)),
+        held: outgoing.filter((change) => held.has(change)),
+      };
+    });
+
+  /** The files the notes use whose local copy is absent or isn't the account's version. */
+  const wantedMedia = async () => {
+    const used = new Set<string>();
+    for (const row of await collectionDb.select().from(notes))
+      for (const name of mediaReferences(parseRecord("notes", row.body).values.map((v) => v.value)))
+        used.add(name);
+    const local = new Map(
+      (await collectionDb.select().from(mediaLocal)).map((row) => [row.name, row.sha256]),
+    );
+    const wanted: { name: string; sha256: string }[] = [];
+    for (const row of await collectionDb.select().from(mediaTable)) {
+      const file = mediaFromRecord(row.body);
+      if (file && used.has(file.name) && local.get(file.name) !== file.sha256)
+        wanted.push({ name: file.name, sha256: file.sha256 });
+    }
+    // oxlint-disable-next-line unicorn/no-array-sort -- ES2022 target; sorts a local array.
+    return wanted.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  };
+  /** Records that this device holds `sha256` under `name`. */
+  const keepLocal = (name: string, sha256: string) =>
+    collectionDb
+      .insert(mediaLocal)
+      .values({ name, sha256 })
+      .onConflictDoUpdate({ target: mediaLocal.name, set: { sha256 } });
+
+  /** Downloads every file the notes use that this device lacks. Stops when storage is refused. */
+  const downloadMedia = (client: SyncClient) =>
+    Effect.gen(function* () {
+      const wanted = yield* serial(wantedMedia);
+      let downloaded = 0;
+      let storageRefused = false;
+      yield* Effect.forEach(
+        wanted,
+        (file) =>
+          storageRefused
+            ? Effect.void
+            : attempt(
+                Effect.gen(function* () {
+                  const bytes = yield* client.media.download({ params: { sha256: file.sha256 } });
+                  yield* (yield* files.sha256(bytes)) === file.sha256
+                    ? files.write(file.name, bytes)
+                    : Effect.fail("corrupt");
+                  yield* serial(() => keepLocal(file.name, file.sha256));
+                }),
+              ).pipe(
+                Effect.map((result) => {
+                  if (result.ok) downloaded += 1;
+                  else if (Cause.squash(result.cause) instanceof MediaStorageRefused)
+                    storageRefused = true;
+                }),
+              ),
+        { concurrency: MEDIA_CONCURRENCY, discard: true },
+      );
+      return { downloaded, missing: wanted.length - downloaded, storageRefused };
+    });
+
   /** Applies one pulled page and its cursor. Alarms commit first: re-applying them is harmless. */
   const apply = (page: readonly Change[], cursor: number) =>
     serial(async () => {
@@ -263,9 +448,11 @@ export function syncEngine({
         const full = yield* serial(async () => (await readMeta("syncFullUpload")) === "1");
         const { changes, marks } = yield* serial(queued);
         const outgoing = full ? yield* serial(everything) : changes;
-        for (let i = 0; i < outgoing.length; i += MAX_CHANGES)
-          yield* client.changes.push({ payload: { changes: outgoing.slice(i, i + MAX_CHANGES) } });
-        yield* acknowledge(marks, full);
+        // Files first, so the Worker never holds a record pointing at a missing file.
+        const { uploaded, push, held } = yield* uploadMedia(client, outgoing);
+        for (let i = 0; i < push.length; i += MAX_CHANGES)
+          yield* client.changes.push({ payload: { changes: push.slice(i, i + MAX_CHANGES) } });
+        yield* acknowledge(marks, full, held);
         const changed = new Set<string>();
         let pulled = 0;
         let more = true;
@@ -276,8 +463,60 @@ export function syncEngine({
           pulled += page.changes.length;
           more = page.more && page.cursor > cursor;
         }
-        const result: SyncResult = { pushed: outgoing.length, pulled, changed: [...changed] };
+        const downloads = yield* downloadMedia(client);
+        if (downloads.downloaded > 0) changed.add("media");
+        const result: SyncResult = {
+          pushed: push.length,
+          pulled,
+          changed: [...changed],
+          media: { uploaded, heldBack: held.length, ...downloads },
+        };
         return result;
+      }),
+    /** The names of the files the notes use that this device lacks, by name. */
+    missingMedia: serial(async () => (await wantedMedia()).map((file) => file.name)),
+    /**
+     * Stores media files by name and records their hashes, so sync uploads them. Each file is read,
+     * hashed and written one at a time; the records commit together once all are stored.
+     */
+    writeMediaFiles: (incoming: readonly { name: string; bytes: () => Promise<Uint8Array> }[]) =>
+      Effect.gen(function* () {
+        const written: { name: string; sha256: string; size: number }[] = [];
+        for (const file of incoming) {
+          const name = safeMediaName(file.name);
+          if (name === undefined)
+            return yield* Effect.fail(
+              new Error(`Unsafe media file name: ${JSON.stringify(file.name)}`),
+            );
+          const bytes = yield* Effect.tryPromise({ try: file.bytes, catch: failure });
+          const sha256 = yield* Effect.tryPromise({
+            try: () => media.sha256(bytes),
+            catch: failure,
+          });
+          yield* Effect.tryPromise({ try: () => media.write(name, bytes), catch: failure });
+          written.push({ name, sha256, size: bytes.length });
+        }
+        return written;
+      }),
+    /** Records stored files: their media records (queued when they changed) and local copies. */
+    recordMedia: (written: readonly { name: string; sha256: string; size: number }[]) =>
+      inCollection(async () => {
+        for (const file of written) {
+          const id = importId("media", file.name);
+          const previous = (
+            await collectionDb.select().from(mediaTable).where(eq(mediaTable.id, id))
+          )[0]?.body;
+          const record = stampMedia(previous, file, env);
+          if (record) {
+            await collectionDb
+              .insert(mediaTable)
+              .values({ id, body: record })
+              .onConflictDoUpdate({ target: mediaTable.id, set: { body: record } });
+            await collectionDb.insert(outbox).values({ kind: "media", recordId: id, body: record });
+          }
+          await keepLocal(file.name, file.sha256);
+        }
+        return written.length;
       }),
   };
 }

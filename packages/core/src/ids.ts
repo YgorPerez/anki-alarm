@@ -41,7 +41,7 @@ export function cardId(noteId: string, ordinal: number): string {
 }
 
 const IMPORT_NAMESPACE = "6f1f9a42-4c55-5a4e-9b8b-2f6d0a1c7e10";
-export type ImportKind = "note" | "noteType" | "deck" | "preset" | "review" | "snapshot";
+export type ImportKind = "note" | "noteType" | "deck" | "preset" | "review" | "snapshot" | "media";
 /**
  * The id an imported record takes from its Anki identity (ADR 0001): note from guid, note type
  * from Anki note type id, deck from Anki deck id, preset from Anki options id, review from revlog

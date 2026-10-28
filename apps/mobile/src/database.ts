@@ -3,6 +3,8 @@ import { Effect } from "effect";
 import { getRandomBytes } from "expo-crypto";
 import { openDatabaseAsync } from "expo-sqlite";
 
+import { phoneMediaFiles } from "./media.ts";
+
 const connection = (name: string): ExecuteSql => {
   const database = openDatabaseAsync(name).then(async (db) => {
     await db.execAsync("PRAGMA journal_mode = WAL;");
@@ -23,11 +25,10 @@ function clientData() {
   data ??= Effect.runPromise(
     ClientData.pipe(
       Effect.provide(
-        clientDataLayer({
-          connect: connection,
-          now: Date.now,
-          random: () => getRandomBytes(16),
-        }),
+        clientDataLayer(
+          { connect: connection, now: Date.now, random: () => getRandomBytes(16) },
+          phoneMediaFiles,
+        ),
       ),
     ),
   ).catch((error: unknown) => {

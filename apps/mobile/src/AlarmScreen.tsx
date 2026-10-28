@@ -23,7 +23,7 @@ import {
   useReveal,
 } from "./alarm-ui.tsx";
 import { bold, GRADE_DELAY_MS, signalWith } from "./alarm-screen.ts";
-import { mediaUrl } from "./apkg.ts";
+import { mediaUrl } from "./media.ts";
 import { copy } from "./copy.ts";
 import { localData } from "./database.ts";
 

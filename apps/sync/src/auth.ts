@@ -10,6 +10,8 @@ import { schema } from "./schema.ts";
 
 export interface Env {
   DB: D1Database;
+  /** Media files by SHA-256 (ADR 0001 › Media). */
+  MEDIA: R2Bucket;
   /** 32+ random bytes, base64. Every value here is a Worker secret (docs/release.md). */
   BETTER_AUTH_SECRET: string;
   /** The Worker's public origin, e.g. `https://sync.example.com`. */

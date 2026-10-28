@@ -15,11 +15,9 @@ test("numbered migrations preserve existing collection and alarm data across rep
       expect(db.prepare(`SELECT ${column} AS value FROM ${table}`).get()).toEqual({
         value: '{"name":"kept"}',
       });
-      expect(db.prepare("SELECT id FROM schema_migrations ORDER BY id").all()).toEqual([
-        { id: database === "collection.db" ? 1 : 2 },
-        { id: database === "collection.db" ? 3 : 4 },
-        { id: database === "collection.db" ? 5 : 6 },
-      ]);
+      expect(db.prepare("SELECT id FROM schema_migrations ORDER BY id").all()).toEqual(
+        (database === "collection.db" ? [1, 3, 5, 7] : [2, 4, 6]).map((id) => ({ id })),
+      );
       const other = database === "collection.db" ? "alarms" : "decks";
       expect(
         db.prepare("SELECT name FROM sqlite_master WHERE name = ?").get(other),

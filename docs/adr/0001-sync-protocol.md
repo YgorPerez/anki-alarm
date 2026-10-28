@@ -51,6 +51,13 @@ depend on any clock and can't skip a write that commits late. One sync is push, 
 - A client uploads missing files before it pushes the records that reference them, so the server
   never holds a record pointing at a missing file. A failed upload holds back only those records.
 - Nothing is garbage-collected in the first release.
+- Fields keep referencing files by name, as Anki does. A **media record** per name (id
+  UUIDv5 of the name, so devices share the slot) holds the file's hash with an HLC, and syncs and
+  merges like any record: the newest bytes for a name win everywhere. The Worker drops a media
+  record whose file it lacks. To serve a download it keeps, per account, the hash of each name and
+  the names each note references (from Core's `mediaReferences`), rewritten on every note push and
+  cleared on delete. A failed upload holds back its media record, the notes that use the name and
+  their cards (so no device gets a card without its note).
 
 ## Imports and linked decks
 

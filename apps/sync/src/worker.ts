@@ -3,6 +3,7 @@ import { SYNC_PROTOCOL_HEADER } from "@app/contracts";
 
 import { syncHandler } from "./api.ts";
 import { makeAuth, type AuthOverrides, type Env } from "./auth.ts";
+import { mediaStore } from "./media.ts";
 import { syncStore } from "./store.ts";
 
 export type { Env } from "./auth.ts";
@@ -17,7 +18,8 @@ export function makeWorker(overrides?: AuthOverrides) {
   const handlers = new WeakMap<Env, ReturnType<typeof build>>();
   const build = (env: Env) => {
     const auth = makeAuth(env, overrides);
-    return { auth, sync: syncHandler({ auth, store: syncStore(env.DB) }) };
+    const media = mediaStore(env.DB, env.MEDIA);
+    return { auth, sync: syncHandler({ auth, store: syncStore(env.DB), media }) };
   };
   return {
     async fetch(request: Request, env: Env): Promise<Response> {

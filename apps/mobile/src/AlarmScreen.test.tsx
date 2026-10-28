@@ -7,7 +7,7 @@ import { fakeSyncApi } from "@app/contracts/testing";
 import { localData } from "./database.ts";
 import { AlarmScreen } from "./AlarmScreen.tsx";
 import { memoryAlarmService, type Ring } from "./alarms.ts";
-import { mediaUrl } from "./apkg.ts";
+import { mediaUrl } from "./media.ts";
 
 const front = () => String(screen.getByLabelText("Frente").props.source.html);
 async function revealAndGrade(grade: string) {

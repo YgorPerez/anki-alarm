@@ -10,6 +10,7 @@ import {
   HttpApiEndpoint,
   HttpApiGroup,
   HttpApiMiddleware,
+  HttpApiSchema,
 } from "effect/http-api";
 
 /** The header every sync request carries Core's `SYNC_PROTOCOL` in. */
@@ -89,6 +90,44 @@ export const PullResult = Schema.Struct({
 });
 export type PullResult = typeof PullResult.Type;
 
+/** Lowercase hex SHA-256 of a media file's bytes: its key in R2. */
+export const Sha256 = Schema.String.check(Schema.isPattern(/^[\da-f]{64}$/));
+/** The largest media file sync carries. The Worker holds a file in memory to hash it. */
+export const MAX_MEDIA_BYTES = 32 * 1024 * 1024;
+
+export const MissingMediaPayload = Schema.Struct({
+  hashes: Schema.Array(Sha256).check(Schema.isMaxLength(MAX_CHANGES)),
+});
+export type MissingMediaPayload = typeof MissingMediaPayload.Type;
+export const MissingMediaResult = Schema.Struct({
+  /** The asked hashes the Worker doesn't store yet: upload them before their records. */
+  missing: Schema.Array(Sha256),
+});
+export type MissingMediaResult = typeof MissingMediaResult.Type;
+/** `Sha256` of some bytes, through WebCrypto (the Worker, browsers and Node have it). */
+export async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  // A copy, so a view of a larger or shared buffer hashes only its own bytes.
+  const digest = await crypto.subtle.digest("SHA-256", bytes.slice());
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+const MediaBytes = Schema.Uint8Array.pipe(
+  HttpApiSchema.asUint8Array({ contentType: "application/octet-stream" }),
+);
+const MediaParams = { sha256: Sha256 };
+
+/** The uploaded bytes don't hash to the address, or are over `MAX_MEDIA_BYTES`. */
+export class MediaRejected extends Schema.TaggedError<MediaRejected>()(
+  "MediaRejected",
+  { reason: Schema.Literals(["hash", "size"]) },
+  { httpApiStatus: 422 },
+) {}
+/** No such file, or no note of the account references it: the same answer for both. */
+export class MediaNotFound extends Schema.TaggedError<MediaNotFound>()(
+  "MediaNotFound",
+  {},
+  { httpApiStatus: 404 },
+) {}
+
 /** The app's `SYNC_PROTOCOL` isn't the Worker's. Sync pauses until the app updates. */
 export class UpdateRequired extends Schema.TaggedError<UpdateRequired>()(
   "UpdateRequired",
@@ -139,7 +178,36 @@ export class SyncChangesApi extends HttpApiGroup.make("changes")
   )
   .middleware(Session) {}
 
-export class SyncApi extends HttpApi.make("sync").add(SyncMetadataApi).add(SyncChangesApi) {}
+/**
+ * Media files by SHA-256, stored once across all users (ADR 0001 › Media). A client asks which of
+ * its files are missing, uploads those, and only then pushes the records that use them. A download
+ * needs a note of the account that references the file.
+ */
+export class SyncMediaApi extends HttpApiGroup.make("media")
+  .add(
+    HttpApiEndpoint.post("missing", "/sync/media/missing", {
+      payload: MissingMediaPayload,
+      success: MissingMediaResult,
+      error: UpdateRequired,
+    }),
+    HttpApiEndpoint.put("upload", "/sync/media/:sha256", {
+      params: MediaParams,
+      payload: MediaBytes,
+      success: HttpApiSchema.NoContent,
+      error: [UpdateRequired, MediaRejected],
+    }),
+    HttpApiEndpoint.get("download", "/sync/media/:sha256", {
+      params: MediaParams,
+      success: MediaBytes,
+      error: [UpdateRequired, MediaNotFound],
+    }),
+  )
+  .middleware(Session) {}
+
+export class SyncApi extends HttpApi.make("sync")
+  .add(SyncMetadataApi)
+  .add(SyncChangesApi)
+  .add(SyncMediaApi) {}
 
 /** The derived client, however it's built: over fetch in the apps, in memory in tests. */
 export type SyncClient = HttpApiClient.ForApi<typeof SyncApi>;

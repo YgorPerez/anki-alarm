@@ -49,6 +49,15 @@ const migrations = [
       "CREATE TABLE IF NOT EXISTS alarm_records (id TEXT PRIMARY KEY NOT NULL, body TEXT NOT NULL)",
     ],
   },
+  {
+    // Media records as they sync, and the files this device holds (ADR 0001 › Media).
+    id: 7,
+    database: "collection.db",
+    statements: [
+      "CREATE TABLE IF NOT EXISTS media (id TEXT PRIMARY KEY NOT NULL, body TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS media_local (name TEXT PRIMARY KEY NOT NULL, sha256 TEXT NOT NULL)",
+    ],
+  },
 ] as const;
 
 // Both initial migrations are additive and safe to replay on databases created before the ledger.

@@ -2,6 +2,7 @@
 /// <reference lib="webworker" />
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import { ClientData, clientDataLayer, type SQLiteConnection } from "@app/client-data";
+import { opfsMediaFiles } from "@app/client-data/web";
 import { ManagedRuntime, type Effect } from "effect";
 import type { Operation, Response, Result } from "./protocol.ts";
 
@@ -25,7 +26,8 @@ const open = async () => {
     now: Date.now,
     random: () => crypto.getRandomValues(new Uint8Array(16)),
   };
-  const runtime = ManagedRuntime.make(clientDataLayer(driver));
+  // Card media in OPFS next to the databases (ADR 0006), copied on sync.
+  const runtime = ManagedRuntime.make(clientDataLayer(driver, opfsMediaFiles()));
   const data = await runtime.runPromise(ClientData);
   return { runtime, data };
 };
