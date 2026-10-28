@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   alarmSession,
+  readAloudFor,
   ringNeed,
   SESSION_RULES,
   type Alarm,
   type Grade,
   type Locale,
+  type ReadAloud,
 } from "@app/core";
 import type { AlarmEvent } from "@app/client-data";
 import { Effect, type Layer } from "effect";
@@ -13,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { BackHandler, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AlarmService, type Ring } from "./alarms.ts";
+import { mediaUrl } from "./apkg.ts";
 import { copy } from "./copy.ts";
 import { localData } from "./database.ts";
 import { AnswerControls, CardSide } from "./StudyScreen.tsx";
@@ -36,6 +39,23 @@ async function succeeded(operation: () => Promise<void>) {
   } catch {
     return false;
   }
+}
+
+type Signal = <A>(
+  send: (service: AlarmService["Service"]) => Effect.Effect<A, Error>,
+) => Promise<A>;
+
+/** Reads a front: its own clips in turn, then TTS when none played. Gives up once not `current`. */
+async function readFront(signal: Signal, reading: ReadAloud, current: () => boolean) {
+  let played = false;
+  for (const clip of reading.clips) {
+    if (!current()) return;
+    // One clip after another, as Anki plays them.
+    // oxlint-disable-next-line no-await-in-loop
+    played = (await signal((service) => service.playClip(mediaUrl(clip)))) || played;
+  }
+  if (played || !reading.text || !current()) return;
+  await signal((service) => service.speak(reading.text, reading.language));
 }
 
 /**
@@ -195,8 +215,23 @@ function useAlarmSession(
   const lock = useRef(false);
   // When the current card appeared, on the monotonic clock: the answer's time taken.
   const shownAt = useRef(0);
-  const signal = (send: (service: AlarmService["Service"]) => Effect.Effect<void, Error>) =>
+  // Bumped for each card shown, so a reading still under way knows it's been replaced.
+  const readingId = useRef(0);
+  const signal: Signal = (send) =>
     Effect.runPromise(Effect.flatMap(AlarmService, send).pipe(Effect.provide(layer)));
+  /** Read aloud, when the alarm has it: the card just shown. A failure never blocks the session. */
+  const read = (next: Session["next"] | undefined) => {
+    const id = ++readingId.current;
+    if (!ring.alarm.readAloud || !next) return;
+    const reading = readAloudFor({
+      note: next.note,
+      type: next.noteType,
+      ordinal: next.card.fields.ordinal.value,
+      deckName: next.deckName,
+      language: next.language,
+    });
+    if (reading) void readFront(signal, reading, () => id === readingId.current).catch(() => {});
+  };
   const query = useQuery({
     queryKey: ["alarmSession", ring.id],
     networkMode: "always",
@@ -229,6 +264,18 @@ function useAlarmSession(
     const handler = BackHandler.addEventListener("hardwareBackPress", () => true);
     return () => handler.remove();
   }, []);
+  const readsAloud = ring.alarm.readAloud;
+  useEffect(
+    () => () => {
+      if (!readsAloud) return;
+      // Leaving the screen stops the reading.
+      readingId.current++;
+      void Effect.runPromise(
+        Effect.flatMap(AlarmService, (service) => service.stopReading).pipe(Effect.provide(layer)),
+      ).catch(() => {});
+    },
+    [layer, readsAloud],
+  );
   useEffect(() => {
     if (!revealedId) return undefined;
     const timer = setTimeout(() => setGradesFor(revealedId), gradeDelayMs);
@@ -260,7 +307,10 @@ function useAlarmSession(
         await signal((service) => service.sessionStarted(ring.id));
         setStarted(true);
         shownAt.current = performance.now();
-        if (session?.done) await finish();
+        // Start can come before the session first loads.
+        const current = session ?? (await query.refetch()).data;
+        if (current?.done) await finish();
+        else read(current?.next);
       }),
     reveal: () => {
       if (!cardId) return;
@@ -279,6 +329,7 @@ function useAlarmSession(
         const { data } = await query.refetch();
         shownAt.current = performance.now();
         if (data?.done) await finish();
+        else read(data?.next);
       }),
     dismiss: () => guarded(finish),
   };

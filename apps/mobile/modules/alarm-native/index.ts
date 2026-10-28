@@ -15,6 +15,11 @@ interface NativeAlarm {
   sessionStarted: (ringId: string) => void;
   activity: (ringId: string) => void;
   dismiss: (ringId: string) => void;
+  /** Resolves when the speech ends or is stopped. */
+  speak: (text: string, language: string) => Promise<void>;
+  /** Resolves when the clip ends or is stopped: false when it couldn't play. */
+  playClip: (uri: string) => Promise<boolean>;
+  stopReading: () => void;
   getPermissions: () => AlarmPermissions;
   isOnboardingComplete: () => boolean;
   completeOnboarding: () => boolean;
