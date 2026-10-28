@@ -1,10 +1,17 @@
 /* oxlint-disable eslint/no-await-in-loop -- Media files are written one at a time. */
 import type { ImportSummary } from "@app/client-data";
-import { readApkg, readApkgMedia, type ApkgHost, type ApkgMedia } from "@app/core";
+import {
+  readApkg,
+  readApkgMedia,
+  writeApkg,
+  type ApkgHost,
+  type ApkgMedia,
+  type ApkgWriteHost,
+} from "@app/core";
 import { Effect } from "effect";
 import { Directory, File, Paths } from "expo-file-system";
-import { deserializeDatabaseAsync } from "expo-sqlite";
-import { unzipSync } from "fflate";
+import { deserializeDatabaseAsync, openDatabaseAsync } from "expo-sqlite";
+import { unzipSync, zipSync } from "fflate";
 import { decompress } from "fzstd";
 import { localData } from "./database.ts";
 
@@ -70,6 +77,60 @@ async function importApkg(bytes: Uint8Array): Promise<ImportSummary> {
   });
   await storeMedia(media);
   return Effect.runPromise(localData((data) => data.importAnki(source)));
+}
+
+/**
+ * Exports a deck and its subdecks as an `.apkg` into a folder the user picks. Resolves with the
+ * file name, or undefined when the user leaves the folder picker.
+ */
+export async function exportApkg(deckId: string): Promise<string | undefined> {
+  const [collection, log] = await Effect.runPromise(
+    localData((data) => Effect.all([data.collection, data.reviewLog])),
+  );
+  const deck = collection.decks.find((d) => d.id === deckId);
+  if (!deck) throw new Error("Deck missing");
+  const entries = await writeApkg(writeHost(), { collection, log, deckId, now: Date.now() });
+  const bytes = zipSync(entries);
+  let folder: Directory;
+  try {
+    folder = await Directory.pickDirectoryAsync();
+  } catch {
+    return undefined;
+  }
+  const name = `${fileName(deck.fields.name.value)}.apkg`;
+  await folder.createFile(name, "application/octet-stream").write(bytes);
+  return name;
+}
+/** A deck name as a file name: `::` levels joined by dashes, no path characters. */
+const fileName = (deck: string) =>
+  deck
+    .split("::")
+    .join(" - ")
+    // oxlint-disable-next-line no-control-regex -- control characters can't go in a file name.
+    .replace(/[/\\:*?"<>|\u0000-\u001f]/g, "_")
+    .trim() || "deck";
+
+/** A fresh in-memory SQLite for the collection, and media from the app's media folder. */
+function writeHost(): ApkgWriteHost {
+  return {
+    createSqlite: async () => {
+      const db = await openDatabaseAsync(":memory:");
+      return {
+        run: async (sql, params = []) => {
+          await db.runAsync(sql, [...params]);
+        },
+        export: async () => {
+          const bytes = await db.serializeAsync();
+          await db.closeAsync();
+          return bytes;
+        },
+      };
+    },
+    media: async (name) => {
+      const file = new File(mediaDirectory(), name);
+      return file.exists ? file.bytes() : undefined;
+    },
+  };
 }
 
 /** Writes media files by name, one at a time: each is decompressed only while it is written. */

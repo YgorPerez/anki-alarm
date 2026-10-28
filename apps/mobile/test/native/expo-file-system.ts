@@ -1,6 +1,7 @@
 /// <reference types="node" />
 // expo-file-system's File and Directory over Node's fs, in a temporary directory per test file.
-// `picks` holds the paths the next system file pickers return; empty means the user cancels.
+// `picks` holds the paths the next system file pickers return and `folders` the directories the
+// next folder pickers return; empty means the user cancels.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -29,6 +30,14 @@ export class Directory {
   create(_options?: object) {
     mkdirSync(this.path, { recursive: true });
   }
+  createFile(name: string, _mimeType: string | null) {
+    return new File(this, name);
+  }
+  static async pickDirectoryAsync(_initialUri?: string) {
+    const next = folders.shift();
+    if (next === undefined) throw new Error("No directory picked");
+    return new Directory(next);
+  }
 }
 export class File {
   readonly path: string;
@@ -55,4 +64,5 @@ export class File {
   }
 }
 export const picks: string[] = [];
+export const folders: string[] = [];
 export const Paths = { document: new Directory(mkdtempSync(join(tmpdir(), "expo-document-"))) };

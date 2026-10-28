@@ -107,6 +107,12 @@ const messages = {
     importing: "Importando…",
     imported: "Importado: {notes} notas, {cards} cartões e {entries} revisões novas.",
     importError: "Não foi possível importar esse arquivo. Confira se é um .apkg do Anki.",
+    exportApkg: "Exportar .apkg",
+    exporting: "Exportando…",
+    exported: "Salvo como {file}.",
+    exportHint:
+      "Leva o baralho, os subbaralhos, a mídia e o histórico. No Anki, marque as opções de importar o progresso de aprendizado e as predefinições do baralho para manter o agendamento. Um perfil do Anki que já tem essas notas não atualiza o agendamento delas.",
+    exportError: "Não foi possível exportar o baralho.",
   },
   en: {
     study: "Study",
@@ -214,6 +220,12 @@ const messages = {
     importing: "Importing…",
     imported: "Imported {notes} notes, {cards} cards and {entries} new reviews.",
     importError: "Could not import that file. Check that it is an Anki .apkg.",
+    exportApkg: "Export .apkg",
+    exporting: "Exporting…",
+    exported: "Saved as {file}.",
+    exportHint:
+      'Takes the deck, its subdecks, media and history. In Anki, tick "Import any learning progress" and "Import deck presets" to keep the schedule. An Anki profile that already has these notes doesn\'t update their schedule.',
+    exportError: "Could not export the deck.",
   },
 } satisfies Messages<string>;
 type CopyKey = keyof (typeof messages)["pt-BR"];
