@@ -114,4 +114,15 @@ class AwakeCheckTest {
     assertEquals("ring-2", AlarmStore.ring(ctx)!!.getString("id"))
     assertEquals("ringStarted", kinds().last())
   }
+
+  @Test fun aCheckDueWhileAnotherRingIsSnoozedIsDropped() {
+    dismissWithCheck()
+    AlarmStore.fire(ctx, JSONObject().put("id", "later"))
+    val other = AlarmStore.ring(ctx)!!.getString("id")
+    assertTrue(AlarmScheduler.snooze(ctx, other, 9, dismissedAt + 100_000))
+    AwakeCheck.advance(ctx, now = dismissedAt + 300_000, unlocked = true)
+    assertNull(AwakeCheck.pending(ctx))
+    assertFalse(kinds().contains("awakeCheckShown"))
+    assertEquals("snoozed", AlarmStore.ring(ctx)!!.getString("phase"))
+  }
 }
