@@ -12,7 +12,10 @@ export type LogEntry = Entry &
         grade: Grade;
         durationMs: number;
         origin: "phone" | "web" | "alarm" | "import";
-        /** The ring an alarm-session answer belongs to: its progress toward N. */
+        /**
+         * The ring an alarm-session answer belongs to (its progress toward N), or the awake
+         * check's id for the check's one answer.
+         */
         ringId?: string;
       }
     | {

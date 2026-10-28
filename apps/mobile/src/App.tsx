@@ -2,6 +2,8 @@ import { AlarmSoundSettings } from "./AlarmSoundSettings.tsx";
 import { AlarmDeckSettings } from "./AlarmDeckSettings.tsx";
 import { AlarmSnoozeSettings } from "./AlarmSnoozeSettings.tsx";
 import { AlarmScreen } from "./AlarmScreen.tsx";
+import { AwakeCheckScreen } from "./AwakeCheckScreen.tsx";
+import { AlarmAwakeCheckSettings } from "./AlarmAwakeCheckSettings.tsx";
 import { ReliabilityScreen } from "./ReliabilityScreen.tsx";
 import { reliabilityCopy } from "./reliability-copy.ts";
 import { UpdateOffer } from "./UpdateOffer.tsx";
@@ -34,7 +36,7 @@ import {
 } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { copy } from "./copy.ts";
-import { AlarmService, alarmController, type Ring } from "./alarms.ts";
+import { AlarmService, alarmController, type AwakeCheck, type Ring } from "./alarms.ts";
 import { androidAlarmService, native } from "./alarm-android.ts";
 import { localData } from "./database.ts";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -85,6 +87,7 @@ function Home() {
   const alarms = alarmsQuery.data ?? [];
   const { locale, setLocale } = useUI();
   const [ring, setRing] = useState<Ring | null>(null);
+  const [awakeCheck, setAwakeCheck] = useState<AwakeCheck | null>(null);
   const [editing, setEditing] = useState<Alarm | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -123,7 +126,8 @@ function Home() {
       void client.invalidateQueries({ queryKey: ["alarms"] });
       void Effect.runPromise(controller.resume.pipe(Effect.provide(androidAlarmService)))
         .then((active) => {
-          setRing(active);
+          setRing(active.ring);
+          setAwakeCheck(active.awakeCheck);
           // An alarm folded into the ring can raise its N.
           void client.invalidateQueries({ queryKey: ["alarmSession"] });
         })
@@ -174,6 +178,16 @@ function Home() {
     ),
     [locale, save],
   );
+  // After each alarm session and awake check: its reviews reach the other devices.
+  const afterAlarm = () => {
+    void run(controller.resume)
+      .then((next) => {
+        setRing(next.ring);
+        setAwakeCheck(next.awakeCheck);
+        appSync?.syncNow();
+      })
+      .catch(() => setError(t("alarmError")));
+  };
   if (ring)
     return (
       <ScopedTheme theme="dark">
@@ -182,15 +196,20 @@ function Home() {
           ring={ring}
           locale={locale}
           layer={androidAlarmService}
-          onDismissed={() => {
-            void run(controller.resume)
-              .then((next) => {
-                setRing(next);
-                // After each alarm session: its reviews reach the other devices.
-                appSync?.syncNow();
-              })
-              .catch(() => setError(t("alarmError")));
-          }}
+          onDismissed={afterAlarm}
+        />
+      </ScopedTheme>
+    );
+  // A check still waiting for its delay leaves the app as usual.
+  if (awakeCheck?.shownAt)
+    return (
+      <ScopedTheme theme="dark">
+        <AwakeCheckScreen
+          key={awakeCheck.id}
+          check={awakeCheck}
+          locale={locale}
+          layer={androidAlarmService}
+          onPassed={afterAlarm}
         />
       </ScopedTheme>
     );
@@ -420,6 +439,7 @@ function AlarmEditor({
       <AlarmDeckSettings alarm={options} locale={locale} onChange={setOptions} />
       <AlarmSoundSettings alarm={options} locale={locale} onChange={setOptions} />
       <AlarmSnoozeSettings alarm={options} locale={locale} onChange={setOptions} />
+      <AlarmAwakeCheckSettings alarm={options} locale={locale} onChange={setOptions} />
       <Text accessibilityRole="alert" className="text-body text-attention">
         {error}
       </Text>

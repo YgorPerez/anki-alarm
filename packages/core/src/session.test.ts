@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
 import {
   alarmSession,
+  awakeCheckSession,
   Collection,
   newAlarm,
   readAlarm,
@@ -215,6 +216,53 @@ describe("alarm session", () => {
     expect(ringNeed(ring, [journalEvent("ringStarted", "b", "ring-2")], alarms)).toBe(3);
     // An absorbed alarm deleted since then no longer raises N.
     expect(ringNeed(ring, [journalEvent("absorbed", "b", "ring-2")], [morning])).toBe(3);
+  });
+});
+
+const check = (setup: ReturnType<typeof deckWithEveryKind>, log: readonly LogEntry[]) =>
+  awakeCheckSession({
+    collection: setup.state,
+    log: [...setup.log, ...log],
+    deckId: setup.deckId,
+    checkId: "check",
+    now,
+  });
+const inCheck = (cardId: string, grade: Grade, at: number) =>
+  review(cardId, grade, at, { origin: "alarm", ringId: "check" });
+
+describe("awake check", () => {
+  test("shows one card from the alarm's deck, picked as a session's first card", () => {
+    const setup = deckWithEveryKind();
+    expect(check(setup, [])).toMatchObject({
+      passed: false,
+      next: { card: { id: setup.id("overdue") }, again: false },
+    });
+    // The ring's answers moved that card on; the check doesn't inherit their progress.
+    expect(check(setup, [inRing(setup.id("overdue"), 4, now - 1)]).next?.card.id).toBe(
+      setup.id("new"),
+    );
+  });
+
+  test("any grade ends it, Again included", () => {
+    const setup = deckWithEveryKind();
+    expect(check(setup, [inCheck(setup.id("overdue"), 1, now)])).toEqual({
+      passed: true,
+      next: null,
+    });
+  });
+
+  test("an answer for the ring or a voided answer doesn't end it", () => {
+    const setup = deckWithEveryKind();
+    const answer = inCheck(setup.id("overdue"), 3, now);
+    const voided: LogEntry = {
+      kind: "void",
+      id: "v",
+      cardId: answer.cardId,
+      at: now + 1,
+      targetId: answer.id,
+    };
+    expect(check(setup, [inRing(setup.id("new"), 3, now)]).passed).toBe(false);
+    expect(check(setup, [answer, voided]).passed).toBe(false);
   });
 });
 

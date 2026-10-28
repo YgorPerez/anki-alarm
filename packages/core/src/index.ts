@@ -59,9 +59,18 @@ export {
   SNOOZE_CHOICES,
   stampAlarm,
   alarmFromRecord,
+  awakeCheckAfter,
+  AWAKE_CHECK_DELAYS,
 } from "./alarm.ts";
-export { alarmSession, ringNeed, snoozeOffer, SESSION_RULES, SNOOZE_COST } from "./session.ts";
-export type { AlarmSessionInput } from "./session.ts";
+export {
+  alarmSession,
+  awakeCheckSession,
+  ringNeed,
+  snoozeOffer,
+  SESSION_RULES,
+  SNOOZE_COST,
+} from "./session.ts";
+export type { AlarmSessionInput, AwakeCheckInput } from "./session.ts";
 export type { Alarm, AlarmRecord, AlarmRule, AlarmSound, BundledSound } from "./alarm.ts";
 
 export { releaseVersion } from "./release.ts";

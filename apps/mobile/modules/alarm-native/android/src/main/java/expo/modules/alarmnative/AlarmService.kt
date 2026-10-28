@@ -34,7 +34,7 @@ class AlarmService : Service() {
     const val ACTION_RING = "expo.modules.alarmnative.RING"
     /** The start reason of a ring that just came due; any other start takes over an existing ring. */
     const val REASON_SCHEDULED = "scheduled ring"
-    private const val CHANNEL_ID = "alarm_ringing_v1"
+    const val CHANNEL_ID = "alarm_ringing_v1"
     private const val NOTIFICATION_ID = 4242
     private const val WAY_BACK_ID = 4243
     /** The start reason when a snooze's alarm fires: the same ring ramps up again. */

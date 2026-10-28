@@ -214,3 +214,78 @@ test("a session can snooze, and Answer now ends the snooze early", async () => {
   // One snooze left.
   screen.getByRole("button", { name: "Adiar 9 min · +2 cartões" });
 });
+
+test("with the awake check on, the dismissal schedules it after the alarm's delay", async () => {
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Despertar");
+        c.addBasicNote(deck.id, "sol", "sun");
+        c.createDeck("Vazio");
+      }),
+    ),
+  );
+  const deckId = (name: string) => state.decks.find((d) => d.fields.name.value === name)!.id;
+  const show = async (ringId: string, deck: string) => {
+    const ring: Ring = {
+      id: ringId,
+      alarm: {
+        ...newAlarm("alarm-2"),
+        deckId: deckId(deck),
+        need: 1,
+        awakeCheck: true,
+        awakeCheckMinutes: 10,
+      },
+      startedAt: Date.now(),
+      phase: "ringing",
+      snoozes: 0,
+      snoozedUntil: null,
+    };
+    const native = memoryAlarmService();
+    native.deliver(
+      {
+        id: `event-${ringId}`,
+        kind: "ringStarted",
+        alarmId: ring.alarm.id,
+        ringId,
+        wallTime: ring.startedAt,
+        elapsedRealtime: 1,
+      },
+      ring,
+    );
+    let dismissed = false;
+    const view = await render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" } } })
+        }
+      >
+        <AlarmScreen
+          ring={ring}
+          locale="pt-BR"
+          layer={native.layer}
+          gradeDelayMs={0}
+          onDismissed={() => {
+            dismissed = true;
+          }}
+        />
+      </QueryClientProvider>,
+    );
+    await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+    return { native, view, dismissed: () => dismissed };
+  };
+
+  const before = Date.now();
+  const answered = await show("ring-2", "Despertar");
+  await revealAndGrade("Bom");
+  await waitFor(() => expect(answered.dismissed()).toBe(true));
+  expect(answered.native.awakeCheck()).toMatchObject({ ringId: "ring-2", shownAt: null });
+  expect(answered.native.awakeCheck()!.dueAt).toBeGreaterThanOrEqual(before + 600_000);
+  await answered.view.unmount();
+
+  // A deck with no cards couldn't show the check a card, so there is none.
+  const empty = await show("ring-3", "Vazio");
+  await fireEvent.press(await screen.findByRole("button", { name: "Desligar" }));
+  await waitFor(() => expect(empty.dismissed()).toBe(true));
+  expect(empty.native.awakeCheck()).toBeNull();
+});

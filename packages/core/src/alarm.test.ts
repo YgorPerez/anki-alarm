@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import fixtures from "../fixtures/next-ring.json" with { type: "json" };
-import { newAlarm, nextRing, parseAlarmSound } from "./index.ts";
+import { awakeCheckAfter, newAlarm, nextRing, parseAlarmSound, readAlarm } from "./index.ts";
 
 describe("next ring", () => {
   it.each(fixtures)("$name", (fixture) => {
@@ -51,6 +51,34 @@ describe("a new alarm", () => {
       snooze: true,
       snoozeMinutes: 9,
       snoozeCap: 2,
+      awakeCheck: false,
+      awakeCheckMinutes: 5,
+    });
+  });
+});
+
+describe("awake check", () => {
+  it("starts its delay after dismissal only when it's on", () => {
+    expect(awakeCheckAfter(newAlarm("a"))).toBeNull();
+    expect(awakeCheckAfter({ ...newAlarm("a"), awakeCheck: true })).toBe(300);
+    expect(awakeCheckAfter({ ...newAlarm("a"), awakeCheck: true, awakeCheckMinutes: 10 })).toBe(
+      600,
+    );
+  });
+
+  it("is off with a 5 minute delay for alarms saved before it, and keeps a valid delay", () => {
+    const { awakeCheck: _on, awakeCheckMinutes: _minutes, ...legacy } = newAlarm("a");
+    expect(readAlarm(legacy)).toMatchObject({ awakeCheck: false, awakeCheckMinutes: 5 });
+    expect(readAlarm({ ...legacy, awakeCheck: true, awakeCheckMinutes: 15 })).toMatchObject({
+      awakeCheck: true,
+      awakeCheckMinutes: 15,
+    });
+    expect(readAlarm({ ...legacy, awakeCheck: "yes", awakeCheckMinutes: 0 })).toMatchObject({
+      awakeCheck: false,
+      awakeCheckMinutes: 1,
+    });
+    expect(readAlarm({ ...legacy, awakeCheckMinutes: 2.5 })).toMatchObject({
+      awakeCheckMinutes: 5,
     });
   });
 });

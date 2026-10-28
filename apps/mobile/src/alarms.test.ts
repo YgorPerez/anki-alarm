@@ -21,6 +21,8 @@ const alarm: Alarm = {
   snooze: true,
   snoozeMinutes: 9,
   snoozeCap: 2,
+  awakeCheck: false,
+  awakeCheckMinutes: 5,
 };
 it("saves alarms and replaces the native schedule with every enabled alarm", async () => {
   const native = memoryAlarmService();
@@ -89,11 +91,46 @@ it("recovers the active ring on resume and dismisses only its matching ID", asyn
   );
   const run = <A>(effect: Effect.Effect<A, Error, AlarmService>) =>
     Effect.runPromise(effect.pipe(Effect.provide(native.layer)));
-  await run(Effect.flatMap(AlarmService, (service) => service.dismiss("stale-ring")));
-  expect(await run(controller.resume)).toEqual(ring);
-  await run(Effect.flatMap(AlarmService, (service) => service.dismiss(ring.id)));
-  await run(Effect.flatMap(AlarmService, (service) => service.dismiss(ring.id)));
-  expect(await run(controller.resume)).toBeNull();
+  await run(Effect.flatMap(AlarmService, (service) => service.dismiss("stale-ring", null)));
+  expect(await run(controller.resume)).toEqual({ ring, awakeCheck: null });
+  await run(Effect.flatMap(AlarmService, (service) => service.dismiss(ring.id, null)));
+  await run(Effect.flatMap(AlarmService, (service) => service.dismiss(ring.id, null)));
+  expect(await run(controller.resume)).toEqual({ ring: null, awakeCheck: null });
+});
+it("a dismissal with an awake check leaves it pending until its own answer passes it", async () => {
+  const native = memoryAlarmService();
+  const controller = alarmController(memoryAlarmRepository());
+  const ring = {
+    id: "ring-1",
+    alarm,
+    startedAt: 1000,
+    phase: "session",
+    snoozes: 0,
+    snoozedUntil: null,
+  };
+  native.deliver(
+    {
+      id: "event-1",
+      kind: "ringStarted",
+      alarmId: alarm.id,
+      ringId: ring.id,
+      wallTime: 1000,
+      elapsedRealtime: 500,
+    },
+    ring,
+  );
+  const run = <A>(effect: Effect.Effect<A, Error, AlarmService>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(native.layer)));
+  await run(Effect.flatMap(AlarmService, (service) => service.dismiss(ring.id, 300)));
+  const { ring: active, awakeCheck } = await run(controller.resume);
+  expect(active).toBeNull();
+  expect(awakeCheck).toMatchObject({ ringId: ring.id, alarm, shownAt: null });
+  native.showAwakeCheck(2000);
+  await run(Effect.flatMap(AlarmService, (service) => service.awakeCheckPassed("stale-check")));
+  expect((await run(controller.resume)).awakeCheck).toMatchObject({ shownAt: 2000 });
+  await run(Effect.flatMap(AlarmService, (service) => service.awakeCheckPassed(awakeCheck!.id)));
+  expect(await run(controller.resume)).toEqual({ ring: null, awakeCheck: null });
+  expect(native.signals()).toContain(`awakeCheckPassed:${awakeCheck!.id}`);
 });
 it("re-reads reliability after a settings change and retains onboarding completion", async () => {
   const memory = memoryAlarmService();

@@ -26,6 +26,10 @@ export interface Alarm {
   snoozeMinutes: number;
   /** The snoozes one ring offers. */
   snoozeCap: number;
+  /** One card a while after dismissal; no answer in time rings the alarm again. */
+  awakeCheck: boolean;
+  /** Minutes from dismissal to the awake check's prompt. */
+  awakeCheckMinutes: number;
 }
 
 /** The sounds shipped in the app. Native plays each from `res/raw/alarm_<id>`. */
@@ -71,6 +75,8 @@ export const newAlarm = (id: string): Alarm => ({
   snooze: true,
   snoozeMinutes: 9,
   snoozeCap: 2,
+  awakeCheck: false,
+  awakeCheckMinutes: 5,
 });
 
 /** The largest N the editor offers. */
@@ -83,7 +89,23 @@ const MAX_SNOOZE_MINUTES = 60;
 /** The most snoozes per ring the editor offers. */
 export const MAX_SNOOZE_CAP = 10;
 
-type Upgraded = "sound" | "deckId" | "need" | "snooze" | "snoozeMinutes" | "snoozeCap";
+/** Awake check delays offered in the editor, in minutes. */
+export const AWAKE_CHECK_DELAYS = [1, 3, 5, 10, 15, 30] as const;
+const MAX_AWAKE_CHECK_MINUTES = 60;
+
+/** Seconds from dismissal to the awake check, or null when the alarm has none. */
+export const awakeCheckAfter = (alarm: Alarm) =>
+  alarm.awakeCheck ? alarm.awakeCheckMinutes * 60 : null;
+
+type Upgraded =
+  | "sound"
+  | "deckId"
+  | "need"
+  | "snooze"
+  | "snoozeMinutes"
+  | "snoozeCap"
+  | "awakeCheck"
+  | "awakeCheckMinutes";
 type StoredAlarm = Omit<Alarm, Upgraded> & Partial<Record<Upgraded, unknown>>;
 
 /** A whole number kept within `min..max`; anything else is the fallback. */
@@ -100,6 +122,8 @@ export function readAlarm({
   snooze,
   snoozeMinutes,
   snoozeCap,
+  awakeCheck,
+  awakeCheckMinutes,
   ...alarm
 }: StoredAlarm): Alarm {
   const defaults = newAlarm(alarm.id);
@@ -111,6 +135,13 @@ export function readAlarm({
     snooze: typeof snooze === "boolean" ? snooze : defaults.snooze,
     snoozeMinutes: wholeIn(snoozeMinutes, 1, MAX_SNOOZE_MINUTES, defaults.snoozeMinutes),
     snoozeCap: wholeIn(snoozeCap, 1, MAX_SNOOZE_CAP, defaults.snoozeCap),
+    awakeCheck: awakeCheck === true,
+    awakeCheckMinutes: wholeIn(
+      awakeCheckMinutes,
+      1,
+      MAX_AWAKE_CHECK_MINUTES,
+      defaults.awakeCheckMinutes,
+    ),
   };
 }
 
@@ -161,6 +192,8 @@ export function alarmFromRecord(record: AlarmRecord): Alarm {
     snooze: record.fields.snooze?.value,
     snoozeMinutes: record.fields.snoozeMinutes?.value,
     snoozeCap: record.fields.snoozeCap?.value,
+    awakeCheck: record.fields.awakeCheck?.value,
+    awakeCheckMinutes: record.fields.awakeCheckMinutes?.value,
   });
 }
 

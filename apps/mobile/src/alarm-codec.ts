@@ -23,6 +23,9 @@ const alarm = Schema.Struct({
   snooze: Schema.optional(Schema.Unknown),
   snoozeMinutes: Schema.optional(Schema.Unknown),
   snoozeCap: Schema.optional(Schema.Unknown),
+  // And none before #47 has an awake check.
+  awakeCheck: Schema.optional(Schema.Unknown),
+  awakeCheckMinutes: Schema.optional(Schema.Unknown),
 });
 const event = Schema.Struct({
   id: Schema.String,
@@ -59,4 +62,18 @@ export const decodeRing = (json: string): Ring | null => {
       snoozedUntil: active.snoozedUntil ?? null,
     }
   );
+};
+const awakeCheck = Schema.NullOr(
+  Schema.Struct({
+    id: Schema.String,
+    ringId: Schema.String,
+    alarm,
+    dueAt: Schema.Number,
+    shownAt: Schema.optional(Schema.Number),
+  }),
+);
+const decodeStoredAwakeCheck = Schema.decodeUnknownSync(Schema.fromJsonString(awakeCheck));
+export const decodeAwakeCheck = (json: string) => {
+  const check = decodeStoredAwakeCheck(json);
+  return check && { ...check, alarm: readAlarm(check.alarm), shownAt: check.shownAt ?? null };
 };

@@ -28,7 +28,21 @@ service, which rings the same ring id. `sessionStarted` on a snoozed ring is Ans
 cancels the snooze alarm and starts the service straight into a silent session. An alarm due
 while snoozed is absorbed, as during any ring. JS checks the cap and adds the snooze cost to N.
 
-Later alarm tickets add awake checks and read aloud from ADR 0005.
+#47 adds the awake check. `dismiss(ringId, awakeCheckAfter)` takes seconds (Core's
+`awakeCheckAfter(alarm)`) or null. With seconds, the dismissal and the pending check
+(`{ id, ringId, alarm, dueAt }`) commit in one write, and `AwakeCheck.advance` arms an exact alarm
+for `dueAt`. When it fires, native journals `awakeCheckShown` (with the dismissed ring's id), sets
+`shownAt`, posts a silent full-screen notification (plus `startActivity` with overlay access) and
+arms a second exact alarm `awakeCheckSeconds` later. `awakeCheckPassed(checkId)` journals
+`awakeCheckPassed` and clears it. If the timeout fires first, native journals `awakeCheckFailed` and
+fires the alarm again as a new ring. Before the first unlock the card can't show, so a check that
+comes due then fails at once and rings. A check that comes due during another ring (snoozed or not) is dropped.
+`rearmAll` re-arms or runs a pending check after a reboot or `setAlarms`. `getAwakeCheck()` returns
+the pending check. JS shows the prompt only once `shownAt` is set.
+
+The service runs one `RingPolicy` per ring; its `Start` says how the ring began: `FRESH` (due, or a
+snooze ended: ramps), `TAKEOVER` (a new service after a kill or reboot: full, journals
+`serviceRestarted`) or `ANSWER_NOW` (silent session). Later alarm tickets add read aloud from ADR 0005.
 
 ## Verification
 

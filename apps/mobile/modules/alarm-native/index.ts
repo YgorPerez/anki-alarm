@@ -16,7 +16,9 @@ interface NativeAlarm {
   activity: (ringId: string) => void;
   /** Returns the ring's JSON after snoozing, or null when no ring is active. */
   snooze: (ringId: string, minutes: number) => string | null;
-  dismiss: (ringId: string) => void;
+  dismiss: (ringId: string, awakeCheckAfter: number | null) => void;
+  getAwakeCheck: () => string | null;
+  awakeCheckPassed: (checkId: string) => boolean;
   getPermissions: () => AlarmPermissions;
   isOnboardingComplete: () => boolean;
   completeOnboarding: () => boolean;
