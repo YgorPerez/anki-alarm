@@ -1,4 +1,4 @@
-import type { CollectionEnvironment, Field } from "./collection.ts";
+import { nextClock, type CollectionEnvironment, type Field } from "./collection.ts";
 
 /** ISO weekdays: Monday = 1, Sunday = 7. A once-date is a local YYYY-MM-DD. */
 export interface AlarmRule {
@@ -71,11 +71,7 @@ export function stampAlarm(
   alarm: Alarm,
   env: CollectionEnvironment,
 ): AlarmRecord {
-  const clocks = Object.values(previous?.fields ?? {}).map((f) => f.hlc);
-  const wallMs = Math.max(env.now(), ...clocks.map((h) => h.wallMs));
-  const counter =
-    Math.max(-1, ...clocks.filter((h) => h.wallMs === wallMs).map((h) => h.counter)) + 1;
-  const hlc = { wallMs, counter, deviceId: env.deviceId };
+  const hlc = nextClock(previous, env);
   const { id, ...properties } = alarm;
   // Every key of the alarm is kept with its own type.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion

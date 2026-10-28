@@ -15,7 +15,7 @@ import {
 import { MAX_CHANGES, UpdateRequired, type Change, type SyncClient } from "@app/contracts";
 import { eq, sql } from "drizzle-orm";
 import type { SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import {
   alarmRecords,
   alarms,
@@ -40,9 +40,7 @@ export interface SyncResult {
 }
 
 /** The signed-in account isn't the one this device adopted. Sign in to it, or adopt this one. */
-export class AccountMismatch extends Error {
-  readonly _tag = "AccountMismatch";
-}
+export class AccountMismatch extends Data.TaggedError("AccountMismatch")<{ message: string }> {}
 
 const recordTables = { decks, presets, noteTypes, notes, cards } as const;
 type RecordTable = keyof typeof recordTables;
@@ -258,7 +256,7 @@ export function syncEngine({
         if (meta.syncProtocol !== SYNC_PROTOCOL)
           return yield* new UpdateRequired({ syncProtocol: meta.syncProtocol });
         if (account !== meta.userId)
-          return yield* Effect.fail(new AccountMismatch("Signed in to another account"));
+          return yield* new AccountMismatch({ message: "Signed in to another account" });
         const full = yield* serial(async () => (await readMeta("syncFullUpload")) === "1");
         const { changes, marks } = yield* serial(queued);
         const outgoing = full ? yield* serial(everything) : changes;

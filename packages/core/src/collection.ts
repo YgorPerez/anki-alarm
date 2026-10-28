@@ -52,6 +52,17 @@ export interface CollectionEnvironment {
   now: () => number;
   random: () => Uint8Array;
 }
+/** The clock after every field of `previous`, even when the wall clock went backwards. */
+export function nextClock(
+  previous: { fields: { [key: string]: Field<unknown> } } | undefined,
+  env: CollectionEnvironment,
+): Hlc {
+  const clocks = Object.values(previous?.fields ?? {}).map((f) => f.hlc);
+  const wallMs = Math.max(env.now(), ...clocks.map((h) => h.wallMs));
+  const counter =
+    Math.max(-1, ...clocks.filter((h) => h.wallMs === wallMs).map((h) => h.counter)) + 1;
+  return { wallMs, counter, deviceId: env.deviceId };
+}
 const empty = (): CollectionState => ({
   decks: [],
   presets: [],

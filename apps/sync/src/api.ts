@@ -9,9 +9,7 @@ import { HttpApiBuilder } from "effect/http-api";
 import type { Auth } from "./auth.ts";
 import type { SyncStore } from "./store.ts";
 
-export class Backend extends Context.Service<Backend, { auth: Auth; store: SyncStore }>()(
-  "Backend",
-) {}
+class Backend extends Context.Service<Backend, { auth: Auth; store: SyncStore }>()("Backend") {}
 
 const SessionLive = Layer.effect(
   Session,

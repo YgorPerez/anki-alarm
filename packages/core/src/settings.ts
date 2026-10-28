@@ -1,6 +1,6 @@
 import { uuid7 } from "./ids.ts";
 import { FACTORY_THEME, parseThemeChoice, type ThemeChoice } from "./theme.ts";
-import type { CollectionEnvironment, Field } from "./collection.ts";
+import { nextClock, type CollectionEnvironment, type Field } from "./collection.ts";
 
 export interface Settings {
   id: string;
@@ -12,10 +12,7 @@ export function updateThemeSettings(
   patch: Partial<ThemeChoice>,
   env: CollectionEnvironment,
 ): Settings {
-  const clocks = Object.values(previous?.fields ?? {}).map((f) => f.hlc);
-  const wallMs = Math.max(env.now(), ...clocks.map((h) => h.wallMs));
-  const counter =
-    Math.max(-1, ...clocks.filter((h) => h.wallMs === wallMs).map((h) => h.counter)) + 1;
+  const hlc = nextClock(previous, env);
   const choice = parseThemeChoice({
     ...FACTORY_THEME,
     ...Object.fromEntries(Object.entries(previous?.fields ?? {}).map(([k, f]) => [k, f.value])),
@@ -28,10 +25,7 @@ export function updateThemeSettings(
       // Object.entries retains the ThemeChoice keys.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion
       const old = previous?.fields[key as keyof ThemeChoice];
-      return [
-        key,
-        old?.value === value ? old : { value, hlc: { wallMs, counter, deviceId: env.deviceId } },
-      ];
+      return [key, old?.value === value ? old : { value, hlc }];
     }),
   ) as Settings["fields"];
   return { id: previous?.id ?? uuid7(env.now(), env.random()), fields };
