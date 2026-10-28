@@ -13,6 +13,8 @@
     "ts-fsrs",
     // Auto-linked native update loader; configuration is in app.config.ts.
     "expo-updates",
+    // babel-preset-expo loads it when app.config.ts turns `experiments.reactCompiler` on.
+    "babel-plugin-react-compiler",
   ],
   "ignoreExports": [
     // shadcn's generated components export their variants for whoever composes them.
