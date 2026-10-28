@@ -34,10 +34,14 @@
     "uniwind": "^1.13.0"
   },
   "devDependencies": {
+    "@babel/core": "7.29.7",
     "@expo/fingerprint": "0.21.7",
+    "@rolldown/plugin-babel": "0.2.4",
+    "@testing-library/react-native": "14.1.0",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "babel-plugin-react-compiler": "catalog:",
+    "test-renderer": "1.3.1",
     "typescript": "catalog:"
   },
   "expo": {
