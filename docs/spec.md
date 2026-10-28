@@ -31,7 +31,7 @@ A pnpm monorepo on GitHub under `YgorPerez`, driven by Vite+ (`vp check`, `vp li
 
 | Path            | What                                                                                                                                                                                                                         |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/mobile`   | Expo + React Native, react-native-reusables on uniwind (Tailwind 4), expo-sqlite + drizzle, Effect for services. A local Expo module in Kotlin (`modules/alarm-native`) for alarms, audio, TTS and AnkiDroid.                |
+| `apps/mobile`   | Expo + React Native, react-native-reusables on uniwind (Tailwind 4), expo-sqlite + drizzle, Effect for services. Local Kotlin Expo modules: `modules/alarm-native` (alarms, audio, TTS) and `modules/ankidroid`.                          |
 | `apps/web`      | TanStack Start/Router/Query, shadcn on Base UI (`@base-ui/react`), Tailwind 4, `@shadcn/lint`, Storybook, Vitest, Playwright. Deployed to Cloudflare Workers.                                                                |
 | `apps/sync`     | Cloudflare Worker with D1 (data) and R2 (media), as in wave's `apps/sync`.                                                                                                                                                   |
 | `packages/core` | Every decision-heavy rule, with **zero runtime dependencies** except `ts-fsrs`: log replay, session and dismiss rules, snooze cost, card picking, daily limits, `.apkg` model, template rendering, stats, alarm time math. |
@@ -161,10 +161,18 @@ session** is a special mode of it on the phone.
 - Leaving the alarm screen before dismissal brings the sound back at full volume after about 10
   seconds and offers the way back. If the app is killed, the service restarts and rings again. A
   reboot mid-session re-rings at boot.
+- A **ring** goes on until dismissal. It survives reboots with a PIN: before the first unlock a small
+  native lock-screen activity shows the clock, the label and "Unlock to start", in the user's theme.
+- An alarm missed while the phone was off rings at boot if it's 30 minutes late or less.
+- An alarm that comes due during a ring is folded into it: the session keeps its deck and needs the
+  larger N.
+- Onboarding asks for notifications and "Display over other apps" (needed to take over an unlocked
+  phone). Settings warns that force-stopping the app drops its alarms.
+- The module's API and who owns what: `docs/adr/0005-alarm-native-module.md`.
 
 ### The alarm session
 
-- Opening the alarm screen starts the session. The sound drops to a low level while you answer and
+- Tapping Start on the alarm screen starts the session. The sound drops to a low level while you answer and
   comes back at full volume if no answer comes for a while.
 - Cards come from the alarm's deck in this order: due cards, then new cards, then reviews ahead
   (cards due soonest). FSRS handles early reviews.

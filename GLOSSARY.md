@@ -45,6 +45,10 @@ runs a sync back first.
 
 **Read aloud.** An alarm option that reads each card's front during the session.
 
+**Ring.** One firing of an alarm, from its first sound to dismissal. It lasts through snoozes, and
+an alarm that comes due during it is folded into it. A failed awake check starts a new ring.
+_Avoid_: wake-up
+
 **Reset.** A log entry that returns a card to new, at the end of the new queue, with its review
 and lapse counts starting over. Its earlier reviews stay in the log.
 _Avoid_: forget (the action's name in the UI, not the entry)
