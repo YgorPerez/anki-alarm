@@ -123,7 +123,8 @@ export function mediaFromRecord(record: {
 /**
  * How a push goes around its media. `uploads` are the files its media records point at: upload the
  * ones the Worker lacks first. With the hashes whose upload failed, `held` is what waits for the
- * next sync (those media records and the notes that reference their names) and `push` the rest.
+ * next sync (those media records, the notes that reference their names, and those notes' cards, so
+ * no device gets a card without its note) and `push` the rest.
  */
 export function mediaPushPlan(changes: readonly SyncChange[], failed: ReadonlySet<string>) {
   const uploads: { name: string; sha256: string }[] = [];
@@ -135,18 +136,25 @@ export function mediaPushPlan(changes: readonly SyncChange[], failed: ReadonlySe
     uploads.push({ name: file.name, sha256: file.sha256 });
     if (failed.has(file.sha256)) heldNames.add(file.name);
   }
+  const heldNotes = new Set<string>();
+  if (heldNames.size > 0)
+    for (const change of changes)
+      if (
+        change.kind === "notes" &&
+        mediaReferences((change.record.values ?? []).map((v) => v.value)).some((name) =>
+          heldNames.has(name),
+        )
+      )
+        heldNotes.add(change.record.id);
   const holds = (change: SyncChange) => {
     if (heldNames.size === 0) return false;
     if (change.kind === "media") {
       const file = mediaFromRecord(change.record);
       return file !== undefined && heldNames.has(file.name);
     }
-    return (
-      change.kind === "notes" &&
-      mediaReferences((change.record.values ?? []).map((v) => v.value)).some((name) =>
-        heldNames.has(name),
-      )
-    );
+    if (change.kind === "notes") return heldNotes.has(change.record.id);
+    const noteId = change.kind === "cards" ? change.record.fields["noteId"]?.value : undefined;
+    return typeof noteId === "string" && heldNotes.has(noteId);
   };
   return {
     uploads,

@@ -73,6 +73,14 @@ const media = (name: string, sha256: string): SyncChange => ({
   record: stampMedia(undefined, { name, sha256, size: 1 }, env(1))!,
 });
 
+const card = (id: string, noteId: string): SyncChange => ({
+  kind: "cards",
+  record: {
+    id,
+    fields: { noteId: { value: noteId, hlc: { wallMs: 1, counter: 0, deviceId: "phone" } } },
+  },
+});
+
 describe("mediaPushPlan", () => {
   const hlc = { wallMs: 1, counter: 0, deviceId: "phone" };
   const note = (id: string, ...values: string[]): SyncChange => ({
@@ -98,7 +106,7 @@ describe("mediaPushPlan", () => {
     expect(plan.held).toEqual([]);
   });
 
-  test("a failed upload holds back its media record and only the notes that reference it", () => {
+  test("a failed upload holds back its media record and only the notes that reference it, with their cards", () => {
     const changes = [
       media("a.jpg", HASH_A),
       media("b.mp3", HASH_B),
@@ -106,9 +114,11 @@ describe("mediaPushPlan", () => {
       note("n2", "[sound:b.mp3]"),
       note("n3", "plain"),
       deck,
+      card("c1", "n1"),
+      card("c3", "n3"),
     ];
     const plan = mediaPushPlan(changes, new Set([HASH_A]));
-    expect(plan.held).toEqual([changes[0], changes[2]]);
-    expect(plan.push).toEqual([changes[1], changes[3], changes[4], changes[5]]);
+    expect(plan.held).toEqual([changes[0], changes[2], changes[6]]);
+    expect(plan.push).toEqual([changes[1], changes[3], changes[4], changes[5], changes[7]]);
   });
 });

@@ -9,7 +9,9 @@ import {
   reviewLog,
 } from "./schema.ts";
 import { syncEngine } from "./sync.ts";
-export { AccountMismatch, type SyncResult } from "./sync.ts";
+export { AccountMismatch, type MediaSyncResult, type SyncResult } from "./sync.ts";
+export { MediaStorageRefused, memoryMediaFiles, type MediaFiles } from "./media.ts";
+import { memoryMediaFiles, type MediaFiles } from "./media.ts";
 export { syncScheduler, type SyncScheduler, type SyncStatus } from "./scheduler.ts";
 export { type ExecuteSql } from "./collection.ts";
 import { openCollectionStore, type ExecuteSql } from "./collection.ts";
@@ -56,8 +58,18 @@ export interface ImportSummary {
   /** Review log entries this import added. */
   entries: number;
 }
-type Engine = ReturnType<typeof syncEngine>;
+type Engine = Omit<ReturnType<typeof syncEngine>, "writeMediaFiles" | "recordMedia">;
 interface Data extends Engine {
+  /**
+   * Stores media files under their names, before the records that use them, and records each one's
+   * SHA-256 so sync uploads it. The same bytes again queue nothing. Fails with
+   * `MediaStorageRefused` when the device won't store, and on an unsafe name.
+   */
+  storeMedia: (
+    files: readonly { name: string; bytes: () => Promise<Uint8Array> }[],
+  ) => Effect.Effect<number, Error>;
+  /** The names of the files the notes use that this device lacks, sorted. Sync downloads them. */
+  missingMedia: Effect.Effect<string[], Error>;
   /** Calls `listener` after each local write commits, to schedule a sync. Returns unsubscribe. */
   subscribe: (listener: () => void) => () => void;
   collection: Effect.Effect<CollectionState, Error>;
@@ -108,20 +120,26 @@ export interface SQLiteConnection {
 export class SQLiteDriver extends Context.Service<SQLiteDriver, SQLiteConnection>()(
   "SQLiteDriver",
 ) {}
+/** Where the app keeps media files. */
+export class MediaDriver extends Context.Service<MediaDriver, MediaFiles>()("MediaDriver") {}
 
 const failure = (error: unknown) => (error instanceof Error ? error : new Error(String(error)));
 export const ClientDataLive = Layer.effect(
   ClientData,
   Effect.gen(function* () {
     const driver = yield* SQLiteDriver;
-    return yield* Effect.tryPromise({ try: () => open(driver), catch: failure });
+    const media = yield* MediaDriver;
+    return yield* Effect.tryPromise({ try: () => open(driver, media), catch: failure });
   }),
 );
-export const clientDataLayer = (driver: SQLiteConnection) =>
-  ClientDataLive.pipe(Layer.provide(Layer.succeed(SQLiteDriver, driver)));
+/** The service over the app's SQLite and media files. Tests may leave media in memory. */
+export const clientDataLayer = (driver: SQLiteConnection, media: MediaFiles = memoryMediaFiles()) =>
+  ClientDataLive.pipe(
+    Layer.provide([Layer.succeed(SQLiteDriver, driver), Layer.succeed(MediaDriver, media)]),
+  );
 
 /* oxlint-disable eslint/no-await-in-loop -- SQLite transactions execute statements in order. */
-async function open(driver: SQLiteConnection): Promise<Data> {
+async function open(driver: SQLiteConnection, media: MediaFiles): Promise<Data> {
   const collectionSql = driver.connect("collection.db");
   const alarmSql = driver.connect("anki-alarm.db");
   const store = await openCollectionStore(collectionSql, driver);
@@ -199,16 +217,19 @@ async function open(driver: SQLiteConnection): Promise<Data> {
     return added.length;
   };
   const env = { ...driver, deviceId: store.deviceId };
-  const engine = syncEngine({
+  const { writeMediaFiles, recordMedia, ...engine } = syncEngine({
     collectionDb,
     alarmDb,
     serial,
     inCollection: (operation) => transaction(collectionSql, operation),
     inAlarms: (operation) => transaction(alarmSql, operation),
     env,
+    media,
   });
   return {
     ...engine,
+    storeMedia: (files) =>
+      writeMediaFiles(files).pipe(Effect.flatMap((stored) => local(() => recordMedia(stored)))),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => {
