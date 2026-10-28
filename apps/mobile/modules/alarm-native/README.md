@@ -20,7 +20,15 @@ the phase back to `ringing` and rings at full; the user taps Start again and the
 progress, which JS reads from reviews carrying the ring id. Native does not count answers. The
 session uses the larger N of absorbed alarms and keeps the active ring's deck.
 
-Later alarm tickets add snooze, awake checks and read aloud from ADR 0005.
+#46 adds snooze. `snooze(ringId, minutes)` stores phase `snoozed`, counts the ring's `snoozes`,
+sets `snoozedUntil`, journals `snoozed` and stops the service; it returns the ring's JSON. The
+re-ring is a `setAlarmClock` exact alarm (`SNOOZE_END`), re-armed by `rearmAll` after a reboot or
+force-stop, or rung at once if its time has passed. It journals `snoozeEnded` and starts the
+service, which rings the same ring id. `sessionStarted` on a snoozed ring is Answer now: it
+cancels the snooze alarm and starts the service straight into a silent session. An alarm due
+while snoozed is absorbed, as during any ring. JS checks the cap and adds the snooze cost to N.
+
+Later alarm tickets add awake checks and read aloud from ADR 0005.
 
 ## Verification
 

@@ -35,6 +35,8 @@ class AlarmService : Service() {
     private const val CHANNEL_ID = "alarm_ringing_v1"
     private const val NOTIFICATION_ID = 4242
     private const val WAY_BACK_ID = 4243
+    /** The start reason for Answer now on a snoozed ring: the session begins silent. */
+    const val ANSWER_NOW = "answer now"
 
     @Volatile
     var instance: AlarmService? = null
@@ -63,6 +65,7 @@ class AlarmService : Service() {
     fun dismissWithoutService(ctx: Context) {
       AlarmStore.finish(ctx)
       AlarmScheduler.cancelWatchdog(ctx)
+      AlarmScheduler.cancelSnooze(ctx)
       AlarmActivityListener.applyLockFlags(false)
       AlarmStore.log(ctx, "dismissed with no service running")
     }
@@ -189,10 +192,7 @@ class AlarmService : Service() {
 
   private fun beginRinging(reason: String) {
     val first = reason != "sticky restart"
-    if (first) {
-
-      sessionStarted = false
-    }
+    if (first) sessionStarted = reason == ANSWER_NOW
     val pm = getSystemService(PowerManager::class.java)
     val km = getSystemService(KeyguardManager::class.java)
     val nm = getSystemService(NotificationManager::class.java)
@@ -205,9 +205,11 @@ class AlarmService : Service() {
     AlarmActivityListener.applyLockFlags(true)
     // A new or restarted service rings at full: the user taps Start again, keeping the progress.
     if (!sessionStarted) AlarmStore.setPhase(this, null, "ringing")
-    if (!sessionStarted) setTarget(1f, ramp = first)
+    if (!sessionStarted) setTarget(1f, ramp = first) else setTarget(low(), ramp = false)
     if (player == null && tone == null) startSound()
-    if (vibrator == null && setting("vibrate") == 1 && setting("silent") == 0) startVibration()
+    if (!sessionStarted && vibrator == null && setting("vibrate") == 1 && setting("silent") == 0) startVibration()
+    // Answer now: the session runs silent, and leaving or idling brings the sound back.
+    if (sessionStarted) restartIdle()
     handler.removeCallbacks(tick)
     handler.post(tick)
     handler.removeCallbacks(watchdogRefresh)
@@ -395,6 +397,17 @@ class AlarmService : Service() {
 
   fun dismiss() {
     AlarmStore.finish(this)
+    AlarmScheduler.cancelSnooze(this)
+    stopRinging()
+  }
+
+  // Snoozed: the ring stays stored with its snooze alarm armed; nothing sounds until it fires.
+  fun snooze() {
+    log("snoozed until ${AlarmStore.ring(this)?.optLong("snoozedUntil")}")
+    stopRinging()
+  }
+
+  private fun stopRinging() {
     AlarmScheduler.cancelWatchdog(this)
     AlarmActivityListener.applyLockFlags(false)
     getSystemService(NotificationManager::class.java).cancel(WAY_BACK_ID)
