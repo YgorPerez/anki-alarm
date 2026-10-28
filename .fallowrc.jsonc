@@ -13,6 +13,8 @@
     "ts-fsrs",
     // Auto-linked native update loader; configuration is in app.config.ts.
     "expo-updates",
+    // Auto-linked Android appearance support for userInterfaceStyle in app.config.ts.
+    "expo-system-ui",
   ],
   "ignoreExports": [
     // shadcn's generated components export their variants for whoever composes them.
