@@ -22,3 +22,11 @@ export type { Alarm, AlarmRule } from "./alarm.ts";
 export { releaseVersion } from "./release.ts";
 export { newerApk, SYNC_PROTOCOL } from "./release.ts";
 export { releaseArtifact } from "./release.ts";
+
+export { reliabilitySteps } from "./reliability.ts";
+export type {
+  AlarmPermissions,
+  PermissionState,
+  ReliabilityKind,
+  ReliabilityStep,
+} from "./reliability.ts";
