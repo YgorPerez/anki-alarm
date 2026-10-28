@@ -1,13 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  alarmSession,
-  ringNeed,
-  SESSION_RULES,
-  type Alarm,
-  type Grade,
-  type Locale,
-} from "@app/core";
-import type { AlarmEvent } from "@app/client-data";
+import { alarmSession, ringNeed, SESSION_RULES, type Grade, type Locale } from "@app/core";
 import { Effect, type Layer } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { BackHandler, Pressable, Text, View } from "react-native";
@@ -20,12 +12,6 @@ import { AnswerControls, CardSide } from "./StudyScreen.tsx";
 const GRADE_DELAY_MS = SESSION_RULES.gradeDelaySeconds * 1000;
 const bold = { fontFamily: "AtkinsonHyperlegible_700Bold" };
 type Session = ReturnType<typeof alarmSession>;
-
-/** The ring's alarm and the alarms folded into it, from the ingested journal. */
-const absorbedInto = (ring: Ring, events: readonly AlarmEvent[], alarms: readonly Alarm[]) =>
-  events
-    .filter((e) => e.kind === "absorbed" && e.ringId === ring.id)
-    .flatMap((e) => alarms.filter((a) => a.id === e.alarmId));
 
 /** Runs an operation and reports whether it succeeded. Outside the components: React Compiler
  * doesn't compile `try` with `await`. */
@@ -215,7 +201,7 @@ function useAlarmSession(
         collection,
         log,
         deckId: ring.alarm.deckId,
-        need: ringNeed(ring.alarm, absorbedInto(ring, events, alarms)),
+        need: ringNeed(ring, events, alarms),
         ringId: ring.id,
         now: Date.now(),
       });

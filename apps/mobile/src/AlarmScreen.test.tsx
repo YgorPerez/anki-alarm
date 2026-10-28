@@ -101,3 +101,58 @@ test("Start silences the ring, cards count toward N and N right dismisses it", a
     await api.dispose();
   }
 });
+
+test("an alarm folded into the ring raises its N and keeps the ring's deck", async () => {
+  const api = await fakeSyncApi({});
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Dobra");
+        c.addBasicNote(deck.id, "sol", "sun");
+        const other = c.createDeck("Dobra outro");
+        c.addBasicNote(other.id, "lua", "moon");
+      }),
+    ),
+  );
+  const deckId = (name: string) => state.decks.find((d) => d.fields.name.value === name)!.id;
+  const ring: Ring = {
+    id: "ring-fold",
+    alarm: { ...newAlarm("fold-1"), label: "Cedo", deckId: deckId("Dobra"), need: 1 },
+    startedAt: Date.now(),
+    phase: "ringing",
+  };
+  const later = { ...newAlarm("fold-2"), deckId: deckId("Dobra outro"), need: 4 };
+  await Effect.runPromise(
+    localData((data) =>
+      Effect.andThen(data.saveAlarm(later), () =>
+        data.ingestEvents([
+          {
+            id: "fold-event",
+            kind: "absorbed",
+            alarmId: later.id,
+            ringId: ring.id,
+            wallTime: ring.startedAt,
+            elapsedRealtime: 2,
+          },
+        ]),
+      ),
+    ),
+  );
+  const native = memoryAlarmService();
+  try {
+    await render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" } } })
+        }
+      >
+        <AlarmScreen ring={ring} locale="pt-BR" layer={native.layer} onDismissed={() => {}} />
+      </QueryClientProvider>,
+    );
+    await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+    await screen.findByText("0 de 4 certos · faltam 4");
+    expect(front()).toContain("sol");
+  } finally {
+    await api.dispose();
+  }
+});
