@@ -6,14 +6,25 @@ packages:
 # app's package.json by `expo install` instead.
 catalog:
   "@types/node": 24.12.4
+  # React Native pins React, so the web follows the phone's version.
+  react: 19.3.0
+  react-dom: 19.3.0
+  "@types/react": ~19.3.0
+  "@types/react-dom": ~19.3.0
+  tailwindcss: 4.3.3
+  "@tailwindcss/vite": 4.3.3
   typescript: 7.0.2
   # The workspace's Vite is Vite+'s core. They move together.
   vite: npm:@voidzero-dev/vite-plus-core@1.4.0
   vite-plus: 1.4.0
 
-# One Vite in the workspace, Vite+'s, so the web's plugins and `vp` see the same copy.
+# One copy of each in the workspace. Vite: Vite+'s, so the web's plugins and `vp` see the same
+# one. React and Tailwind: the phone and the web on one version, which ranges would let drift.
 overrides:
   vite@*: "catalog:"
+  react: "catalog:"
+  react-dom: "catalog:"
+  tailwindcss: "catalog:"
 
 peerDependencyRules:
   allowAny:

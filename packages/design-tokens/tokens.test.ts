@@ -28,12 +28,12 @@ const luminance = (hex: string) => {
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
 };
 const contrast = (a: string, b: string) => {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  const [hi, lo] = [luminance(a), luminance(b)].toSorted((x, y) => y - x);
   return (hi! + 0.05) / (lo! + 0.05);
 };
 
 test("light and dark define the same colors", () => {
-  assert.deepEqual([...light.keys()].sort(), [...dark.keys()].sort());
+  assert.deepEqual([...light.keys()].toSorted(), [...dark.keys()].toSorted());
 });
 
 test("every color is a plain #rrggbb literal", () => {
@@ -42,7 +42,7 @@ test("every color is a plain #rrggbb literal", () => {
 
 test("web.css registers exactly the colors tokens.css defines", () => {
   const registered = [...webCss.matchAll(/--color-([\w-]+):\s*unset;/g)].map((m) => m[1]!);
-  assert.deepEqual(registered.sort(), [...light.keys()].sort());
+  assert.deepEqual(registered.toSorted(), [...light.keys()].toSorted());
 });
 
 test("web.css's shadcn aliases point at defined colors", () => {

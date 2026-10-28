@@ -14,14 +14,14 @@
     "expo": "~58.0.20",
     "expo-dev-client": "~58.0.16",
     "expo-status-bar": "~58.0.4",
-    "react": "19.3.0",
+    "react": "catalog:",
     "react-native": "0.88.0",
     "react-native-safe-area-context": "~5.10.1",
-    "tailwindcss": "^4.3.3",
+    "tailwindcss": "catalog:",
     "uniwind": "^1.13.0"
   },
   "devDependencies": {
-    "@types/react": "~19.3.0",
+    "@types/react": "catalog:",
     "typescript": "catalog:"
   },
   "expo": {

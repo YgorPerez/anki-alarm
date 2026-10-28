@@ -26,15 +26,22 @@ export default defineConfig({
     // Not the web yet: its Vite config runs SSR in workerd, which Vitest can't load. Its first
     // test brings a test config without the Cloudflare plugin. The phone has no Vite config.
     projects: ["packages/*", "apps/sync"],
+    // A stray `.only` passes locally and must not pass CI.
+    allowOnly: !process.env["CI"],
+  },
+  // The pre-commit hook (`vp config`, run by `prepare`) formats what's staged.
+  staged: {
+    "*": "vp fmt --no-error-on-unmatched-pattern",
   },
   fmt: {
     printWidth: 100,
+    sortPackageJson: {},
     ignorePatterns: IGNORED,
   },
   lint: {
     ignorePatterns: IGNORED,
     plugins: ["eslint", "typescript", "unicorn", "oxc", "react", "import", "vitest"],
-    categories: { correctness: "error" },
+    categories: { correctness: "error", suspicious: "error", perf: "error" },
     options: {
       typeAware: true,
       typeCheck: true,
@@ -58,6 +65,12 @@ export default defineConfig({
       "vite-plus/prefer-vite-plus-imports": "error",
       "react/rules-of-hooks": "error",
       "react/exhaustive-deps": "error",
+      // Both apps use the automatic JSX runtime, which needs no `React` in scope.
+      "react/react-in-jsx-scope": "off",
+      // expo-status-bar's `style` is a string ("auto", "light", "dark").
+      "react/style-prop-object": ["error", { allow: ["StatusBar"] }],
+      // A stylesheet is imported for its effect.
+      "import/no-unassigned-import": ["error", { allow: ["**/*.css"] }],
     },
     overrides: [
       {

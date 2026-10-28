@@ -22,31 +22,27 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Without `version`, the action reads `packageManager` from the root package.json.
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v5
+      # Vite+, the Node.js in package.json's `engines` and the pnpm in `packageManager`, then
+      # `vp install` from the lockfile.
+      - uses: voidzero-dev/setup-vp@v1
         with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
+          node-version-file: package.json
+          cache: true
 
       - name: vp check
-        run: pnpm check
+        run: vp check
 
       - name: vp lint
-        run: pnpm lint
+        run: vp lint
 
       - name: vp test
-        run: pnpm test
+        run: vp test run
 
       - name: Fallow
-        run: pnpm fallow
+        run: vp run fallow
 
       - name: React Doctor
-        run: pnpm react-doctor
+        run: vp run react-doctor
 
   # The apps build: the web for Workers, and the phone's JS bundle through Metro and uniwind.
   build:
@@ -56,18 +52,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v5
+      - uses: voidzero-dev/setup-vp@v1
         with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
+          node-version-file: package.json
+          cache: true
 
       - name: Web
-        run: pnpm --filter @app/web build
+        run: vp run --filter @app/web build
 
       - name: Phone bundle
-        run: pnpm --filter @app/mobile exec expo export --platform android --output-dir "$RUNNER_TEMP/mobile"
+        run: vp exec --filter @app/mobile expo export --platform android --output-dir "$RUNNER_TEMP/mobile"

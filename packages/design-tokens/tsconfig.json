@@ -1,14 +1,6 @@
 {
   // Only the test is TypeScript here: it reads the CSS and DESIGN.md from disk with Node.
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "types": ["node"]
-  },
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "lib": ["ES2023"], "types": ["node"] },
   "include": ["*.ts"]
 }

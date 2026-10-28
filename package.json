@@ -4,6 +4,7 @@
   "description": "An alarm clock for Android that you turn off by reviewing flashcards.",
   "type": "module",
   "scripts": {
+    "prepare": "vp config --no-agent",
     "check": "vp check",
     "lint": "vp lint",
     "fmt": "vp fmt",
@@ -20,7 +21,7 @@
     "vite-plus": "catalog:"
   },
   "engines": {
-    "node": ">=24"
+    "node": "26.8.2"
   },
   "packageManager": "pnpm@11.22.0"
 }
