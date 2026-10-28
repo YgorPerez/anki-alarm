@@ -94,6 +94,11 @@ class AwakeCheckTest {
     assertTrue(AwakeCheck.passed(ctx, AwakeCheck.pending(ctx)!!.getString("id")))
     assertNull(AwakeCheck.pending(ctx))
     assertEquals("awakeCheckPassed", kinds().last())
+    // Wake-up stats (#59) key every awake check event on the dismissed ring and its alarm.
+    for (e in journal().filter { it.getString("kind").startsWith("awakeCheck") }) {
+      assertEquals("ring-1", e.getString("ringId"))
+      assertEquals("morning", e.getString("alarmId"))
+    }
     AwakeCheck.advance(ctx, now = dismissedAt + 400_000, unlocked = true)
     assertNull(AlarmStore.ring(ctx))
   }

@@ -62,6 +62,12 @@ class SnoozeTest {
     assertFalse(ring().has("snoozedUntil"))
     assertTrue(AlarmStore.isRinging(ctx))
     assertEquals(listOf("ringStarted", "snoozed", "snoozeEnded"), journal())
+    // Wake-up stats (#59) count snoozes by the ring id, which a snooze keeps.
+    val events = JSONArray(AlarmStore.prefs(ctx).getString("journal", "[]"))
+    for (i in 0 until events.length()) {
+      assertEquals("ring-1", events.getJSONObject(i).getString("ringId"))
+      assertEquals("morning", events.getJSONObject(i).getString("alarmId"))
+    }
     AlarmScheduler.snooze(ctx, "ring-1", 5, now + nineMinutes)
     assertEquals(2, ring().getInt("snoozes"))
   }
