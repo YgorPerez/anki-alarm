@@ -6,6 +6,7 @@ import { openDatabaseAsync } from "expo-sqlite";
 import { fakeSyncApi } from "@app/contracts/testing";
 import type { Collection } from "@app/core";
 import { answerAlert } from "../test/native/react-native.ts";
+import { memoryAnkiDroid } from "./ankidroid.ts";
 import { localData } from "./database.ts";
 import { CollectionScreen } from "./CollectionScreen.tsx";
 
@@ -18,7 +19,12 @@ async function open() {
         new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" } } })
       }
     >
-      <CollectionScreen locale="pt-BR" onExit={() => {}} onTheme={() => {}} />
+      <CollectionScreen
+        locale="pt-BR"
+        onExit={() => {}}
+        onTheme={() => {}}
+        ankiDroid={memoryAnkiDroid({ installed: null })}
+      />
     </QueryClientProvider>,
   );
 }

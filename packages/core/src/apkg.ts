@@ -76,18 +76,11 @@ export interface ApkgMedia {
 
 const FILES = { 1: "collection.anki2", 2: "collection.anki21", 3: "collection.anki21b" } as const;
 
+/** Reads the package's collection and lists its media files. */
 export async function readApkg(
   host: ApkgHost,
 ): Promise<{ package: AnkiPackage; media: ApkgMedia[] }> {
-  const has = new Set(host.entries);
-  const version = has.has("meta")
-    ? packageVersion(new Message(await host.read("meta")).number(1))
-    : has.has(FILES[2])
-      ? 2
-      : 1;
-  const latest = version === 3;
-  const unpack = async (bytes: Uint8Array) => (latest ? host.decompressZstd(bytes) : bytes);
-  if (!has.has(FILES[version])) throw new Error("Not an Anki package: collection missing");
+  const { version, latest, unpack } = await open(host);
   const database = await host.openSqlite(openable(await unpack(await host.read(FILES[version]))));
   let parsed: AnkiPackage;
   try {
@@ -95,11 +88,41 @@ export async function readApkg(
   } finally {
     await database.close();
   }
+  return { package: parsed, media: await readMedia(host, latest, unpack) };
+}
+
+/**
+ * Lists only the package's media files, without opening its collection: for an export of a deck
+ * linked from AnkiDroid, whose API hands out records but not media.
+ */
+export async function readApkgMedia(host: Omit<ApkgHost, "openSqlite">): Promise<ApkgMedia[]> {
+  const { latest, unpack } = await open(host);
+  return readMedia(host, latest, unpack);
+}
+
+type Unpack = (bytes: Uint8Array) => Promise<Uint8Array>;
+async function open(host: Omit<ApkgHost, "openSqlite">) {
+  const has = new Set(host.entries);
+  const version = has.has("meta")
+    ? packageVersion(new Message(await host.read("meta")).number(1))
+    : has.has(FILES[2])
+      ? 2
+      : 1;
+  if (!has.has(FILES[version])) throw new Error("Not an Anki package: collection missing");
+  const latest = version === 3;
+  const unpack: Unpack = async (bytes) => (latest ? host.decompressZstd(bytes) : bytes);
+  return { version, latest, unpack };
+}
+async function readMedia(
+  host: Omit<ApkgHost, "openSqlite">,
+  latest: boolean,
+  unpack: Unpack,
+): Promise<ApkgMedia[]> {
+  const has = new Set(host.entries);
   const map = has.has("media") ? await unpack(await host.read("media")) : undefined;
-  const media = (map ? mediaEntries(map, latest) : [])
+  return (map ? mediaEntries(map, latest) : [])
     .filter(({ entry }) => has.has(entry))
     .map(({ entry, name }) => ({ name, bytes: async () => unpack(await host.read(entry)) }));
-  return { package: parsed, media };
 }
 
 function packageVersion(version: number | undefined): 1 | 2 | 3 {

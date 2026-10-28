@@ -1,6 +1,6 @@
 /* oxlint-disable eslint/no-await-in-loop -- Media files are written one at a time. */
 import type { ImportSummary } from "@app/client-data";
-import { readApkg } from "@app/core";
+import { readApkg, readApkgMedia, type ApkgHost, type ApkgMedia } from "@app/core";
 import { Effect } from "effect";
 import { Directory, File, Paths } from "expo-file-system";
 import { deserializeDatabaseAsync } from "expo-sqlite";
@@ -18,18 +18,31 @@ export const mediaBaseUrl = () => mediaUrl("");
 
 /** Asks for a package and imports it. Undefined when the user cancels the picker. */
 export async function pickAndImportApkg(): Promise<ImportSummary | undefined> {
-  const picked = await File.pickFileAsync({ mimeTypes: "*/*" });
-  if (picked.canceled) return undefined;
-  return importApkg(await picked.result.bytes());
+  const bytes = await pickPackage();
+  return bytes && importApkg(bytes);
 }
 
 /**
- * Unzips the package, lets Core read it, stores its media files and then merges its records.
- * Media go first, so no imported card points at a missing file.
+ * Asks for a package and stores only its media, for an export of a deck linked from AnkiDroid,
+ * whose API can't hand out media. Returns the number of files, or null when the user cancels.
  */
-async function importApkg(bytes: Uint8Array): Promise<ImportSummary> {
+export async function pickAndImportApkgMedia(): Promise<number | null> {
+  const bytes = await pickPackage();
+  if (!bytes) return null;
+  const media = await readApkgMedia(unzipped(bytes));
+  await storeMedia(media);
+  return media.length;
+}
+
+async function pickPackage(): Promise<Uint8Array | undefined> {
+  const picked = await File.pickFileAsync({ mimeTypes: "*/*" });
+  return picked.canceled ? undefined : picked.result.bytes();
+}
+
+/** The package's zip entries and zstd, held in memory: one unzip path for records and media. */
+export function unzipped(bytes: Uint8Array): Omit<ApkgHost, "openSqlite"> {
   const zip = unzipSync(bytes);
-  const { package: source, media } = await readApkg({
+  return {
     entries: Object.keys(zip),
     read: async (entry) => {
       const content = zip[entry];
@@ -37,6 +50,16 @@ async function importApkg(bytes: Uint8Array): Promise<ImportSummary> {
       return content;
     },
     decompressZstd: (compressed) => decompress(compressed),
+  };
+}
+
+/**
+ * Unzips the package, lets Core read it, stores its media files and then merges its records.
+ * Media go first, so no imported card points at a missing file.
+ */
+async function importApkg(bytes: Uint8Array): Promise<ImportSummary> {
+  const { package: source, media } = await readApkg({
+    ...unzipped(bytes),
     openSqlite: async (database) => {
       const db = await deserializeDatabaseAsync(database);
       return {
@@ -45,13 +68,17 @@ async function importApkg(bytes: Uint8Array): Promise<ImportSummary> {
       };
     },
   });
+  await storeMedia(media);
+  return Effect.runPromise(localData((data) => data.importAnki(source)));
+}
+
+/** Writes media files by name, one at a time: each is decompressed only while it is written. */
+async function storeMedia(media: readonly ApkgMedia[]) {
   const directory = mediaDirectory();
   directory.create({ intermediates: true, idempotent: true });
   for (const file of media) {
     const target = new File(directory, file.name);
-    // Sequential: each file is decompressed in memory only while it is written.
     // react-doctor-disable-next-line react-doctor/async-await-in-loop -- One file in memory at a time.
     await target.write(await file.bytes());
   }
-  return Effect.runPromise(localData((data) => data.importAnki(source)));
 }

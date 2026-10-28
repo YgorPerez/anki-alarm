@@ -20,6 +20,7 @@ import {
   type CollectionState,
   type Alarm,
   type AnkiPackage,
+  type AnkiDroidSource,
 } from "@app/core";
 
 export interface AlarmEvent {
@@ -61,6 +62,11 @@ interface Data {
   changeCollection: (
     command: (collection: Collection) => void,
   ) => Effect.Effect<CollectionState, Error>;
+  /**
+   * Imports an AnkiDroid deck as a linked deck owned by this phone, with a snapshot for each
+   * reviewed card, in one transaction. Linking again updates it. Resolves with the deck's id.
+   */
+  linkAnkiDroidDeck: (source: AnkiDroidSource) => Effect.Effect<string, Error>;
   alarms: Effect.Effect<Alarm[], Error>;
   saveAlarm: (alarm: Alarm) => Effect.Effect<void, Error>;
   ingestEvents: (events: readonly AlarmEvent[]) => Effect.Effect<void, Error>;
@@ -143,6 +149,21 @@ async function open(driver: SQLiteConnection): Promise<Data> {
         return entry;
       }),
     );
+  /** Appends the entries not yet in the log, with their outbox records; inside a transaction. */
+  const appendNew = async (log: readonly LogEntry[]) => {
+    const known = new Set(
+      (await collectionDb.select({ id: reviewLog.id }).from(reviewLog)).map((r) => r.id),
+    );
+    const added = log.filter((entry) => !known.has(entry.id));
+    for (let i = 0; i < added.length; i += 200) {
+      const batch = added.slice(i, i + 200);
+      await collectionDb.insert(reviewLog).values(batch.map((e) => ({ id: e.id, body: e })));
+      await collectionDb
+        .insert(outbox)
+        .values(batch.map((e) => ({ kind: "reviewLog", recordId: e.id, body: e })));
+    }
+    return added.length;
+  };
   return {
     reviewLog: serial(readLog),
     answerCard: (cardId, grade, durationMs) =>
@@ -180,23 +201,20 @@ async function open(driver: SQLiteConnection): Promise<Data> {
         const { result } = await store.run(
           (collection) => collection.importAnki(source),
           async ({ log }) => {
-            const known = new Set(
-              (await collectionDb.select({ id: reviewLog.id }).from(reviewLog)).map((r) => r.id),
-            );
-            const added = log.filter((entry) => !known.has(entry.id));
-            entries = added.length;
-            for (let i = 0; i < added.length; i += 200) {
-              const batch = added.slice(i, i + 200);
-              await collectionDb
-                .insert(reviewLog)
-                .values(batch.map((e) => ({ id: e.id, body: e })));
-              await collectionDb
-                .insert(outbox)
-                .values(batch.map((e) => ({ kind: "reviewLog", recordId: e.id, body: e })));
-            }
+            entries = await appendNew(log);
           },
         );
         return { notes: result.notes, cards: result.cards, entries };
+      }),
+    linkAnkiDroidDeck: (source) =>
+      serial(async () => {
+        const { result } = await store.run(
+          (c) => c.linkAnkiDroid(source),
+          async ({ snapshots }) => {
+            await appendNew(snapshots);
+          },
+        );
+        return result.deckId;
       }),
     changeCollection: (command) => serial(() => store.change(command)),
     alarms: serial(async () =>

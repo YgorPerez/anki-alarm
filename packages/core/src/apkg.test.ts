@@ -12,6 +12,7 @@ import { beforeAll, describe, expect, test } from "vite-plus/test";
 import {
   Collection,
   readApkg,
+  readApkgMedia,
   renderCard,
   replayCard,
   studyQueue,
@@ -363,4 +364,27 @@ test("Basic notes stored before note fields had their own list are upgraded", ()
   expect(
     renderCard({ note: state.notes[0]!, type, ordinal: 0, side: "back", dark: false }),
   ).toContain('<body class="card card1">b</body>');
+});
+
+const utf8 = (s: string) => [...new TextEncoder().encode(s)];
+/** A protobuf MediaEntry: name = 1, size = 2, sha1 = 3, legacy_zip_filename = 255. */
+const mediaEntry = (name: string, legacy?: number) => {
+  const bytes = [0x0a, utf8(name).length, ...utf8(name), 0x10, 0x05, 0x1a, 0x01, 0xff];
+  if (legacy !== undefined) bytes.push(0xf8, 0x0f, legacy);
+  return [0x0a, bytes.length, ...bytes];
+};
+test("media alone are read without the collection, in protobuf order for Latest", async () => {
+  const files = {
+    meta: new Uint8Array([0x08, 0x03]),
+    "collection.anki21b": new Uint8Array(),
+    media: new Uint8Array([...mediaEntry("cat.jpg"), ...mediaEntry("café.png", 7)]),
+    "0": new Uint8Array([1]),
+    "7": new Uint8Array([2]),
+  };
+  const media = await readApkgMedia({ ...host(files), decompressZstd: (bytes) => bytes });
+  expect(media.map((m) => m.name)).toEqual(["cat.jpg", "café.png".normalize("NFC")]);
+  expect(await media[1]!.bytes()).toEqual(new Uint8Array([2]));
+  await expect(readApkgMedia(host({ "notes.txt": new Uint8Array() }))).rejects.toThrow(
+    "collection missing",
+  );
 });

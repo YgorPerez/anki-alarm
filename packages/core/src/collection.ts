@@ -1,6 +1,13 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh arrays are sorted. */
 import { default_w } from "ts-fsrs";
 import type { AnkiPackage } from "./apkg.ts";
+import {
+  ankiDroidSnapshot,
+  linkedAnkiDroidDecks,
+  presetFromOptions,
+  type AnkiDroidCard,
+  type AnkiDroidSource,
+} from "./ankidroid.ts";
 import { cardId, importId, uuid7 } from "./ids.ts";
 import { studyDayStart, type LogEntry } from "./study.ts";
 
@@ -24,6 +31,8 @@ export type Deck = RecordFields<{
   presetId: string;
   /** Overrides the preset's when set, as in Anki. */
   desiredRetention: number | null;
+  /** The phone that linked this deck from AnkiDroid; another phone can take over. */
+  linkedBy?: string;
 }> &
   AnkiIdentity;
 export type Preset = RecordFields<{
@@ -71,7 +80,7 @@ export type NoteType = RecordFields<{
   templates: Template[];
   css: string;
 }> &
-  AnkiIdentity<{ fieldIds: string[]; templateIds: string[] }>;
+  AnkiIdentity<{ fieldIds?: string[]; templateIds?: string[] }>;
 /** `values` follow the note type's `fieldNames` by position, each with its own clock. Cards own decks. */
 export type Note = RecordFields<{ noteTypeId: string; tags: string[] }> & {
   values: Field<string>[];
@@ -114,6 +123,8 @@ function ordinalsFor(type: NoteType, values: readonly string[]): number[] {
     for (const match of value.matchAll(/\{\{c(\d+)::/g)) numbers.add(Number(match[1]) - 1);
   return numbers.size ? [...numbers].sort((a, b) => a - b) : [0];
 }
+/** Anki joins field names and values with the unit separator. */
+const SEPARATOR = "\u001f";
 const empty = (): CollectionState => ({
   decks: [],
   presets: [],
@@ -245,6 +256,9 @@ export class Collection {
       ) as RecordFields<T>["fields"],
     };
   }
+  private deleted(kind: RecordKind, id: string) {
+    return this.state.tombstones.some((t) => t.kind === kind && t.id === id);
+  }
   snapshot(): CollectionState {
     return copy(this.state);
   }
@@ -364,6 +378,121 @@ export class Collection {
     for (const note of orphans) this.remove("notes", note.id);
     this.remove("decks", id);
   }
+  /**
+   * Imports an AnkiDroid deck with its subdecks as linked decks owned by this phone (ADR 0001).
+   * Records take ids from their Anki identities, so linking again updates instead of duplicating:
+   * a note field takes AnkiDroid's value when the note's mod time is newer than the field's clock.
+   * Reviewed cards come with a snapshot of AnkiDroid's state to append to the review log.
+   */
+  linkAnkiDroid(source: AnkiDroidSource): { deckId: string; snapshots: LogEntry[] } {
+    const decks = linkedAnkiDroidDecks(source);
+    const deckIds = new Map(decks.map((d) => [d.id, importId("deck", d.id, d.name)]));
+    if ([...deckIds.values()].some((id) => this.deleted("decks", id)))
+      throw new Error("Linked deck was deleted");
+    const steps = new Map<string, number[]>();
+    for (const ad of decks) {
+      const { ankiId, ...options } = presetFromOptions(ad.options);
+      const presetId = importId("preset", ankiId, options.name);
+      const id = deckIds.get(ad.id)!;
+      steps.set(id, options.learningSteps);
+      if (!this.state.presets.some((p) => p.id === presetId))
+        this.state.presets.push({
+          ...this.record({ ...options, fsrsParameters: [...DEFAULT_FSRS_PARAMETERS] }, presetId),
+          anki: { id: ankiId },
+        });
+      const deck = this.state.decks.find((d) => d.id === id);
+      if (!deck)
+        this.state.decks.push({
+          ...this.record(
+            { name: ad.name, presetId, desiredRetention: null, linkedBy: this.env.deviceId },
+            id,
+          ),
+          anki: { id: ad.id },
+        });
+      else if (deck.fields.linkedBy?.value !== this.env.deviceId)
+        deck.fields.linkedBy = { value: this.env.deviceId, hlc: this.tick() };
+    }
+    const typeIds = new Map<number, string>();
+    for (const ad of source.noteTypes) {
+      const id = importId("noteType", ad.id);
+      typeIds.set(ad.id, id);
+      if (this.state.noteTypes.some((t) => t.id === id)) continue;
+      const templates = ad.templates
+        .map(({ ord, name, front, back }) => ({ ord, template: { name, front, back } }))
+        // oxlint-disable-next-line unicorn/no-array-sort -- ES2022/Hermes target; sorts a fresh copy.
+        .sort((a, b) => a.ord - b.ord)
+        .map((t) => t.template);
+      this.state.noteTypes.push({
+        ...this.record(
+          {
+            name: ad.name,
+            kind: ad.cloze ? ("cloze" as const) : ("standard" as const),
+            fieldNames: ad.fieldNames.split(SEPARATOR),
+            templates,
+            css: ad.css,
+          },
+          id,
+        ),
+        anki: { id: ad.id },
+      });
+    }
+    const homeDeck = (c: AnkiDroidCard) => deckIds.get(c.originalDeckId || c.deckId);
+    const noteIds = new Map<number, string>();
+    for (const ad of source.notes) {
+      const id = importId("note", ad.guid);
+      const noteTypeId = typeIds.get(ad.noteTypeId);
+      const hasCard = source.cards.some((c) => c.noteId === ad.id && homeDeck(c));
+      if (!noteTypeId || !hasCard || this.deleted("notes", id)) continue;
+      noteIds.set(ad.id, id);
+      this.mergeAnkiNote(id, ad, noteTypeId);
+    }
+    const snapshots: LogEntry[] = [];
+    for (const ad of source.cards) {
+      const noteId = noteIds.get(ad.noteId);
+      const deckId = homeDeck(ad);
+      if (!noteId || !deckId) continue;
+      const id = cardId(noteId, ad.ord);
+      if (this.deleted("cards", id)) continue;
+      if (!this.state.cards.some((c) => c.id === id))
+        this.state.cards.push({
+          // Queue -1 is suspended in Anki; buried cards (-2/-3) are not modelled.
+          ...this.record({ noteId, deckId, ordinal: ad.ord, suspended: ad.queue === -1 }, id),
+          anki: { id: ad.id },
+        });
+      const snapshot = ankiDroidSnapshot(ad, steps.get(deckId) ?? [], this.env.now());
+      if (snapshot)
+        snapshots.push({
+          kind: "snapshot",
+          id: importId("snapshot", `${ad.id}:${ad.reps}`),
+          cardId: id,
+          ...snapshot,
+        });
+    }
+    return { deckId: deckIds.get(source.deckId)!, snapshots };
+  }
+  private mergeAnkiNote(id: string, ad: AnkiDroidSource["notes"][number], noteTypeId: string) {
+    const values = ad.fields.split(SEPARATOR);
+    const tags = ad.tags.split(" ").filter(Boolean);
+    const note = this.state.notes.find((n) => n.id === id);
+    if (!note) {
+      const hlc = this.tick();
+      this.state.notes.push({
+        ...this.record({ noteTypeId, tags }, id, hlc),
+        values: values.map((value) => ({ value, hlc })),
+        anki: { id: ad.id, guid: ad.guid },
+      });
+      return;
+    }
+    // Per field, the newer of the local clock and AnkiDroid's mod time wins (ADR 0001).
+    const mod = ad.mod * 1000;
+    values.forEach((value, i) => {
+      const local = note.values[i];
+      if (local?.value !== value && (!local || mod > local.hlc.wallMs))
+        note.values[i] = { value, hlc: this.tick() };
+    });
+    if (note.fields.tags.value.join(" ") !== tags.join(" ") && mod > note.fields.tags.hlc.wallMs)
+      note.fields.tags = { value: tags, hlc: this.tick() };
+  }
   private remove(kind: RecordKind, id: string) {
     this.state.tombstones.push({ id, kind, sequence: 0, hlc: this.tick() });
     const records = this.state[kind];
@@ -420,7 +549,7 @@ export class Collection {
     const presets = new Map<number, string>();
     for (const p of source.presets) {
       if (!source.decks.some((d) => d.presetId === p.id && usedDecks.has(d.id))) continue;
-      const id = importId("preset", p.id === 1 ? `name:${p.name}` : String(p.id));
+      const id = importId("preset", p.id, p.name);
       const { id: ankiId, mtime, ...options } = p;
       const values = { ...options, fsrsParameters: [...DEFAULT_FSRS_PARAMETERS] };
       const rest = { anki: { id: ankiId } };
@@ -430,7 +559,7 @@ export class Collection {
     const decks = new Map<number, string>();
     for (const d of source.decks) {
       if (!usedDecks.has(d.id)) continue;
-      const id = importId("deck", d.id === 1 ? `name:${d.name}` : String(d.id));
+      const id = importId("deck", d.id, d.name);
       const presetId = presets.get(d.presetId) ?? this.defaultPreset().id;
       const values = { name: d.name, presetId, desiredRetention: d.desiredRetention };
       const rest = { anki: { id: d.id } };
@@ -441,7 +570,7 @@ export class Collection {
     const usedTypes = new Set(source.notes.map((n) => n.noteTypeId));
     for (const t of source.noteTypes) {
       if (!usedTypes.has(t.id)) continue;
-      const id = importId("noteType", String(t.id));
+      const id = importId("noteType", t.id);
       const values = {
         name: t.name,
         kind: t.kind,

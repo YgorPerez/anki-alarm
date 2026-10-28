@@ -40,15 +40,23 @@ export function cardId(noteId: string, ordinal: number): string {
   return uuid5(noteId, String(ordinal));
 }
 
-/** Namespace of every id derived from an Anki identity (ADR 0001). Never change it. */
-const ANKI_NAMESPACE = "5d1f3b0e-8c4a-4f8e-9a51-2a8e7c0b6d43";
+const IMPORT_NAMESPACE = "6f1f9a42-4c55-5a4e-9b8b-2f6d0a1c7e10";
+export type ImportKind = "note" | "noteType" | "deck" | "preset" | "review" | "snapshot";
 /**
- * The id an imported record takes from its Anki identity, so the same package gives the same ids
- * on every device: a note from its guid, a note type, deck or preset from its Anki id, a review
- * from its card and revlog ids.
+ * The id an imported record takes from its Anki identity (ADR 0001): note from guid, note type
+ * from Anki note type id, deck from Anki deck id, preset from Anki options id, review from revlog
+ * id. `.apkg` import and AnkiDroid linking share it, so both give one record. Anki's Default deck
+ * and Default options have id 1 in every collection, so pass their name and it is used instead.
  */
-export const importId = (kind: "note" | "noteType" | "deck" | "preset" | "review", key: string) =>
-  uuid5(ANKI_NAMESPACE, `${kind}:${key}`);
+export function importId(kind: ImportKind, identity: string | number, name?: string): string {
+  if (identity === "" || (typeof identity === "number" && !Number.isSafeInteger(identity)))
+    throw new Error("Invalid import identity");
+  const key =
+    (kind === "deck" || kind === "preset") && identity === 1 && name !== undefined
+      ? `${kind}Name:${name}`
+      : `${kind}:${identity}`;
+  return uuid5(IMPORT_NAMESPACE, key);
+}
 
 // SHA-1 is required by UUIDv5, not used for passwords or security decisions.
 function sha1(input: Uint8Array): Uint8Array {

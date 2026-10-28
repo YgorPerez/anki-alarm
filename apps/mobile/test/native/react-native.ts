@@ -59,5 +59,10 @@ export function answerAlert(text: string) {
 export const BackHandler = {
   addEventListener: () => ({ remove: () => {} }),
 };
+// The app stays in the foreground during a test.
+export const AppState = {
+  currentState: "active",
+  addEventListener: () => ({ remove: () => {} }),
+};
 
 export const useColorScheme = () => "light";

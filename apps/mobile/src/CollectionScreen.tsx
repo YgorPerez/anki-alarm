@@ -31,19 +31,33 @@ import { bold, regular } from "./fonts.ts";
 import { NoteEditor, type NoteDraft } from "./NoteEditor.tsx";
 import { StudyScreen } from "./StudyScreen.tsx";
 import { pickAndImportApkg } from "./apkg.ts";
+import { AnkiDroidScreen } from "./AnkiDroidScreen.tsx";
+import { ankiDroidCopy } from "./ankidroid-copy.ts";
+import type { AnkiDroidApi } from "./ankidroid.ts";
 
 type Form = { kind: "deck"; id?: string } | { kind: "note"; id?: string } | { kind: "options" };
 type Translate = ReturnType<typeof copy>;
+/** Field text for the note list: markup and sound tags left out. */
+const plain = (html: string | undefined) =>
+  (html ?? "")
+    .replace(/<[^>]*>|\[sound:[^\]]*\]/g, " ")
+    .replaceAll("&nbsp;", " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 export function CollectionScreen({
   locale,
   onExit,
   onTheme,
+  ankiDroid,
 }: {
   locale: Locale;
   onExit: () => void;
   onTheme: () => void;
+
+  ankiDroid: AnkiDroidApi;
 }) {
+  const [linking, setLinking] = useState(false);
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["collection"],
@@ -175,6 +189,18 @@ export function CollectionScreen({
   }
   if (studying && deckId)
     return <StudyScreen deckId={deckId} locale={locale} onExit={() => setStudying(false)} />;
+  if (linking)
+    return (
+      <AnkiDroidScreen
+        ankiDroid={ankiDroid}
+        locale={locale}
+        onExit={() => setLinking(false)}
+        onOpen={(id) => {
+          setLinking(false);
+          setDeckId(id);
+        }}
+      />
+    );
   const content = () => {
     if (!state)
       return (
@@ -295,6 +321,13 @@ export function CollectionScreen({
           )}
           {!form && !deck && <Button label={t("theme")} disabled={busy} onPress={onTheme} />}
         </View>
+        <AnkiDroidEntry
+          locale={locale}
+          deck={deck}
+          editing={form !== undefined}
+          busy={busy}
+          onLink={() => setLinking(true)}
+        />
         <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
           {screenTitle(t, locale, form, deck)}
         </Text>
@@ -306,6 +339,30 @@ export function CollectionScreen({
         {content()}
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+/** On the deck list: the way to AnkiDroid. On a linked deck: that it is linked. */
+function AnkiDroidEntry({
+  locale,
+  deck,
+  editing,
+  busy,
+  onLink,
+}: {
+  locale: Locale;
+  deck: Deck | undefined;
+  editing: boolean;
+  busy: boolean;
+  onLink: () => void;
+}) {
+  const t = ankiDroidCopy(locale);
+  if (editing) return null;
+  if (!deck) return <Button label={t("entry")} disabled={busy} onPress={onLink} />;
+  if (!deck.fields.linkedBy) return null;
+  return (
+    <Text style={regular} className="text-label text-muted-foreground">
+      {t("linkedLabel")}
+    </Text>
   );
 }
 const cardsOf = (state: CollectionState | undefined, noteId: string) =>
@@ -399,15 +456,15 @@ function DeckDetails({
           key={note.id}
           accessibilityRole="button"
           disabled={busy}
-          accessibilityLabel={`${t("editNote")}: ${note.values[0]?.value ?? ""}`}
+          accessibilityLabel={`${t("editNote")}: ${plain(note.values[0]?.value)}`}
           onPress={() => edit({ kind: "note", id: note.id })}
           className="min-h-16 gap-2 border-b border-border py-4 active:opacity-80"
         >
           <Text style={bold} className="text-body text-foreground">
-            {note.values[0]?.value}
+            {plain(note.values[0]?.value)}
           </Text>
           <Text style={regular} className="text-body text-answer">
-            {note.values[1]?.value}
+            {plain(note.values[1]?.value)}
           </Text>
         </Pressable>
       ))}

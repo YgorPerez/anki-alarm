@@ -95,3 +95,13 @@ test("every created property carries a clock and app records use UUIDv7", () => 
   expect(() => c.addBasicNote("missing", "front", "back")).toThrow("Invalid note");
   expect(c.snapshot()).toEqual(state);
 });
+
+import { importId } from "./index.ts";
+test("imported records take UUIDv5 ids from their Anki identity", () => {
+  // Python: uuid.uuid5(uuid.UUID("6f1f9a42-4c55-5a4e-9b8b-2f6d0a1c7e10"), "<kind>:<identity>").
+  expect(importId("note", "abc")).toBe("4ea25c0e-6ade-50fe-93a6-0ccb7e6df163");
+  expect(importId("noteType", 1600000000000)).toBe("4a26013f-326c-5a51-b1a5-832cc7c6c0df");
+  expect(importId("deck", 1700000000001)).toBe("251484e5-82fc-52c7-a91e-62baf563233f");
+  // Anki's Default deck has id 1 in every collection, so it is keyed by name.
+  expect(importId("deck", 1, "Default")).toBe("e68befdc-758f-57d8-9c60-1e276eeae6d3");
+});

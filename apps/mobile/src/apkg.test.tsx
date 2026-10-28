@@ -6,6 +6,7 @@ import { Effect } from "effect";
 import { fileURLToPath } from "node:url";
 import { fakeSyncApi } from "@app/contracts/testing";
 import { File, Paths, picks } from "../test/native/expo-file-system.ts";
+import { memoryAnkiDroid } from "./ankidroid.ts";
 import { CollectionScreen } from "./CollectionScreen.tsx";
 import { localData } from "./database.ts";
 import { StudyScreen } from "./StudyScreen.tsx";
@@ -21,7 +22,12 @@ test("imports a package from the picker, stores its media and imports it again w
   try {
     await render(
       <QueryClientProvider client={client()}>
-        <CollectionScreen locale="pt-BR" onExit={() => {}} onTheme={() => {}} />
+        <CollectionScreen
+          locale="pt-BR"
+          onExit={() => {}}
+          onTheme={() => {}}
+          ankiDroid={memoryAnkiDroid({ installed: null })}
+        />
       </QueryClientProvider>,
     );
     picks.push(fixture("latest.apkg"));

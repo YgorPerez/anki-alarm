@@ -11,8 +11,18 @@ export {
   toHex,
 } from "./theme.ts";
 export type { Hex, Theme, ThemeChoice, ThemeField, ThemeMode } from "./theme.ts";
-export { uuid7, cardId } from "./ids.ts";
+export { uuid7, cardId, importId } from "./ids.ts";
+export type { ImportKind } from "./ids.ts";
 export { Collection, DEFAULT_FSRS_PARAMETERS, parseCollection, validOption } from "./collection.ts";
+export { ankiDroidAccess, linkableAnkiDroidDecks } from "./ankidroid.ts";
+export type {
+  AnkiDroidAccess,
+  AnkiDroidCard,
+  AnkiDroidDeck,
+  AnkiDroidNote,
+  AnkiDroidNoteType,
+  AnkiDroidSource,
+} from "./ankidroid.ts";
 export type {
   PresetOptions,
   StoredCollection,
@@ -64,6 +74,6 @@ export {
 } from "./study.ts";
 export { renderCard } from "./template.ts";
 export type { RenderInput } from "./template.ts";
-export { readApkg } from "./apkg.ts";
+export { readApkg, readApkgMedia } from "./apkg.ts";
 export type { ApkgHost, ApkgMedia, AnkiDatabase, AnkiPackage } from "./apkg.ts";
 export type { LogEntry, MemoryState, Grade } from "./study.ts";

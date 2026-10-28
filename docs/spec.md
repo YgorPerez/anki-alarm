@@ -150,7 +150,11 @@ AnkiDroid decks become the app's own decks. The app schedules them with FSRS lik
 
 - **Import** reads note types, notes, cards and decks through AnkiDroid's ContentProvider API
   (`FlashCardsContract`) and keeps AnkiDroid's note and card ids on each one. That makes it a
-  **linked deck**.
+  **linked deck**, owned by the phone that linked it. Subdecks come along. Each reviewed card
+  starts from a **snapshot** of AnkiDroid's state, since the API has no review history. Records
+  take the same import ids as `.apkg` import, so linking again updates instead of duplicating.
+- **Media** can't come through the API: the AnkiDroid screen asks for an `.apkg` export of the
+  deck and stores its images and audio.
 - **Pull** (on demand, from the deck): new notes and edited fields come in. For each linked card
   whose AnkiDroid review is newer than our last review of it, the app records an imported review
   from AnkiDroid's state, and replay folds it in.
@@ -159,8 +163,8 @@ AnkiDroid decks become the app's own decks. The app schedules them with FSRS lik
   taken, so AnkiDroid reschedules with its own scheduler and keeps a real history. AnkiDroid's API
   can't write due dates or memory state directly; only answers, bury, suspend and moving decks. The
   two schedules can drift a little when the FSRS parameters differ; that's accepted.
-- Needs AnkiDroid installed and its API permission granted. Without it, the AnkiDroid screens say so
-  and the rest of the app works.
+- Needs AnkiDroid 2.24 or newer installed and its API permission granted. Without them, the
+  AnkiDroid screens say so and the rest of the app works.
 
 ## Study
 

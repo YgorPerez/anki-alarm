@@ -30,3 +30,5 @@ apps/web/storybook-static/
 # Playwright
 apps/web/test-results/
 apps/web/playwright-report/
+# Gradle output of the local Expo modules.
+apps/mobile/modules/*/android/build/
