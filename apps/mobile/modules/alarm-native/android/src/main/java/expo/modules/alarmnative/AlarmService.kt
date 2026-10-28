@@ -32,6 +32,8 @@ import androidx.core.content.ContextCompat
 class AlarmService : Service() {
   companion object {
     const val ACTION_RING = "expo.modules.alarmnative.RING"
+    /** The start reason of a ring that just came due; any other start takes over an existing ring. */
+    const val REASON_SCHEDULED = "scheduled ring"
     private const val CHANNEL_ID = "alarm_ringing_v1"
     private const val NOTIFICATION_ID = 4242
     private const val WAY_BACK_ID = 4243
@@ -84,8 +86,11 @@ class AlarmService : Service() {
 
   var level = 0f
     private set
-  var sessionStarted = false
-    private set
+  /** The ring this instance is ringing, and the volume policy it runs for it. */
+  private var ringId: String? = null
+  private var policy: RingPolicy? = null
+  private var rendered: RingPolicy.Sound? = null
+  private var wayBackShown = false
 
   private fun log(msg: String) = AlarmStore.log(this, msg)
 
@@ -106,16 +111,16 @@ class AlarmService : Service() {
     }
   }
 
-  private val leaveRunnable = Runnable {
-    log("alarm screen left for ${setting("leaveSeconds")}s: full volume, posting the way-back notification")
-    loud()
-    postWayBack()
-    if (setting("directLaunch") == 1) tryLaunch("leave")
-  }
-
-  private val idleRunnable = Runnable {
-    log("no answer for ${setting("idleSeconds")}s: full volume")
-    loud()
+  private val policyTimer = Runnable {
+    val p = policy ?: return@Runnable
+    for (fired in p.advance(SystemClock.elapsedRealtime())) when (fired) {
+      RingPolicy.Fired.IDLE -> log("no answer for ${setting("idleSeconds")}s: full volume")
+      RingPolicy.Fired.LEFT -> {
+        log("alarm screen left for ${setting("leaveSeconds")}s: full volume, posting the way-back notification")
+        if (setting("directLaunch") == 1) tryLaunch("leave")
+      }
+    }
+    render()
   }
 
   override fun onCreate() {
@@ -139,11 +144,21 @@ class AlarmService : Service() {
       stopSelf()
       return START_NOT_STICKY
     }
-    if (intent == null) {
-      AlarmStore.event(this, "serviceRestarted")
-      log("service restarted by the system with a null intent (START_STICKY)")
+    val reason = intent?.getStringExtra("reason") ?: "sticky restart"
+    val active = AlarmStore.ring(this)!!.getString("id")
+    if (active == ringId) {
+      // Already ringing it (e.g. the watchdog after a swipe-away): keep the session as it is.
+      log("start ($reason) for the ring already playing")
+      if (!AlarmActivityListener.visible && setting("directLaunch") == 1) tryLaunch(reason)
+      return START_STICKY
     }
-    beginRinging(intent?.getStringExtra("reason") ?: "sticky restart")
+    val fresh = reason == REASON_SCHEDULED
+    if (!fresh) {
+      // A new service taking over a ring: after a kill, a swipe-away that took the process, or a reboot.
+      AlarmStore.event(this, "serviceRestarted")
+      log("service took over ring $active ($reason)")
+    }
+    beginRinging(active, fresh, reason)
     return START_STICKY
   }
 
@@ -187,27 +202,28 @@ class AlarmService : Service() {
     }
   }
 
-  private fun beginRinging(reason: String) {
-    val first = reason != "sticky restart"
-    if (first) {
-
-      sessionStarted = false
-    }
+  private fun beginRinging(id: String, fresh: Boolean, reason: String) {
     val pm = getSystemService(PowerManager::class.java)
     val km = getSystemService(KeyguardManager::class.java)
     val nm = getSystemService(NotificationManager::class.java)
     val fsi = if (Build.VERSION.SDK_INT >= 34) nm.canUseFullScreenIntent() else true
     log(
-      "RING ($reason) first=$first screenOn=${pm.isInteractive} locked=${km.isKeyguardLocked} " +
+      "RING ($reason) fresh=$fresh screenOn=${pm.isInteractive} locked=${km.isKeyguardLocked} " +
         "fullScreenIntentAllowed=$fsi dndFilter=${nm.currentInterruptionFilter} " +
         "ringerMode=${getSystemService(AudioManager::class.java).ringerMode}",
     )
     AlarmActivityListener.applyLockFlags(true)
-    // A new or restarted service rings at full: the user taps Start again, keeping the progress.
-    if (!sessionStarted) AlarmStore.setPhase(this, null, "ringing")
-    if (!sessionStarted) setTarget(1f, ramp = first)
+    // A restarted service rings at full: the user taps Start again, keeping the progress.
+    AlarmStore.setPhase(this, null, "ringing")
+    ringId = id
+    rendered = null
+    val now = SystemClock.elapsedRealtime()
+    policy = RingPolicy(setting("leaveSeconds") * 1000L, setting("idleSeconds") * 1000L).apply {
+      start(now, fresh)
+      if (AlarmActivityListener.visible) screenShown(now)
+    }
+    render()
     if (player == null && tone == null) startSound()
-    if (vibrator == null && setting("vibrate") == 1 && setting("silent") == 0) startVibration()
     handler.removeCallbacks(tick)
     handler.post(tick)
     handler.removeCallbacks(watchdogRefresh)
@@ -329,6 +345,34 @@ class AlarmService : Service() {
     if (!AlarmActivityListener.visible) tryLaunch("user unlocked")
   }
 
+  /** Makes the sound, vibration, way-back notification and timer match the policy. */
+  private fun render() {
+    val p = policy ?: return
+    if (p.sound != rendered) {
+      rendered = p.sound
+      log("sound ${p.sound}")
+      when (p.sound) {
+        RingPolicy.Sound.RAMP -> { setTarget(1f, ramp = true); vibrate() }
+        RingPolicy.Sound.FULL -> { setTarget(1f, ramp = false); vibrate() }
+        RingPolicy.Sound.SILENT -> {
+          setTarget(0f, ramp = false)
+          vibrator?.cancel()
+          vibrator = null
+        }
+      }
+    }
+    if (p.wayBack != wayBackShown) {
+      wayBackShown = p.wayBack
+      if (p.wayBack) postWayBack() else getSystemService(NotificationManager::class.java).cancel(WAY_BACK_ID)
+    }
+    handler.removeCallbacks(policyTimer)
+    p.nextDeadline()?.let { handler.postDelayed(policyTimer, maxOf(0, it - SystemClock.elapsedRealtime())) }
+  }
+
+  private fun vibrate() {
+    if (vibrator == null && setting("vibrate") == 1 && setting("silent") == 0) startVibration()
+  }
+
   private fun postWayBack() {
     val n = NotificationCompat.Builder(this, CHANNEL_ID)
       .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
@@ -343,61 +387,33 @@ class AlarmService : Service() {
     getSystemService(NotificationManager::class.java).notify(WAY_BACK_ID, n)
   }
 
-  private fun restartIdle() {
-    handler.removeCallbacks(idleRunnable)
-    handler.postDelayed(idleRunnable, setting("idleSeconds") * 1000L)
-  }
-
-  // Start silences the ring and vibration; leaving or going idle restores both.
-  private fun quiet() {
-    setTarget(low(), ramp = false)
-    vibrator?.cancel()
-    vibrator = null
-  }
-
-  // Left the screen or went idle: full sound and vibration again.
-  private fun loud() {
-    setTarget(1f, ramp = false)
-    if (vibrator == null && setting("vibrate") == 1 && setting("silent") == 0) startVibration()
-  }
-
   private fun vol() = if (setting("silent") == 1) 0f else level
 
-  private fun low() = setting("lowLevel") / 100f
-
-  fun onScreenShown() {
-    handler.removeCallbacks(leaveRunnable)
-    getSystemService(NotificationManager::class.java).cancel(WAY_BACK_ID)
-    if (sessionStarted) {
-      quiet()
-      restartIdle()
-    }
+  private fun signal(change: RingPolicy.(Long) -> Unit) {
+    val p = policy ?: return
+    p.change(SystemClock.elapsedRealtime())
+    render()
   }
 
-  fun onScreenLeft() {
-    handler.removeCallbacks(leaveRunnable)
-    handler.postDelayed(leaveRunnable, setting("leaveSeconds") * 1000L)
-  }
+  fun onScreenShown() = signal { screenShown(it) }
+
+  fun onScreenLeft() = signal { screenLeft(it) }
 
   fun startSession() {
-    sessionStarted = true
     log("session started: sound and vibration off")
-    quiet()
-    restartIdle()
+    signal { sessionStarted(it) }
   }
 
   // An answer or tap: silence again if idle brought the sound back, and restart the idle timer.
-  fun onActivity() {
-    if (!sessionStarted) return
-    quiet()
-    restartIdle()
-  }
+  fun onActivity() = signal { activity(it) }
 
   fun dismiss() {
     AlarmStore.finish(this)
     AlarmScheduler.cancelWatchdog(this)
     AlarmActivityListener.applyLockFlags(false)
     getSystemService(NotificationManager::class.java).cancel(WAY_BACK_ID)
+    policy = null
+    ringId = null
     stopEverything()
     stopForeground(STOP_FOREGROUND_REMOVE)
     stopSelf()

@@ -23,7 +23,9 @@ export function AlarmDeckSettings({
   });
   const decks = (collection.data?.decks ?? [])
     .map((deck) => ({ id: deck.id, name: deck.fields.name.value }))
-    .toSorted((a, b) => a.name.localeCompare(b.name, locale));
+    // Hermes has no toSorted; the array is freshly mapped.
+    // oxlint-disable-next-line unicorn/no-array-sort
+    .sort((a, b) => a.name.localeCompare(b.name, locale));
   const step = (delta: number) =>
     onChange({ ...alarm, need: Math.min(MAX_NEED, Math.max(1, alarm.need + delta)) });
   return (

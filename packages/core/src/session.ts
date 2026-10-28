@@ -14,9 +14,26 @@ export const SESSION_RULES = { gradeDelaySeconds: 3, retryGap: 2 };
 /** Good and Easy count toward N. */
 const isRight = (grade: Grade) => grade === Rating.Good || grade === Rating.Easy;
 
-/** A ring needs the largest N among its alarm and the alarms folded into it. */
-export function ringNeed(alarm: Alarm, absorbed: readonly Alarm[]) {
-  return Math.max(alarm.need, ...absorbed.map((a) => a.need));
+/** A journal event, as native records it: only the fields the fold rule reads. */
+interface RingEvent {
+  kind: string;
+  alarmId: string;
+  ringId: string | null;
+}
+
+/**
+ * A ring needs the largest N among its alarm and the alarms folded into it: those the journal
+ * records as `absorbed` by this ring. An absorbed alarm deleted since then no longer counts.
+ */
+export function ringNeed(
+  ring: { id: string; alarm: Alarm },
+  journal: readonly RingEvent[],
+  alarms: readonly Alarm[],
+) {
+  const folded = new Set(
+    journal.filter((e) => e.kind === "absorbed" && e.ringId === ring.id).map((e) => e.alarmId),
+  );
+  return Math.max(ring.alarm.need, ...alarms.filter((a) => folded.has(a.id)).map((a) => a.need));
 }
 
 /** The deck and its subdecks, which Anki names `Parent::Child`. */

@@ -12,6 +12,11 @@ import {
 const now = new Date(2026, 9, 28, 7).getTime();
 const day = 86_400_000;
 let seed = 0;
+const journalEvent = (kind: string, alarmId: string, ringId: string | null) => ({
+  kind,
+  alarmId,
+  ringId,
+});
 function collection() {
   return new Collection({
     deviceId: "a",
@@ -188,13 +193,28 @@ describe("alarm session", () => {
 
   test("an alarm folded into the ring makes the session need the larger N", () => {
     const morning = { ...newAlarm("a"), need: 3 };
-    expect(ringNeed(morning, [])).toBe(3);
+    const ring = { id: "ring-1", alarm: morning };
+    const alarms = [morning, { ...newAlarm("b"), need: 5 }, { ...newAlarm("c"), need: 2 }];
+    expect(ringNeed(ring, [], alarms)).toBe(3);
+    expect(ringNeed(ring, [journalEvent("absorbed", "c", "ring-1")], alarms)).toBe(3);
     expect(
-      ringNeed(morning, [
-        { ...newAlarm("b"), need: 5 },
-        { ...newAlarm("c"), need: 2 },
-      ]),
+      ringNeed(
+        ring,
+        [journalEvent("absorbed", "b", "ring-1"), journalEvent("absorbed", "c", "ring-1")],
+        alarms,
+      ),
     ).toBe(5);
+  });
+
+  test("only alarms folded into this ring count toward its N", () => {
+    const morning = { ...newAlarm("a"), need: 3 };
+    const ring = { id: "ring-2", alarm: morning };
+    const alarms = [morning, { ...newAlarm("b"), need: 8 }];
+    expect(ringNeed(ring, [journalEvent("absorbed", "b", "ring-1")], alarms)).toBe(3);
+    expect(ringNeed(ring, [journalEvent("absorbed", "b", null)], alarms)).toBe(3);
+    expect(ringNeed(ring, [journalEvent("ringStarted", "b", "ring-2")], alarms)).toBe(3);
+    // An absorbed alarm deleted since then no longer raises N.
+    expect(ringNeed(ring, [journalEvent("absorbed", "b", "ring-2")], [morning])).toBe(3);
   });
 });
 

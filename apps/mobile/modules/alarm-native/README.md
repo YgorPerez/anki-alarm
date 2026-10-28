@@ -111,3 +111,44 @@ Device checks: save and ring each source type, cancel both pickers, change vibra
 delete the original file, reboot with a PIN without unlocking, and remove the saved copy to check
 fallback. A device with inaccessible system tones is needed to verify the final generated tone.
 Confirm Start silences both audio paths and vibration, and leaving/idle restores them at full.
+
+## A ring you can't escape (#42)
+
+`RingPolicy.kt` holds the volume rules without Android, as deadlines on `elapsedRealtime`: a new
+ring ramps; Start silences sound and vibration; leaving the RN screen for `leaveSeconds` brings both
+back at full with the way-back notification and a relaunch; `idleSeconds` with no answer brings them
+back at full; any answer or return to the screen quiets them again. `AlarmService` feeds it the
+screen's visibility and JS's signals and renders its state.
+
+A service instance remembers the ring it plays. A second start for that ring (the watchdog after a
+swipe-away, opening the app) keeps the session as it is. A new instance taking over a stored ring
+(START_STICKY after a kill, the watchdog after the process died, a reboot) journals
+`serviceRestarted`, sets the phase back to `ringing` and rings at full without the ramp; Start then
+resumes the count from the ring's reviews. Only a ring that just came due (`REASON_SCHEDULED`) ramps.
+
+An alarm due during a ring is journaled as `absorbed` with the ring's id and re-arms for its next
+occurrence. Core's `ringNeed(ring, journal, alarms)` takes the larger N; the deck stays the ring's.
+
+JVM tests: `RingPolicyTest` (the rules) and `InescapableRingTest` (the real service under
+Robolectric: leave, idle, watchdog, restart after a kill, reboot mid-session, folding).
+`test/scenario.sh` runs the #6 adb scenarios against the app on an emulator; see its header.
+
+Emulator run, 2026-10-28, `alarm-api37` (Android 17, x86_64, PIN 1234, overlay granted), x86_64
+release APK. Every case passed:
+
+- Ring with the app in the background: ramp, `startActivity` brought the screen to the front.
+- `leave`: Home after Start; 10 s later full volume, way-back notification and relaunch; back on the
+  screen it went quiet.
+- `idle`: 20 s with no answer, full volume. `answer`: Again after idle, quiet again.
+- Fold: a second alarm (N 5) came due during the ring (N 3). No new ring; the screen went to
+  "0 de 5" on the same deck.
+- `swipe-away`: `onTaskRemoved`, the process stayed up, the leave timer brought the screen back.
+  While the card sits in Overview the activity is still started, so leave doesn't count; idle does.
+- `crash`: `am crash`, START_STICKY restart, "service took over ring", full volume, screen back,
+  Start shown again.
+- `reboot` after one right answer: rang at `LOCKED_BOOT_COMPLETED` before unlock with the native
+  lock-screen activity and the same ring id; after the PIN, Start resumed at "1 de 5".
+- Answering the rest dismissed the ring and stopped the service.
+
+The emulator has no vibration motor and its audio can't be heard, so loudness and vibration still
+need a real phone; the log's `sound RAMP/FULL/SILENT` lines show what native applied.
