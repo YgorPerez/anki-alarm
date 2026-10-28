@@ -1,0 +1,74 @@
+import { expect, test } from "vite-plus/test";
+import { uuid7, cardId } from "./index.ts";
+
+test("record ids carry the creation time and UUIDv7 version", () => {
+  const id = uuid7(1700000000000, new Uint8Array(16).fill(255));
+  expect(id).toBe("018bcfe5-6800-7fff-bfff-ffffffffffff");
+});
+
+test("card ids use the note namespace and decimal ordinal (UUIDv5)", () => {
+  // Python uuid.uuid5(UUID(note), '0').
+  expect(cardId("018bcfe5-6800-7fff-bfff-ffffffffffff", 0)).toBe(
+    "87377b9b-4222-51fe-88b6-4cf73ca39cb4",
+  );
+});
+
+import { Collection } from "./index.ts";
+const environment = () => {
+  let n = 0;
+  return {
+    deviceId: "phone-a",
+    now: () => 1700000000000,
+    random: () => new Uint8Array(16).fill(n++),
+  };
+};
+test("offline Basic notes make a stable card and edits stamp only changed fields", () => {
+  const collection = new Collection(environment());
+  const deck = collection.createDeck("Português");
+  const note = collection.addBasicNote(deck.id, "casa", "house");
+  const before = collection.snapshot();
+  expect(before.cards).toHaveLength(1);
+  expect(before.cards[0]!.id).toBe(cardId(note.id, 0));
+  expect(before.presets).toHaveLength(1);
+  expect(before.noteTypes[0]!.fields.name.value).toBe("Basic");
+  collection.editBasicNote(note.id, "casa nova", "house");
+  const edited = collection.snapshot().notes[0]!;
+  expect(edited.fields.front.value).toBe("casa nova");
+  expect(edited.fields.back).toEqual(note.fields.back);
+  expect(edited.fields.front.hlc.counter).toBeGreaterThan(note.fields.front.hlc.counter);
+  collection.renameDeck(deck.id, "Vocabulary");
+  expect(collection.snapshot().decks[0]!.fields.name.value).toBe("Vocabulary");
+  expect(collection.snapshot().cards[0]!.id).toBe(before.cards[0]!.id);
+});
+
+test("deleting a deck tombstones its notes and cards and cannot resurrect stale edits", () => {
+  const collection = new Collection(environment());
+  const deck = collection.createDeck("Vocabulary");
+  const note = collection.addBasicNote(deck.id, "casa", "house");
+  const stale = collection.snapshot();
+  collection.deleteDeck(deck.id);
+  const deleted = collection.snapshot();
+  expect(deleted.decks).toEqual([]);
+  expect(deleted.notes).toEqual([]);
+  expect(deleted.cards).toEqual([]);
+  expect(deleted.tombstones.map((t) => [t.kind, t.id])).toEqual([
+    ["cards", cardId(note.id, 0)],
+    ["notes", note.id],
+    ["decks", deck.id],
+  ]);
+  const restored = new Collection(environment(), { ...stale, tombstones: deleted.tombstones });
+  expect(restored.snapshot().decks).toEqual([]);
+  expect(() => restored.renameDeck(deck.id, "Resurrected")).toThrow("Invalid deck");
+  collection.deleteDeck(deck.id);
+  expect(collection.snapshot().tombstones).toHaveLength(3);
+});
+
+test("clock survives reload and a backwards device clock", () => {
+  const collection = new Collection(environment());
+  const deck = collection.createDeck("Words");
+  const restored = new Collection({ ...environment(), now: () => 1 }, collection.snapshot());
+  restored.renameDeck(deck.id, "New words");
+  const hlc = restored.snapshot().decks[0]!.fields.name.hlc;
+  expect(hlc.wallMs).toBe(deck.fields.name.hlc.wallMs);
+  expect(hlc.counter).toBeGreaterThan(deck.fields.name.hlc.counter);
+});
