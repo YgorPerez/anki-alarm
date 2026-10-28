@@ -18,7 +18,11 @@ function cors(request: Request, env: Env) {
     "access-control-allow-origin": origin,
     "access-control-allow-credentials": "true",
     "access-control-allow-methods": "GET, POST, OPTIONS",
-    "access-control-allow-headers": `content-type, ${SYNC_PROTOCOL_HEADER}`,
+    // Whatever the trusted page asks for: besides content-type and the protocol header, Effect's
+    // client adds trace headers (b3, traceparent).
+    "access-control-allow-headers":
+      request.headers.get("access-control-request-headers") ??
+      `content-type, ${SYNC_PROTOCOL_HEADER}`,
     "access-control-max-age": "600",
   };
 }

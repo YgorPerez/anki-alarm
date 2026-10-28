@@ -26,6 +26,8 @@ jobs:
       # Inlined into the phone's bundle: the sync Worker and the Google web OAuth client.
       EXPO_PUBLIC_SYNC_URL: ${{ vars.EXPO_PUBLIC_SYNC_URL }}
       EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+      # Inlined into the web's bundle: the same sync Worker.
+      VITE_SYNC_URL: ${{ vars.EXPO_PUBLIC_SYNC_URL }}
       RELEASE_TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v5

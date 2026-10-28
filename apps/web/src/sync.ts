@@ -1,6 +1,6 @@
 // The web's account controller: client-data's `accountSync`, with the database (and the sync
-// itself) in the leader tab's Worker. Sync runs on load and window focus, throttled with Pacer, and
-// a few seconds after this tab's writes.
+// itself) in the leader tab's Worker. Sync runs on load and window focus, throttled with Pacer, when
+// the browser is back online, and a few seconds after this tab's writes.
 import { accountSync, type AccountState, type AccountSync } from "@app/client-data";
 import { Throttler } from "@tanstack/pacer";
 import { useSyncExternalStore } from "react";
@@ -43,9 +43,13 @@ export const followSync = () => {
   );
   throttler.maybeExecute();
   const onFocus = () => throttler.maybeExecute();
+  // Back online: what waited in the outbox goes out now.
+  const onOnline = () => sync.syncNow();
   window.addEventListener("focus", onFocus);
+  window.addEventListener("online", onOnline);
   return () => {
     window.removeEventListener("focus", onFocus);
+    window.removeEventListener("online", onOnline);
     throttler.cancel();
   };
 };

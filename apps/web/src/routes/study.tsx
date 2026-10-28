@@ -1,4 +1,4 @@
-import { renderCard, studyQueue, type Grade, type LogEntry } from "@app/core";
+import { nextStudyCard, renderCard, type Grade, type LogEntry } from "@app/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -10,9 +10,8 @@ import { Button } from "#/ui/shadcn/button.tsx";
 
 // The deck is a search parameter, so the offline shell has one /study page for every deck.
 export const Route = createFileRoute("/study")({
-  validateSearch: (search: Record<string, unknown>): { deck: string } => ({
-    deck: typeof search["deck"] === "string" ? search["deck"] : "",
-  }),
+  validateSearch: (search: Record<string, unknown>): { deck?: string } =>
+    typeof search["deck"] === "string" ? { deck: search["deck"] } : {},
   component: Study,
 });
 
@@ -34,7 +33,7 @@ const useDark = () =>
 
 /** Show the front, reveal the back, grade: the phone's flow, with Core rendering the card. */
 function Study() {
-  const { deck: deckId, lang = "pt-BR" } = Route.useSearch();
+  const { deck: deckId = "", lang = "pt-BR" } = Route.useSearch();
   const t = copy(lang);
   const dark = useDark();
   const session = useStudySession(deckId);
@@ -148,74 +147,73 @@ function useStudyKeys(session: StudySession) {
 
 type StudySession = ReturnType<typeof useStudySession>;
 
+/** Where the session is: the card shown, its side, and this session's answers for Undo. */
+interface SessionState {
+  revealedId: string | undefined;
+  /** This session's answers, newest last: what Undo voids. */
+  answers: LogEntry[];
+  /** The card Undo just brought back. */
+  undone: string | undefined;
+  status: "ready" | "saving" | "failed";
+}
+
 function useStudySession(deckId: string) {
   const client = useQueryClient();
-  const [revealedId, setRevealedId] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
-  /** This session's answers, newest last: what Undo voids. */
-  const [answers, setAnswers] = useState<LogEntry[]>([]);
-  const [undone, setUndone] = useState<string>();
+  const [state, setState] = useState<SessionState>({
+    revealedId: undefined,
+    answers: [],
+    undone: undefined,
+    status: "ready",
+  });
   const lock = useRef(false);
   const query = useQuery(studyQuery(deckId));
-  const queue = query.data
-    ? studyQueue(query.data.collection, query.data.log, deckId, query.data.now)
-    : [];
-  // An undone card comes back first, as it was before the answer.
-  const item = queue.find((c) => c.card.id === undone) ?? queue[0];
-  const card = item?.card;
-  const cardId = card?.id;
-  const revealed = Boolean(cardId && revealedId === cardId);
-  /** Runs one write at a time, then reads the session again. */
-  const write = async (operation: () => Promise<void>) => {
+  const next =
+    query.data &&
+    nextStudyCard(query.data.collection, query.data.log, deckId, query.data.now, state.undone);
+  const cardId = next?.card.id;
+  const revealed = Boolean(cardId && state.revealedId === cardId);
+  /** One write at a time; then the card's front, and the session read again. */
+  const write = async (operation: () => Promise<Partial<SessionState>>) => {
     if (lock.current) return;
     lock.current = true;
-    setBusy(true);
-    setError(false);
+    setState((s) => ({ ...s, status: "saving" }));
     try {
-      await operation();
-      setRevealedId(undefined);
+      const change = await operation();
+      setState((s) => ({ ...s, ...change, revealedId: undefined, status: "ready" }));
       await client.invalidateQueries({ queryKey: ["study", deckId] });
     } catch {
-      setError(true);
+      setState((s) => ({ ...s, status: "failed" }));
     }
     lock.current = false;
-    setBusy(false);
   };
-  const answer = (grade: Grade) =>
-    write(async () => {
-      if (!cardId || !revealed) return;
-      const started = query.data?.started ?? performance.now();
-      const entry = await webData().request(
-        "answerCard",
-        cardId,
-        grade,
-        Math.max(0, Math.round(performance.now() - started)),
-      );
-      setAnswers((list) => [...list, entry]);
-      setUndone(undefined);
-    });
-  const undo = () =>
-    write(async () => {
-      const last = answers.at(-1);
-      if (!last) return;
-      await webData().request("undo", last.id);
-      setAnswers((list) => list.slice(0, -1));
-      setUndone(last.cardId);
-    });
-  const note = query.data?.collection.notes.find((n) => n.id === card?.fields.noteId.value);
-  const type = query.data?.collection.noteTypes.find((n) => n.id === note?.fields.noteTypeId.value);
   return {
     query,
-    card,
-    note,
-    type,
-    busy,
-    error,
+    card: next?.card,
+    note: next?.note,
+    type: next?.type,
+    busy: state.status === "saving",
+    error: state.status === "failed",
     revealed,
-    reveal: () => setRevealedId(cardId),
-    answer,
-    canUndo: answers.length > 0,
-    undo,
+    reveal: () => setState((s) => ({ ...s, revealedId: cardId })),
+    answer: (grade: Grade) =>
+      write(async () => {
+        if (!cardId || !revealed) return {};
+        const started = query.data?.started ?? performance.now();
+        const entry = await webData().request(
+          "answerCard",
+          cardId,
+          grade,
+          Math.max(0, Math.round(performance.now() - started)),
+        );
+        return { answers: [...state.answers, entry], undone: undefined };
+      }),
+    canUndo: state.answers.length > 0,
+    undo: () =>
+      write(async () => {
+        const last = state.answers.at(-1);
+        if (!last) return {};
+        await webData().request("undo", last.id);
+        return { answers: state.answers.slice(0, -1), undone: last.cardId };
+      }),
   };
 }

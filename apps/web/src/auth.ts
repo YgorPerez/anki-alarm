@@ -4,6 +4,7 @@
 import type { Account, AccountUser } from "@app/client-data";
 import { createAuthClient } from "better-auth/client";
 
+import { devIdToken } from "./dev-token.ts";
 import { DEV_SIGN_IN, SYNC_URL } from "./env.ts";
 
 /** The last signed-in user, so a reload without network still shows who is signed in. */
@@ -37,20 +38,6 @@ const remembered = (): AccountUser | null => {
 
 const userOf = (data: { user: { id: string; email: string } } | null | undefined) =>
   data ? { id: data.user.id, email: data.user.email } : null;
-
-const base64url = (value: object) =>
-  btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-/** An unsigned ID token: only a local Worker with DEV_SIGN_IN accepts it. */
-const devIdToken = (email: string) =>
-  `${base64url({ alg: "none" })}.${base64url({
-    iss: "https://accounts.google.com",
-    aud: "dev",
-    sub: email,
-    email,
-    email_verified: true,
-    name: email,
-    exp: Math.floor(Date.now() / 1000) + 600,
-  })}.`;
 
 function googleAccount(baseURL: string): Account {
   const auth = createAuthClient({ baseURL, fetchOptions: { credentials: "include" } });

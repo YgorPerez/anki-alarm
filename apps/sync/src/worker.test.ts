@@ -223,13 +223,15 @@ test("the web's origin gets CORS with credentials on auth and sync, others get n
     headers: {
       origin: WEB,
       "access-control-request-method": "POST",
-      "access-control-request-headers": "content-type, x-sync-protocol",
+      "access-control-request-headers": "b3, content-type, traceparent, x-sync-protocol",
     },
   });
   expect(preflight.status).toBe(204);
   expect(preflight.headers.get("access-control-allow-origin")).toBe(WEB);
   expect(preflight.headers.get("access-control-allow-credentials")).toBe("true");
-  expect(preflight.headers.get("access-control-allow-headers")).toMatch(/x-sync-protocol/);
+  expect(preflight.headers.get("access-control-allow-headers")).toBe(
+    "b3, content-type, traceparent, x-sync-protocol",
+  );
 
   const outdated = await call("/sync/metadata", { headers: { origin: WEB } });
   expect(outdated.status).toBe(426);

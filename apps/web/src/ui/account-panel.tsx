@@ -6,18 +6,21 @@ import { webAccount } from "#/auth.ts";
 import { useAccountState, webSync } from "#/sync.ts";
 import { Button } from "#/ui/shadcn/button.tsx";
 
-const syncLine = (state: Extract<AccountState, { kind: "signedIn" }>, locale: Locale, t: T) => {
-  const { sync } = state;
-  if (sync.kind === "syncing") return t("syncing");
-  if (sync.kind === "failed") return t("syncFailed");
-  if (sync.kind === "updateRequired") return t("updateRequired");
-  if (sync.kind === "signedOut") return t("expired");
+const STATUS_COPY = {
+  syncing: "syncing",
+  failed: "syncFailed",
+  updateRequired: "updateRequired",
+  signedOut: "expired",
+} as const;
+/** What the last sync did, in a line. */
+const syncLine = ({ sync }: Extract<AccountState, { kind: "signedIn" }>, locale: Locale, t: T) => {
+  if (sync.kind !== "idle") return t(STATUS_COPY[sync.kind]);
   if (sync.lastSyncedAt === null) return t("notSynced");
-  const time = new Date(sync.lastSyncedAt).toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
+  const at = new Date(sync.lastSyncedAt);
+  return t("synced", {
+    // react-doctor-disable-next-line react-doctor/no-locale-format-in-render -- Only the browser renders a signed-in state; the server renders loading.
+    time: at.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }),
   });
-  return t("synced", { time });
 };
 
 /** Sign in with Google, the merge question, sync status and sign out. */

@@ -162,6 +162,5 @@ class WebData {
   };
 }
 
-export type { WebData };
 let instance: WebData | undefined;
 export const webData = () => (instance ??= new WebData());
