@@ -40,6 +40,7 @@ class SoundsTest {
   }
 
   @Test fun selectedRingtoneIsCopiedBeforeLockedBoot() {
+    org.robolectric.Shadows.shadowOf(ctx.getSystemService(android.os.UserManager::class.java)).setUserUnlocked(false)
     AlarmStore.prefs(ctx).edit().clear().commit()
     val source = java.io.File(ctx.cacheDir, "picked.wav").apply { writeText("ringtone bytes") }
     val uri = Uri.fromFile(source)
