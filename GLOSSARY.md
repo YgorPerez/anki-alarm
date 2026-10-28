@@ -49,3 +49,5 @@ AnkiDroid).
 **Snooze cost.** Cards added to an alarm's next ring for each snooze.
 
 **Sync back.** Sending reviews done in the app to AnkiDroid as answers.
+
+**Void.** A log entry that cancels one review, written by Undo. Replay skips voided reviews.

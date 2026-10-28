@@ -70,7 +70,8 @@ in a WebView; the web shows it in the page. Card audio (`[sound:…]`) plays on 
 
 Every answer is a **review**: an immutable event with its own id (UUIDv7), the card id, the grade
 (Again, Hard, Good, Easy), the time it was answered, the time taken and its **origin** (phone, web,
-AnkiDroid import, alarm session). Reviews are only ever appended.
+AnkiDroid import, alarm session). Reviews are only ever appended. Undo appends a **void** for the
+review, and replay skips voided reviews.
 
 A card's **memory state** (stability, difficulty, due date, learning step) is not stored as truth.
 Core rebuilds it by replaying the card's reviews in answer-time order through FSRS with the deck's
@@ -89,10 +90,14 @@ options. Caches of the result are fine; the log is what syncs.
 - Sign-in follows wave: Android's Google account picker on the phone, Google sign-in on the web; the
   Worker checks the ID token and issues its own session token.
 - Sync is push and pull of changes since a cursor: notes, note types, decks, deck options, alarms
-  and reviews. Notes and settings are last-write-wins by edit time. Reviews never conflict: both
-  sides append, and replay settles the card.
-- Media goes to R2, keyed by content hash, so the same file is stored once. The phone keeps a local
-  copy of every file its decks use, so an alarm never waits on the network.
+  and reviews, against a per-user server sequence. Notes and settings merge field by field,
+  last-write-wins by hybrid logical clock; the Worker resolves on push. Reviews never conflict: both
+  sides append, and replay settles the card. Deletes are tombstones and beat edits.
+- Media goes to R2, keyed by content hash, so the same file is stored once. Clients upload a file
+  before the records that reference it. The phone keeps a local copy of every file its decks use,
+  so an alarm never waits on the network.
+- Ids, imports, linked decks, sign-in and sign-out, and when sync runs: see
+  `docs/adr/0001-sync-protocol.md`.
 
 ## Import and export
 
