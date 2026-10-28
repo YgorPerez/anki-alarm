@@ -20,24 +20,35 @@ export function uuid7(now: number, random: Uint8Array): string {
   return format(bytes);
 }
 
-/** RFC 9562 UUIDv5: note UUID as namespace, decimal zero-based template ordinal as name. */
-export function cardId(noteId: string, ordinal: number): string {
-  if (
-    !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(noteId) ||
-    !Number.isSafeInteger(ordinal) ||
-    ordinal < 0
-  )
-    throw new Error("Invalid card identity");
-  const namespace = noteId
+const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+/** RFC 9562 UUIDv5 of a UTF-8 name in a namespace UUID. */
+function uuid5(namespace: string, name: string): string {
+  const space = namespace
     .replaceAll("-", "")
     .match(/../g)!
     .map((b) => Number.parseInt(b, 16));
-  const input = new Uint8Array([...namespace, ...new TextEncoder().encode(String(ordinal))]);
-  const digest = sha1(input).slice(0, 16);
+  const digest = sha1(new Uint8Array([...space, ...new TextEncoder().encode(name)])).slice(0, 16);
   digest[6] = (digest[6]! & 15) | 0x50;
   digest[8] = (digest[8]! & 63) | 0x80;
   return format(digest);
 }
+
+/** RFC 9562 UUIDv5: note UUID as namespace, decimal zero-based template ordinal as name. */
+export function cardId(noteId: string, ordinal: number): string {
+  if (!UUID.test(noteId) || !Number.isSafeInteger(ordinal) || ordinal < 0)
+    throw new Error("Invalid card identity");
+  return uuid5(noteId, String(ordinal));
+}
+
+/** Namespace of every id derived from an Anki identity (ADR 0001). Never change it. */
+const ANKI_NAMESPACE = "5d1f3b0e-8c4a-4f8e-9a51-2a8e7c0b6d43";
+/**
+ * The id an imported record takes from its Anki identity, so the same package gives the same ids
+ * on every device: a note from its guid, a note type, deck or preset from its Anki id, a review
+ * from its card and revlog ids.
+ */
+export const importId = (kind: "note" | "noteType" | "deck" | "preset" | "review", key: string) =>
+  uuid5(ANKI_NAMESPACE, `${kind}:${key}`);
 
 // SHA-1 is required by UUIDv5, not used for passwords or security decisions.
 function sha1(input: Uint8Array): Uint8Array {

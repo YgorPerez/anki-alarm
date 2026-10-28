@@ -1,6 +1,6 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only freshly filtered/mapped arrays are sorted. */
 import { createEmptyCard, fsrs, State, type Card as MemoryState, type Grade } from "ts-fsrs";
-import type { CollectionState, Note, NoteType, Preset } from "./collection.ts";
+import type { CollectionState, Preset } from "./collection.ts";
 export type { MemoryState, Grade };
 type Entry = { id: string; cardId: string; at: number };
 export type LogEntry = Entry &
@@ -77,14 +77,35 @@ export function studyQueue(
   dayStart = studyDayStart(now),
 ) {
   const deck = collection.decks.find((d) => d.id === deckId);
-  const preset = collection.presets.find((p) => p.id === deck?.fields.presetId.value);
-  if (!preset) throw new Error("Deck preset missing");
-  const cards = collection.cards.filter((c) => c.fields.deckId.value === deckId);
+  const base = collection.presets.find((p) => p.id === deck?.fields.presetId.value);
+  if (!deck || !base) throw new Error("Deck preset missing");
+  const override = deck.fields.desiredRetention?.value;
+  const preset: Preset =
+    override == null
+      ? base
+      : {
+          ...base,
+          fields: {
+            ...base.fields,
+            desiredRetention: { ...base.fields.desiredRetention, value: override },
+          },
+        };
+  const cards = collection.cards.filter(
+    (c) => c.fields.deckId.value === deckId && !c.fields.suspended?.value,
+  );
   const voided = new Set(log.filter((e) => e.kind === "void").map((e) => e.targetId));
+  // Each card replays only its own entries.
+  const entries = new Map<string, LogEntry[]>();
+  for (const entry of log) {
+    const own = entries.get(entry.cardId);
+    if (own) own.push(entry);
+    else entries.set(entry.cardId, [entry]);
+  }
   let newCount = 0;
   let reviewCount = 0;
   for (const card of cards) {
-    const today = log
+    const own = entries.get(card.id) ?? [];
+    const today = own
       .filter(
         (e) =>
           e.cardId === card.id &&
@@ -98,7 +119,7 @@ export function studyQueue(
     if (first) {
       const before = replayCard(
         card.id,
-        log.filter(
+        own.filter(
           (e) => e.at < first.at || (e.at === first.at && e.id < first.id) || e.kind === "void",
         ),
         preset,
@@ -111,11 +132,11 @@ export function studyQueue(
   return cards
     .map((card) => ({
       card,
-      memory: replayCard(card.id, log, preset, now),
+      memory: replayCard(card.id, entries.get(card.id) ?? [], preset, now),
       newPosition: Math.max(
         card.fields.noteId.hlc.wallMs,
-        ...log
-          .filter((e) => e.cardId === card.id && e.kind === "reset" && !voided.has(e.id))
+        ...(entries.get(card.id) ?? [])
+          .filter((e) => e.kind === "reset" && !voided.has(e.id))
           .map((e) => e.at),
       ),
     }))
@@ -133,18 +154,4 @@ export function studyQueue(
           : a.memory.due.getTime() - b.memory.due.getTime()) ||
         a.card.id.localeCompare(b.card.id),
     );
-}
-export function renderCard(note: Note, type: NoteType, side: "front" | "back", dark: boolean) {
-  const fields: Record<string, string> = {
-    Front: note.fields.front.value,
-    Back: note.fields.back.value,
-  };
-  const expand = (template: string) =>
-    template.replace(/{{(Front|Back)}}/g, (_, name: string) => fields[name] ?? "");
-  const front = expand(type.fields.frontTemplate.value);
-  const body =
-    side === "front"
-      ? front
-      : expand(type.fields.backTemplate.value.replaceAll("{{FrontSide}}", front));
-  return `<!doctype html><html class="${dark ? "nightMode night_mode" : ""}"><head><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: file:; media-src data: file:; style-src 'unsafe-inline'"><style>body{margin:24px;background:${dark ? "#000" : "#fff"};color:${dark ? "#fff" : "#16131d"};font:28px/1.4 sans-serif;overflow-wrap:anywhere}img{max-width:100%}${type.fields.css.value}</style></head><body class="card">${body}</body></html>`;
 }

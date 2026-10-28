@@ -12,7 +12,7 @@ export {
 } from "./theme.ts";
 export type { Hex, Theme, ThemeChoice, ThemeField, ThemeMode } from "./theme.ts";
 export { uuid7, cardId } from "./ids.ts";
-export { Collection } from "./collection.ts";
+export { Collection, upgradeCollection } from "./collection.ts";
 export type {
   Hlc,
   Field,
@@ -21,6 +21,7 @@ export type {
   NoteType,
   Note,
   Card,
+  Template,
   RecordKind,
   Tombstone,
   CollectionState,
@@ -50,5 +51,9 @@ export type {
   ReliabilityKind,
   ReliabilityStep,
 } from "./reliability.ts";
-export { replayCard, studyQueue, studyDayStart, renderCard } from "./study.ts";
+export { replayCard, studyQueue, studyDayStart } from "./study.ts";
+export { renderCard } from "./template.ts";
+export type { RenderInput } from "./template.ts";
+export { readApkg } from "./apkg.ts";
+export type { ApkgHost, ApkgMedia, AnkiDatabase, AnkiPackage } from "./apkg.ts";
 export type { LogEntry, MemoryState, Grade } from "./study.ts";

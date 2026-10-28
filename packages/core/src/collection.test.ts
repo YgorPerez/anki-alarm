@@ -33,9 +33,9 @@ test("offline Basic notes make a stable card and edits stamp only changed fields
   expect(before.noteTypes[0]!.fields.name.value).toBe("Basic");
   collection.editBasicNote(note.id, "casa nova", "house");
   const edited = collection.snapshot().notes[0]!;
-  expect(edited.fields.front.value).toBe("casa nova");
-  expect(edited.fields.back).toEqual(note.fields.back);
-  expect(edited.fields.front.hlc.counter).toBeGreaterThan(note.fields.front.hlc.counter);
+  expect(edited.values[0]!.value).toBe("casa nova");
+  expect(edited.values[1]).toEqual(note.values[1]);
+  expect(edited.values[0]!.hlc.counter).toBeGreaterThan(note.values[0]!.hlc.counter);
   collection.renameDeck(deck.id, "Vocabulary");
   expect(collection.snapshot().decks[0]!.fields.name.value).toBe("Vocabulary");
   expect(collection.snapshot().cards[0]!.id).toBe(before.cards[0]!.id);
