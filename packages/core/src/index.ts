@@ -50,3 +50,5 @@ export type {
   ReliabilityKind,
   ReliabilityStep,
 } from "./reliability.ts";
+export { replayCard, studyQueue, studyDayStart, renderCard } from "./study.ts";
+export type { LogEntry, MemoryState, Grade } from "./study.ts";

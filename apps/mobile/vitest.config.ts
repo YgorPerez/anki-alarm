@@ -11,6 +11,7 @@ export default defineConfig({
   plugins: [babel({ include: /\/src\/.*\.tsx$/, plugins: ["babel-plugin-react-compiler"] })],
   resolve: {
     alias: {
+      "react-native-webview": standIn("webview.ts"),
       "react-native": standIn("react-native.ts"),
       "react-native-safe-area-context": standIn("safe-area-context.ts"),
       "expo-sqlite": standIn("expo-sqlite.ts"),

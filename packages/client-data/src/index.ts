@@ -1,11 +1,15 @@
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import { sql } from "drizzle-orm";
-import { settings as settingsTable, alarms, alarmEvents, outbox } from "./schema.ts";
+import { settings as settingsTable, alarms, alarmEvents, outbox, reviewLog } from "./schema.ts";
 export { type ExecuteSql } from "./collection.ts";
 import { openCollectionStore, type ExecuteSql } from "./collection.ts";
 import { migrationStatements } from "./migrations.ts";
 import { Context, Effect, Layer } from "effect";
 import {
+  uuid7,
+  studyQueue,
+  type LogEntry,
+  type Grade,
   updateThemeSettings,
   parseAlarmSound,
   type Settings,
@@ -32,6 +36,8 @@ export interface PendingChange {
 }
 interface Data {
   collection: Effect.Effect<CollectionState, Error>;
+  reviewLog: Effect.Effect<LogEntry[], Error>;
+  answerCard: (cardId: string, grade: Grade, durationMs: number) => Effect.Effect<LogEntry, Error>;
   changeCollection: (
     command: (collection: Collection) => void,
   ) => Effect.Effect<CollectionState, Error>;
@@ -98,7 +104,40 @@ async function open(driver: SQLiteConnection): Promise<Data> {
         .values({ kind: "settings", recordId: initial.id, body: initial });
     });
   }
+  const readLog = async () => (await collectionDb.select().from(reviewLog)).map((r) => r.body);
   return {
+    reviewLog: serial(readLog),
+    answerCard: (cardId, grade, durationMs) =>
+      serial(() =>
+        transaction(collectionSql, async () => {
+          if (![1, 2, 3, 4].includes(grade) || !Number.isFinite(durationMs) || durationMs < 0)
+            throw new Error("Invalid answer");
+          const state = await store.read();
+          const card = state.cards.find((c) => c.id === cardId);
+          const at = driver.now();
+          if (
+            !card ||
+            !studyQueue(state, await readLog(), card.fields.deckId.value, at).some(
+              (c) => c.card.id === cardId,
+            )
+          )
+            throw new Error("Card is not available for study");
+          const entry: LogEntry = {
+            kind: "review",
+            id: uuid7(at, driver.random()),
+            cardId,
+            at,
+            grade,
+            durationMs,
+            origin: "phone",
+          };
+          await collectionDb.insert(reviewLog).values({ id: entry.id, body: entry });
+          await collectionDb
+            .insert(outbox)
+            .values({ kind: "reviewLog", recordId: entry.id, body: entry });
+          return entry;
+        }),
+      ),
     collection: serial(store.read),
     changeCollection: (command) => serial(() => store.change(command)),
     alarms: serial(async () =>

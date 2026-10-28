@@ -22,6 +22,8 @@ import { localData } from "./database.ts";
 import { Effect } from "effect";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { StudyScreen } from "./StudyScreen.tsx";
+
 type Form = { kind: "deck" | "note"; id?: string; first: string; second: string };
 const regular = { fontFamily: "AtkinsonHyperlegible_400Regular" };
 const bold = { fontFamily: "AtkinsonHyperlegible_700Bold" };
@@ -108,6 +110,7 @@ export function CollectionScreen({
     queryFn: () => Effect.runPromise(localData((data) => data.collection)),
   });
   const state = query.data;
+  const [studying, setStudying] = useState(false);
   const [deckId, setDeckId] = useState<string>();
   const [form, setForm] = useState<Form>();
   const [busy, setBusy] = useState(false);
@@ -119,6 +122,7 @@ export function CollectionScreen({
     void query.refetch();
   };
   const goBack = useCallback(() => {
+    if (studying) return false;
     if (locked.current) return true;
     if (form) {
       Alert.alert(t("discardTitle"), t("discardBody"), [
@@ -140,7 +144,7 @@ export function CollectionScreen({
       return true;
     }
     return false;
-  }, [form, deckId, t]);
+  }, [form, deckId, t, studying]);
   useEffect(() => {
     const handler = BackHandler.addEventListener("hardwareBackPress", goBack);
     return () => handler.remove();
@@ -191,6 +195,8 @@ export function CollectionScreen({
       },
     ]);
   }
+  if (studying && deckId)
+    return <StudyScreen deckId={deckId} locale={locale} onExit={() => setStudying(false)} />;
   return (
     <KeyboardAvoidingView
       behavior="padding"
@@ -214,6 +220,7 @@ export function CollectionScreen({
             {t(state ? "error" : "loadError")}
           </Text>
         ) : null}
+        {deck && !form && <Button label={t("study")} primary onPress={() => setStudying(true)} />}
         <ScreenContent
           state={state}
           form={form}
@@ -321,7 +328,6 @@ function DeckDetails({
       </Text>
       <Button
         label={t("addNote")}
-        primary
         disabled={busy}
         onPress={() => edit({ kind: "note", first: "", second: "" })}
       />

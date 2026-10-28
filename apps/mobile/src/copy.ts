@@ -1,6 +1,9 @@
 import { translator, type Locale, type Messages } from "@app/core";
 const messages = {
   "pt-BR": {
+    study: "Estudar",
+    reveal: "Mostrar resposta",
+    studyDone: "Nenhum cartão disponível agora. Os limites diários se aplicam.",
     title: "Baralhos",
     switchLanguage: "English",
     newDeck: "Criar baralho",
@@ -91,6 +94,9 @@ const messages = {
     applyIcon: "Aplicar cores ao ícone",
   },
   en: {
+    study: "Study",
+    reveal: "Show answer",
+    studyDone: "No cards available now. Daily limits apply.",
     title: "Decks",
     switchLanguage: "Português",
     newDeck: "Create deck",
