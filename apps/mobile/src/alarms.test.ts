@@ -28,7 +28,7 @@ it("saves alarms and replaces the native schedule with every enabled alarm", asy
       Effect.flatMap(AlarmService, (service) => service.list).pipe(Effect.provide(native.layer)),
     ),
   ).toEqual([alarm]);
-  expect(controller.list()).toEqual([alarm, second]);
+  expect(await Effect.runPromise(controller.list)).toEqual([alarm, second]);
 });
 it("persists a replayed journal once and acknowledges only after successful storage", async () => {
   const native = memoryAlarmService();
@@ -44,9 +44,7 @@ it("persists a replayed journal once and acknowledges only after successful stor
   native.deliver(event);
   const failing = alarmController({
     ...repository,
-    ingest: () => {
-      throw new Error("disk full");
-    },
+    ingest: () => Effect.fail(new Error("disk full")),
   });
   await expect(
     Effect.runPromise(failing.resume.pipe(Effect.provide(native.layer))),
@@ -59,7 +57,7 @@ it("persists a replayed journal once and acknowledges only after successful stor
   await Effect.runPromise(controller.resume.pipe(Effect.provide(native.layer)));
   native.deliver(event);
   await Effect.runPromise(controller.resume.pipe(Effect.provide(native.layer)));
-  expect(repository.events()).toEqual([event]);
+  expect(await Effect.runPromise(repository.events)).toEqual([event]);
   expect(await Effect.runPromise(pending)).toEqual([]);
 });
 it("recovers the active ring on resume and dismisses only its matching ID", async () => {

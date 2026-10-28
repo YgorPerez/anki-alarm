@@ -15,7 +15,20 @@ import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-cont
 import { copy } from "./copy.ts";
 import { AlarmService, alarmController, type Ring } from "./alarms.ts";
 import { androidAlarmService, native } from "./alarm-android.ts";
-import { sqliteAlarmRepository } from "./alarm-storage.ts";
+import { localData } from "./database.ts";
+import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ThemeSettings } from "./ThemeSettings.tsx";
+import { initializeTheme } from "./theme.ts";
+import { BackHandler } from "react-native";
+import { queryClient } from "./query.ts";
+import { useUI } from "./ui.ts";
+const repository = {
+  list: localData((data) => data.alarms),
+  save: (alarm: Alarm) => localData((data) => data.saveAlarm(alarm)),
+  ingest: (events: readonly import("./alarms.ts").AlarmEvent[]) =>
+    localData((data) => data.ingestEvents(events)),
+  events: localData((data) => data.events),
+};
 
 export function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -23,10 +36,12 @@ export function App() {
     AtkinsonHyperlegible_700Bold,
   });
   return (
-    <SafeAreaProvider>
-      {fontsLoaded || fontError ? <Home /> : <View className="flex-1 bg-background" />}
-      <StatusBar style="auto" />
-    </SafeAreaProvider>
+    <QueryClientProvider client={queryClient}>
+      <SafeAreaProvider>
+        {fontsLoaded || fontError ? <Home /> : <View className="flex-1 bg-background" />}
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    </QueryClientProvider>
   );
 }
 const run = <A,>(effect: Effect.Effect<A, Error, AlarmService>) =>
@@ -35,18 +50,36 @@ const run = <A,>(effect: Effect.Effect<A, Error, AlarmService>) =>
 const currentTime = () => Date.now();
 function Home() {
   const [showDecks, setShowDecks] = useState(false);
-  const [controller] = useState(() => alarmController(sqliteAlarmRepository()));
-  const [locale, setLocale] = useState<Locale>("pt-BR");
-  const [alarms, setAlarms] = useState(() => controller.list());
+  const [controller] = useState(() => alarmController(repository));
+  const client = useQueryClient();
+  const [showTheme, setShowTheme] = useState(false);
+  const alarmsQuery = useQuery({
+    queryKey: ["alarms"],
+    queryFn: () => Effect.runPromise(controller.list),
+  });
+  const alarms = alarmsQuery.data ?? [];
+  const { locale, setLocale } = useUI();
   const [ring, setRing] = useState<Ring | null>(null);
   const [editing, setEditing] = useState<Alarm | null>(null);
   const [error, setError] = useState("");
+  useEffect(() => {
+    void initializeTheme().catch(() => setError(copy(locale)("error")));
+  }, [locale]);
+  useEffect(() => {
+    if (!showTheme) return undefined;
+    const back = BackHandler.addEventListener("hardwareBackPress", () => {
+      setShowTheme(false);
+      return true;
+    });
+    return () => back.remove();
+  }, [showTheme]);
   const [permissions, setPermissions] = useState(() => native.getPermissions());
   const t = copy(locale);
   const insets = useSafeAreaInsets();
   useEffect(() => {
     const refresh = () => {
       setPermissions(native.getPermissions());
+      void client.invalidateQueries({ queryKey: ["alarms"] });
       void Effect.runPromise(controller.resume.pipe(Effect.provide(androidAlarmService)))
         .then(setRing)
         .catch(() => setError(copy(locale)("alarmError")));
@@ -60,18 +93,18 @@ function Home() {
       subscription.remove();
       appState.remove();
     };
-  }, [controller, locale]);
+  }, [controller, locale, client]);
   const save = useCallback(
     (alarm: Alarm) => {
       void run(controller.save(alarm))
         .then(() => {
-          setAlarms(controller.list());
+          void client.invalidateQueries({ queryKey: ["alarms"] });
           setEditing(null);
           setError("");
         })
         .catch(() => setError(copy(locale)("alarmError")));
     },
-    [controller, locale],
+    [controller, locale, client],
   );
   const renderAlarm = useCallback(
     ({ item }: ListRenderItemInfo<Alarm>) => (
@@ -107,7 +140,15 @@ function Home() {
         <Text className="text-body text-white">{error}</Text>
       </View>
     );
-  if (showDecks) return <CollectionScreen locale={locale} onExit={() => setShowDecks(false)} />;
+  if (showTheme) return <ThemeSettings locale={locale} onBack={() => setShowTheme(false)} />;
+  if (showDecks)
+    return (
+      <CollectionScreen
+        locale={locale}
+        onExit={() => setShowDecks(false)}
+        onTheme={() => setShowTheme(true)}
+      />
+    );
   return (
     <View
       className="flex-1 bg-background"
@@ -123,6 +164,9 @@ function Home() {
             <Text className="text-title font-bold text-foreground">{t("alarms")}</Text>
             <Pressable accessibilityRole="button" onPress={() => setShowDecks(true)}>
               <Text className="text-body text-primary">{t("title")}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => setShowTheme(true)}>
+              <Text className="text-body text-primary">{t("theme")}</Text>
             </Pressable>
             {editing ? (
               <AlarmEditor
@@ -158,7 +202,7 @@ function Home() {
           <View className="gap-4">
             <UpdateOffer locale={locale} />
             <Text accessibilityRole="alert" className="text-body text-attention">
-              {error}
+              {error || (alarmsQuery.isError ? t("alarmError") : "")}
             </Text>
             <Text className="text-body text-foreground">{t("permission")}</Text>
             {(["notifications", "exactAlarm", "fullScreenIntent", "overlay", "battery"] as const)

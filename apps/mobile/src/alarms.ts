@@ -7,14 +7,8 @@ export interface Ring {
   startedAt: number;
   phase: string;
 }
-export interface AlarmEvent {
-  id: string;
-  kind: string;
-  alarmId: string;
-  ringId: string | null;
-  wallTime: number;
-  elapsedRealtime: number;
-}
+import type { AlarmEvent } from "@app/client-data";
+export type { AlarmEvent } from "@app/client-data";
 interface AlarmPort {
   capabilities: { canHoldDismissal: boolean; canTakeOverScreen: boolean };
   setAlarms: (alarms: readonly Alarm[], policy: typeof RING_POLICY) => Effect.Effect<void, Error>;
@@ -27,55 +21,50 @@ interface AlarmPort {
 export class AlarmService extends Context.Service<AlarmService, AlarmPort>()("AlarmService") {}
 
 export interface AlarmRepository {
-  list: () => Alarm[];
-  save: (alarm: Alarm) => void;
-  ingest: (events: readonly AlarmEvent[]) => void;
-  events: () => AlarmEvent[];
+  list: Effect.Effect<Alarm[], Error>;
+  save: (alarm: Alarm) => Effect.Effect<void, Error>;
+  ingest: (events: readonly AlarmEvent[]) => Effect.Effect<void, Error>;
+  events: Effect.Effect<AlarmEvent[], Error>;
 }
 export function alarmController(repository: AlarmRepository) {
   return {
     list: repository.list,
     save: (alarm: Alarm) =>
       Effect.gen(function* () {
-        yield* Effect.try({
-          try: () => repository.save(alarm),
-          catch: (error) => new Error(String(error)),
-        });
+        yield* repository.save(alarm);
         const service = yield* AlarmService;
         yield* service.setAlarms(
-          repository.list().filter((item) => item.enabled),
+          (yield* repository.list).filter((item) => item.enabled),
           RING_POLICY,
         );
       }),
     resume: Effect.gen(function* () {
       const service = yield* AlarmService;
       yield* service.setAlarms(
-        repository.list().filter((item) => item.enabled),
+        (yield* repository.list).filter((item) => item.enabled),
         RING_POLICY,
       );
       const events = yield* service.drainJournal;
-      yield* Effect.try({
-        try: () => repository.ingest(events),
-        catch: (error) => new Error(String(error)),
-      });
+      yield* repository.ingest(events);
       yield* service.ack(events.map((event) => event.id));
       return yield* service.getRing;
     }),
   };
 }
-
 export function memoryAlarmRepository(): AlarmRepository {
   const alarms = new Map<string, Alarm>();
   const journal = new Map<string, AlarmEvent>();
   return {
-    list: () => [...alarms.values()],
-    save: (alarm) => {
-      alarms.set(alarm.id, alarm);
-    },
-    ingest: (events) => {
-      for (const event of events) journal.set(event.id, event);
-    },
-    events: () => [...journal.values()],
+    list: Effect.sync(() => [...alarms.values()]),
+    save: (alarm) =>
+      Effect.sync(() => {
+        alarms.set(alarm.id, alarm);
+      }),
+    ingest: (events) =>
+      Effect.sync(() => {
+        for (const event of events) journal.set(event.id, event);
+      }),
+    events: Effect.sync(() => [...journal.values()]),
   };
 }
 export function memoryAlarmService() {
