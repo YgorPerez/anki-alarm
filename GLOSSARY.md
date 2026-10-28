@@ -2,8 +2,9 @@
 
 **Alarm.** A scheduled ring with a deck, N, sound and options. Turned off only by an alarm session.
 
-**Alarm session.** The study mode the alarm screen opens: cards from the alarm's deck until N are
-rated right. The alarm keeps coming back until it ends.
+**Alarm session.** The study mode on the alarm screen: cards from the alarm's deck until N are
+rated right. It starts when the user taps Start, not when the screen opens. The alarm keeps coming
+back until it ends.
 
 **Awake check.** A prompt a few minutes after dismissal that shows one card. No answer in 60
 seconds rings the alarm again.
@@ -13,9 +14,8 @@ memory state.
 
 **Card template.** The front and back HTML of a note type, with field placeholders.
 
-**Deck.** A named set of cards, with deck options. Decks nest.
-
-**Deck options.** Daily new and review limits, desired retention, FSRS parameters and learning steps.
+**Deck.** A named set of cards that uses one preset, optionally with its own desired retention.
+Decks nest.
 
 **Dismissal.** The end of an alarm session: N cards rated Good or Easy.
 
@@ -25,7 +25,7 @@ memory state.
 be pulled and synced back.
 
 **Memory state.** A card's FSRS stability, difficulty, due date and learning step. Derived by
-replaying its reviews, never stored as the truth.
+replaying its review log entries, never stored as the truth.
 
 **N.** How many cards an alarm needs rated right before it dismisses.
 
@@ -36,18 +36,37 @@ replaying its reviews, never stored as the truth.
 **Origin.** Where a review happened: phone, web, alarm session, or imported (from `.apkg` or
 AnkiDroid).
 
-**Pull.** Bringing new notes, edits and newer reviews from AnkiDroid into a linked deck.
+**Preset.** A named set of options that many decks share: daily new and review limits, desired
+retention, FSRS parameters and learning steps.
+_Avoid_: deck options (that's the screen), options group
+
+**Pull.** Bringing new notes, edits and AnkiDroid's newer card states into a linked deck. Always
+runs a sync back first.
 
 **Read aloud.** An alarm option that reads each card's front during the session.
 
+**Reset.** A log entry that returns a card to new, at the end of the new queue, with its review
+and lapse counts starting over. Its earlier reviews stay in the log.
+_Avoid_: forget (the action's name in the UI, not the entry)
+
 **Review.** One answer to a card: an immutable event in the review log.
 
-**Review log.** The append-only list of every review. What syncs, and what memory states come from.
+**Review log.** The append-only list of reviews, snapshots, resets, set due dates and voids. What
+syncs, and what memory states come from.
 
 **Reviews ahead.** Cards not yet due, taken soonest first when an alarm has no due or new cards left.
 
+**Set due date.** A log entry that moves a card's due date and keeps the rest of its memory state.
+
+**Snapshot.** A log entry holding a linked card's memory state as AnkiDroid had it at its last
+review. Replay adopts it. It has no grade.
+
 **Snooze cost.** Cards added to an alarm's next ring for each snooze.
+
+**Study day.** The day daily limits and "due today" count in. It starts at the user's chosen hour,
+4 am by default.
 
 **Sync back.** Sending reviews done in the app to AnkiDroid as answers.
 
-**Void.** A log entry that cancels one review, written by Undo. Replay skips voided reviews.
+**Void.** A log entry that cancels one earlier entry (a review, reset or set due date), written by
+Undo. Replay skips voided entries.
