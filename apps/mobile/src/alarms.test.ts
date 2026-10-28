@@ -18,6 +18,9 @@ const alarm: Alarm = {
   sound: { kind: "default" },
   deckId: "deck",
   need: 3,
+  snooze: true,
+  snoozeMinutes: 9,
+  snoozeCap: 2,
 };
 it("saves alarms and replaces the native schedule with every enabled alarm", async () => {
   const native = memoryAlarmService();
@@ -65,7 +68,14 @@ it("persists a replayed journal once and acknowledges only after successful stor
 it("recovers the active ring on resume and dismisses only its matching ID", async () => {
   const native = memoryAlarmService();
   const controller = alarmController(memoryAlarmRepository());
-  const ring = { id: "ring-1", alarm, startedAt: 1000, phase: "ringing" };
+  const ring = {
+    id: "ring-1",
+    alarm,
+    startedAt: 1000,
+    phase: "ringing",
+    snoozes: 0,
+    snoozedUntil: null,
+  };
   native.deliver(
     {
       id: "event-1",

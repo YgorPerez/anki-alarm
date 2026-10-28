@@ -3,6 +3,7 @@ import { MAX_NEED, type Alarm, type Locale } from "@app/core";
 import { Effect } from "effect";
 import { Pressable, Text, View } from "react-native";
 import { copy } from "./copy.ts";
+import { Stepper } from "./controls.tsx";
 import { localData } from "./database.ts";
 
 /** The alarm editor's deck (subdecks ring with their parent) and N. */
@@ -24,8 +25,6 @@ export function AlarmDeckSettings({
   const decks = (collection.data?.decks ?? [])
     .map((deck) => ({ id: deck.id, name: deck.fields.name.value }))
     .toSorted((a, b) => a.name.localeCompare(b.name, locale));
-  const step = (delta: number) =>
-    onChange({ ...alarm, need: Math.min(MAX_NEED, Math.max(1, alarm.need + delta)) });
   return (
     <View className="gap-4">
       <Text className="text-body font-bold text-foreground">{t("alarmDeck")}</Text>
@@ -49,30 +48,16 @@ export function AlarmDeckSettings({
           </Pressable>
         );
       })}
-      <Text className="text-body font-bold text-foreground">{t("need")}</Text>
-      <View className="flex-row items-center gap-4">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("fewer")}
-          disabled={alarm.need <= 1}
-          onPress={() => step(-1)}
-          className="min-h-12 min-w-12 items-center justify-center rounded-pill bg-surface"
-        >
-          <Text className="text-title text-foreground">−</Text>
-        </Pressable>
-        <Text className="text-body text-foreground">
-          {t("needCount", { count: String(alarm.need) })}
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("more")}
-          disabled={alarm.need >= MAX_NEED}
-          onPress={() => step(1)}
-          className="min-h-12 min-w-12 items-center justify-center rounded-pill bg-surface"
-        >
-          <Text className="text-title text-foreground">+</Text>
-        </Pressable>
-      </View>
+      <Stepper
+        label={t("need")}
+        value={alarm.need}
+        text={t("needCount", { count: String(alarm.need) })}
+        min={1}
+        max={MAX_NEED}
+        fewer={t("fewer")}
+        more={t("more")}
+        onChange={(need) => onChange({ ...alarm, need })}
+      />
     </View>
   );
 }

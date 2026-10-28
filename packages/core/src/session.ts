@@ -15,7 +15,7 @@ export const SESSION_RULES = { gradeDelaySeconds: 3, retryGap: 2 };
 const isRight = (grade: Grade) => grade === Rating.Good || grade === Rating.Easy;
 
 /** Cards each snooze adds to the ring's N: the snooze cost. */
-const SNOOZE_COST = 2;
+export const SNOOZE_COST = 2;
 
 /**
  * A ring needs the largest N among its alarm and the alarms folded into it, plus the snooze cost

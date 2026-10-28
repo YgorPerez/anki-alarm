@@ -141,6 +141,57 @@ export function Choice<T extends string>({
   );
 }
 
+/** A whole number between `min` and `max`, set with − and +. */
+export function Stepper({
+  label,
+  value,
+  text,
+  min,
+  max,
+  fewer,
+  more,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  /** The value as shown, e.g. "3 cards". */
+  text: string;
+  min: number;
+  max: number;
+  /** The − and + buttons' accessible names. */
+  fewer: string;
+  more: string;
+  onChange: (value: number) => void;
+}) {
+  const step = (delta: number) => onChange(Math.min(max, Math.max(min, value + delta)));
+  return (
+    <>
+      <Text className="text-body font-bold text-foreground">{label}</Text>
+      <View className="flex-row items-center gap-4">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={fewer}
+          disabled={value <= min}
+          onPress={() => step(-1)}
+          className="min-h-12 min-w-12 items-center justify-center rounded-pill bg-surface"
+        >
+          <Text className="text-title text-foreground">−</Text>
+        </Pressable>
+        <Text className="text-body text-foreground">{text}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={more}
+          disabled={value >= max}
+          onPress={() => step(1)}
+          className="min-h-12 min-w-12 items-center justify-center rounded-pill bg-surface"
+        >
+          <Text className="text-title text-foreground">+</Text>
+        </Pressable>
+      </View>
+    </>
+  );
+}
+
 /** Save and Cancel at the end of a form. */
 export function SaveButtons({
   locale,

@@ -5,7 +5,12 @@ export interface Ring {
   id: string;
   alarm: Alarm;
   startedAt: number;
+  /** `ringing`, `session` or `snoozed`. */
   phase: string;
+  /** Snoozes so far in this ring: each adds its cost to N. */
+  snoozes: number;
+  /** When a snoozed ring rings again (epoch ms); null when not snoozed. */
+  snoozedUntil: number | null;
 }
 import type { AlarmEvent } from "@app/client-data";
 export type { AlarmEvent } from "@app/client-data";
@@ -26,8 +31,17 @@ interface AlarmPort {
   getRing: Effect.Effect<Ring | null, Error>;
   drainJournal: Effect.Effect<readonly AlarmEvent[], Error>;
   ack: (ids: readonly string[]) => Effect.Effect<void, Error>;
-  /** Start tapped: native stops the sound and vibration and begins the idle timer. */
+  /**
+   * Start tapped: native stops the sound and vibration and begins the idle timer. On a snoozed
+   * ring ("Answer now") it also cancels the snooze.
+   */
   sessionStarted: (ringId: string) => Effect.Effect<void, Error>;
+  /**
+   * Silences the ring for `minutes` and counts the snooze; native rings it again with an exact
+   * alarm that survives kills and reboots. Returns the ring as native now holds it. JS checks the
+   * cap; a ring that isn't active or is already snoozed is left alone.
+   */
+  snooze: (ringId: string, minutes: number) => Effect.Effect<Ring | null, Error>;
   /** A tap or answer in the session: native restarts the idle timer. */
   activity: (ringId: string) => Effect.Effect<void, Error>;
   /** N right. Idempotent, and ignores a ring that isn't the active one. */
@@ -125,6 +139,20 @@ export function memoryAlarmService() {
     sessionStarted: (id) =>
       Effect.sync(() => {
         signals.push(`sessionStarted:${id}`);
+        if (ring?.id === id) ring = { ...ring, phase: "session", snoozedUntil: null };
+      }),
+    snooze: (id, minutes) =>
+      Effect.sync(() => {
+        signals.push(`snooze:${id}:${minutes}`);
+        if (ring?.id === id && ring.phase !== "snoozed") {
+          ring = {
+            ...ring,
+            phase: "snoozed",
+            snoozes: ring.snoozes + 1,
+            snoozedUntil: Date.now() + minutes * 60_000,
+          };
+        }
+        return ring;
       }),
     activity: (id) =>
       Effect.sync(() => {
@@ -144,6 +172,11 @@ export function memoryAlarmService() {
     /** The signals JS sent native, in order, as `kind:ringId`. */
     signals: () => [...signals],
     ring: () => ring,
+    /** The snooze timer fires: the ring rings again under the same id. */
+    endSnooze: () => {
+      if (ring?.phase === "snoozed") ring = { ...ring, phase: "ringing", snoozedUntil: null };
+      return ring;
+    },
     deliver: (event: AlarmEvent, active: Ring | null = null) => {
       events.push(event);
       ring = active;
