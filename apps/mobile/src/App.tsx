@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { UpdateOffer } from "./UpdateOffer.tsx";
 import { copy } from "./copy.ts";
 
 export function App() {
@@ -27,6 +28,7 @@ function Home() {
       className="flex-1 justify-center gap-6 bg-background p-6"
       style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
     >
+      <UpdateOffer locale={locale} />
       <Text className="text-title font-bold text-foreground">{t("title")}</Text>
       <Text className="text-body text-muted-foreground">{t("tagline")}</Text>
       <Pressable

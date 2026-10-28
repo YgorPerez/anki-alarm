@@ -18,3 +18,9 @@ apps/web/.nitro/
 # Worker
 apps/*/.wrangler/
 apps/*/.dev.vars
+
+# Local release dry runs
+/fingerprint.json
+/release-version.json
+/release-metadata.json
+/anki-alarm.apk

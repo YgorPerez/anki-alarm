@@ -32,6 +32,9 @@ peerDependencyRules:
 
 # Packages whose install scripts may run. pnpm fails the install on any other.
 allowBuilds:
+  # EAS CLI uses the shipped JS; optional native tracing and protobuf regeneration are unused.
+  dtrace-provider: false
+  protobufjs: false
   esbuild: true
   workerd: true
 
