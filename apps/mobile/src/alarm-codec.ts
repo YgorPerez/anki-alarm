@@ -18,6 +18,8 @@ const alarm = Schema.Struct({
   // Alarms saved before #41 have no deck or N; Core fills them in.
   deckId: Schema.optional(Schema.Unknown),
   need: Schema.optional(Schema.Unknown),
+  // Alarms saved before #48 don't read aloud.
+  readAloud: Schema.optional(Schema.Unknown),
 });
 const event = Schema.Struct({
   id: Schema.String,

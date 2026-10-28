@@ -26,3 +26,9 @@ it("keeps the ring's deck and N through native, with defaults for older alarms",
   const { deckId: _deck, need: _need, ...legacy } = newAlarm("a");
   expect(ringAlarm(JSON.stringify(legacy))).toMatchObject({ deckId: null, need: 3 });
 });
+
+it("keeps read aloud through native, off for older alarms", () => {
+  expect(ringAlarm(JSON.stringify({ ...newAlarm("a"), readAloud: true })).readAloud).toBe(true);
+  const { readAloud: _readAloud, ...legacy } = newAlarm("a");
+  expect(ringAlarm(JSON.stringify(legacy)).readAloud).toBe(false);
+});

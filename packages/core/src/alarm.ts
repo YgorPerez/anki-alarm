@@ -20,6 +20,8 @@ export interface Alarm {
   deckId: string | null;
   /** N: the cards to rate Good or Easy before the alarm dismisses. */
   need: number;
+  /** Reads each card's front aloud in the session: its own audio, else TTS. */
+  readAloud: boolean;
 }
 
 /** The sounds shipped in the app. Native plays each from `res/raw/alarm_<id>`. */
@@ -62,18 +64,20 @@ export const newAlarm = (id: string): Alarm => ({
   sound: { kind: "bundled", id: "dawn" },
   deckId: null,
   need: 3,
+  readAloud: false,
 });
 
 /** The largest N the editor offers. */
 export const MAX_NEED = 50;
 
-type StoredAlarm = Omit<Alarm, "sound" | "deckId" | "need"> & {
+type StoredAlarm = Omit<Alarm, "sound" | "deckId" | "need" | "readAloud"> & {
   sound?: unknown;
   deckId?: unknown;
   need?: unknown;
+  readAloud?: unknown;
 };
 /** Reads a stored, synced or native alarm, filling in what older versions didn't save. */
-export function readAlarm({ sound, deckId, need, ...alarm }: StoredAlarm): Alarm {
+export function readAlarm({ sound, deckId, need, readAloud, ...alarm }: StoredAlarm): Alarm {
   return {
     ...alarm,
     sound: parseAlarmSound(sound),
@@ -82,6 +86,7 @@ export function readAlarm({ sound, deckId, need, ...alarm }: StoredAlarm): Alarm
       typeof need === "number" && Number.isInteger(need)
         ? Math.min(MAX_NEED, Math.max(1, need))
         : newAlarm(alarm.id).need,
+    readAloud: readAloud === true,
   };
 }
 
@@ -129,6 +134,7 @@ export function alarmFromRecord(record: AlarmRecord): Alarm {
     sound: record.fields.sound?.value,
     deckId: record.fields.deckId?.value,
     need: record.fields.need?.value,
+    readAloud: record.fields.readAloud?.value,
   });
 }
 

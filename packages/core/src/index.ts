@@ -85,6 +85,14 @@ export {
   dueInDays,
 } from "./study.ts";
 export { renderCard } from "./template.ts";
+export {
+  DEFAULT_READ_ALOUD_LANGUAGE,
+  READ_ALOUD_LANGUAGES,
+  deckLanguage,
+  isLanguageTag,
+  readAloudFor,
+} from "./read-aloud.ts";
+export type { ReadAloud, ReadAloudInput } from "./read-aloud.ts";
 export type { RenderInput } from "./template.ts";
 export { readApkg, readApkgMedia } from "./apkg.ts";
 export type { ApkgHost, ApkgMedia, AnkiDatabase, AnkiPackage } from "./apkg.ts";

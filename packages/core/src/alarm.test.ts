@@ -48,6 +48,7 @@ describe("a new alarm", () => {
       sound: { kind: "bundled", id: "dawn" },
       deckId: null,
       need: 3,
+      readAloud: false,
     });
   });
 });
