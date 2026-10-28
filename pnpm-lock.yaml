@@ -351,6 +351,9 @@ importers:
 
   packages/contracts:
     dependencies:
+      '@app/core':
+        specifier: workspace:*
+        version: link:../core
       effect:
         specifier: ^4.0.6
         version: 4.0.6
