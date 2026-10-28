@@ -15,3 +15,14 @@ it("reads back the chosen sound from storage, native's list and the active ring"
   const ring = `{"id":"r","alarm":${stored(file)},"startedAt":1,"phase":"ringing"}`;
   expect(decodeRing(ring)!.alarm.sound).toEqual(file);
 });
+
+const ringAlarm = (alarm: string) =>
+  decodeRing(`{"id":"r","alarm":${alarm},"startedAt":1,"phase":"ringing"}`)!.alarm;
+it("keeps the ring's deck and N through native, with defaults for older alarms", () => {
+  expect(ringAlarm(JSON.stringify({ ...newAlarm("a"), deckId: "deck", need: 7 }))).toMatchObject({
+    deckId: "deck",
+    need: 7,
+  });
+  const { deckId: _deck, need: _need, ...legacy } = newAlarm("a");
+  expect(ringAlarm(JSON.stringify(legacy))).toMatchObject({ deckId: null, need: 3 });
+});

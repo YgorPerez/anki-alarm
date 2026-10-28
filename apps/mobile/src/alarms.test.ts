@@ -16,6 +16,8 @@ const alarm: Alarm = {
   vibrate: true,
   rampSeconds: 30,
   sound: { kind: "default" },
+  deckId: "deck",
+  need: 3,
 };
 it("saves alarms and replaces the native schedule with every enabled alarm", async () => {
   const native = memoryAlarmService();

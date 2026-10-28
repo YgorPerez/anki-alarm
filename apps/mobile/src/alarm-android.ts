@@ -19,6 +19,8 @@ export const androidAlarmService = Layer.succeed(AlarmService, {
   getRing: attempt(() => decodeRing(native.getRing() ?? "null")),
   drainJournal: attempt(() => decodeEvents(native.drainJournal())),
   ack: (ids) => attempt(() => native.ack(ids)),
+  sessionStarted: (id) => attempt(() => native.sessionStarted(id)),
+  activity: (id) => attempt(() => native.activity(id)),
   dismiss: (id) => attempt(() => native.dismiss(id)),
 });
 export { native };

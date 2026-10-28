@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { parseAlarmSound, type Alarm } from "@app/core";
+import { readAlarm } from "@app/core";
 
 const alarm = Schema.Struct({
   id: Schema.String,
@@ -15,6 +15,9 @@ const alarm = Schema.Struct({
   rampSeconds: Schema.Number,
   // Alarms saved before #45 have `null`; Core reads anything unknown as the phone's alarm sound.
   sound: Schema.Unknown,
+  // Alarms saved before #41 have no deck or N; Core fills them in.
+  deckId: Schema.optional(Schema.Unknown),
+  need: Schema.optional(Schema.Unknown),
 });
 const event = Schema.Struct({
   id: Schema.String,
@@ -27,17 +30,13 @@ const event = Schema.Struct({
 const ring = Schema.NullOr(
   Schema.Struct({ id: Schema.String, alarm, startedAt: Schema.Number, phase: Schema.String }),
 );
-const withSound = (stored: typeof alarm.Type): Alarm => ({
-  ...stored,
-  sound: parseAlarmSound(stored.sound),
-});
 const decodeStored = Schema.decodeUnknownSync(Schema.fromJsonString(alarm));
 const decodeStoredList = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(alarm)));
 const decodeStoredRing = Schema.decodeUnknownSync(Schema.fromJsonString(ring));
-export const decodeAlarm = (json: string) => withSound(decodeStored(json));
-export const decodeAlarms = (json: string) => decodeStoredList(json).map(withSound);
+export const decodeAlarm = (json: string) => readAlarm(decodeStored(json));
+export const decodeAlarms = (json: string) => decodeStoredList(json).map(readAlarm);
 export const decodeEvents = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(event)));
 export const decodeRing = (json: string) => {
   const active = decodeStoredRing(json);
-  return active && { ...active, alarm: withSound(active.alarm) };
+  return active && { ...active, alarm: readAlarm(active.alarm) };
 };

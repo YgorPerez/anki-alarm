@@ -26,6 +26,11 @@ interface AlarmPort {
   getRing: Effect.Effect<Ring | null, Error>;
   drainJournal: Effect.Effect<readonly AlarmEvent[], Error>;
   ack: (ids: readonly string[]) => Effect.Effect<void, Error>;
+  /** Start tapped: native stops the sound and vibration and begins the idle timer. */
+  sessionStarted: (ringId: string) => Effect.Effect<void, Error>;
+  /** A tap or answer in the session: native restarts the idle timer. */
+  activity: (ringId: string) => Effect.Effect<void, Error>;
+  /** N right. Idempotent, and ignores a ring that isn't the active one. */
   dismiss: (ringId: string) => Effect.Effect<void, Error>;
 }
 export class AlarmService extends Context.Service<AlarmService, AlarmPort>()("AlarmService") {}
@@ -82,6 +87,7 @@ export function memoryAlarmService() {
   let ring: Ring | null = null;
   let events: AlarmEvent[] = [];
   let complete = false;
+  const signals: string[] = [];
   let permissions: AlarmPermissions = {
     manufacturer: "unknown",
     sdk: 35,
@@ -116,8 +122,17 @@ export function memoryAlarmService() {
         const acknowledged = new Set(ids);
         events = events.filter((event) => !acknowledged.has(event.id));
       }),
+    sessionStarted: (id) =>
+      Effect.sync(() => {
+        signals.push(`sessionStarted:${id}`);
+      }),
+    activity: (id) =>
+      Effect.sync(() => {
+        signals.push(`activity:${id}`);
+      }),
     dismiss: (id) =>
       Effect.sync(() => {
+        signals.push(`dismiss:${id}`);
         if (ring?.id === id) ring = null;
       }),
   };
@@ -126,6 +141,9 @@ export function memoryAlarmService() {
       permissions = { ...permissions, ...next };
     },
     layer: Layer.succeed(AlarmService, service),
+    /** The signals JS sent native, in order, as `kind:ringId`. */
+    signals: () => [...signals],
+    ring: () => ring,
     deliver: (event: AlarmEvent, active: Ring | null = null) => {
       events.push(event);
       ring = active;
