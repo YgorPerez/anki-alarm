@@ -74,7 +74,7 @@ function Home() {
     };
   }, [controller, locale]);
   useEffect(() => {
-    if (!themeOpen || ring) return;
+    if (!themeOpen || ring) return undefined;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       setThemeOpen(false);
       return true;
