@@ -18,3 +18,6 @@ export const translator =
       /\{(\w+)\}/g,
       (placeholder, name: string) => params[name] ?? placeholder,
     );
+
+/** A well-formed BCP 47 tag such as `pt-BR` or `en`, as TTS engines take it. */
+export const isLanguageTag = (tag: string) => /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(tag);

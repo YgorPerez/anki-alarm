@@ -15,9 +15,6 @@ export const READ_ALOUD_LANGUAGES = [
   { tag: "ja-JP", name: "日本語" },
 ] as const;
 
-/** A well-formed BCP 47 tag such as `pt-BR` or `en`, as TTS engines take it. */
-export const isLanguageTag = (tag: string) => /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(tag);
-
 /**
  * The language a deck's cards are read in: its own, else its nearest parent's (Anki names
  * subdecks `Parent::Child`), else pt-BR.

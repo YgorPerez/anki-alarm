@@ -9,7 +9,7 @@ import {
   type AnkiDroidSource,
 } from "./ankidroid.ts";
 import { cardId, importId, uuid7 } from "./ids.ts";
-import { isLanguageTag } from "./read-aloud.ts";
+import { isLanguageTag } from "./locale.ts";
 import { studyDayStart, type LogEntry } from "./study.ts";
 
 /** FSRS-6's default weights, which every new preset starts from. */
