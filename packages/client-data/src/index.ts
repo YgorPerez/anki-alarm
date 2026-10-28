@@ -63,7 +63,8 @@ interface Data extends Engine {
   collection: Effect.Effect<CollectionState, Error>;
   /**
    * Merges an Anki package into the collection and appends its review log in one transaction.
-   * Store the package's media files first. Importing the same package again adds no entries.
+   * Store the package's media files first. Importing the same package again adds no entries, and
+   * neither does importing an export of the app's own reviews.
    */
   importAnki: (source: AnkiPackage) => Effect.Effect<ImportSummary, Error>;
   reviewLog: Effect.Effect<LogEntry[], Error>;
@@ -258,8 +259,10 @@ async function open(driver: SQLiteConnection): Promise<Data> {
     importAnki: (source) =>
       local(async () => {
         let entries = 0;
+        // Local writes run one at a time: the log can't change before the import commits.
+        const known = await readLog();
         const { result } = await store.run(
-          (collection) => collection.importAnki(source),
+          (collection) => collection.importAnki(source, known),
           async ({ log }) => {
             entries = await appendNew(log);
           },

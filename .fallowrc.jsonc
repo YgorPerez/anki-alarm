@@ -5,6 +5,8 @@
     "apps/mobile/.rnstorybook/*.{ts,tsx}",
     "apps/mobile/test/native/*.ts",
     "scripts/tooling/*.ts",
+    // Fixture generator, run by hand (see the file).
+    "packages/core/fixtures/apkg/*.mts",
   ],
 
   "ignorePatterns": [

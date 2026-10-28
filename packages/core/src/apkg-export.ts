@@ -1,6 +1,6 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh copies are sorted. */
 /* oxlint-disable eslint/no-await-in-loop -- Statements run in order, one media file at a time. */
-import { APP_ID_KEY } from "./apkg.ts";
+import { APP_ID_KEY, safeMediaName } from "./apkg.ts";
 import type { Card, CollectionState, Deck, Field, NoteType, Preset } from "./collection.ts";
 import { importId, sha1, type ImportKind } from "./ids.ts";
 import {
@@ -76,7 +76,8 @@ export async function writeApkg(
   };
   const map: Record<string, string> = {};
   for (const name of rows.media) {
-    const bytes = await host.media(name);
+    // A note could name any path; only bare file names in the media folder go in.
+    const bytes = safeMediaName(name) ? await host.media(name) : undefined;
     if (!bytes) continue;
     const entry = String(Object.keys(map).length);
     map[entry] = name;

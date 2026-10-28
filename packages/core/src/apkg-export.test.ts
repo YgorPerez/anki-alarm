@@ -306,6 +306,25 @@ test("the package is Legacy 2 with Anki's scheduling columns, FSRS state and rev
   expect(graded.every((r) => Number(r.type) <= 2 && r.time === 4200)).toBe(true);
 });
 
+test("media are asked for by bare file name only", async () => {
+  const collection = new Collection(environment());
+  const deck = collection.createDeck("Paths");
+  collection.addBasicNote(deck.id, '<img src="../escape.png"> [sound:a/b.mp3]', "[sound:ok.mp3]");
+  const asked: string[] = [];
+  const zip = await writeApkg(
+    {
+      ...writeHost,
+      media: async (name) => {
+        asked.push(name);
+        return new Uint8Array([1]);
+      },
+    },
+    { collection: collection.snapshot(), log: [], deckId: deck.id, now: NOW },
+  );
+  expect(asked).toEqual(["ok.mp3"]);
+  expect(new TextDecoder().decode(zip.media)).toBe('{"0":"ok.mp3"}');
+});
+
 test("a deck that is not there can't be exported", async () => {
   const { collection, log } = await studied();
   await expect(

@@ -738,7 +738,7 @@ function unmatched(known: readonly LogEntry[]) {
  * Anki intervals are days when positive and seconds when negative. Days end at the study day; 0
  * is due today.
  */
-export function dueAfter(at: number, interval: number) {
+function dueAfter(at: number, interval: number) {
   if (interval < 0) return at - interval * 1000;
   const due = new Date(studyDayStart(at));
   due.setDate(due.getDate() + interval);

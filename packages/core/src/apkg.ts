@@ -169,10 +169,13 @@ function mediaEntries(map: Uint8Array, latest: boolean) {
 /** Media names are bare file names, NFC like Anki's. Anything else is a corrupt package. */
 function mediaName(name: string) {
   const normal = name.normalize("NFC");
-  // oxlint-disable-next-line no-control-regex -- control characters are what this rejects.
-  if (!normal || normal === "." || normal === ".." || /[/\\\u0000-\u001f]/.test(normal))
-    throw new Error(`Unsafe media file name: ${JSON.stringify(name)}`);
+  if (!safeMediaName(normal)) throw new Error(`Unsafe media file name: ${JSON.stringify(name)}`);
   return normal;
+}
+/** A bare file name: no path, no control characters. */
+export function safeMediaName(name: string) {
+  // oxlint-disable-next-line no-control-regex -- control characters are what this rejects.
+  return Boolean(name) && name !== "." && name !== ".." && !/[/\\\u0000-\u001f]/.test(name);
 }
 
 type Row = Record<string, unknown>;
