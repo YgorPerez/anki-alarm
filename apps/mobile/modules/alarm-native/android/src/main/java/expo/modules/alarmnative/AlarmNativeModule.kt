@@ -24,19 +24,29 @@ class AlarmNativeModule : Module() {
     Events("onChange")
     Function("createId") { AlarmStore.uuid7() }
     OnCreate { current = this@AlarmNativeModule; AlarmService.ensureChannel(context) }
-    OnDestroy { current = null; Sounds.stopPreview() }
+    OnDestroy { current = null; picking?.second?.resolve(null); picking = null; Sounds.stopPreview() }
     // Resolves with the picked sound's JSON, or null when the picker is cancelled.
     AsyncFunction("pickSound") { kind: String, currentUri: String?, promise: Promise ->
       val activity = appContext.currentActivity ?: return@AsyncFunction promise.resolve(null)
       picking?.second?.resolve(null)
       picking = kind to promise
-      activity.startActivityForResult(Sounds.picker(kind, currentUri), PICK_SOUND)
+      try {
+        require(kind == "ringtone" || kind == "file")
+        activity.startActivityForResult(Sounds.picker(kind, currentUri), PICK_SOUND)
+      } catch (e: Exception) {
+        picking = null
+        promise.reject("ERR_SOUND_PICKER", "Could not open sound picker", e)
+      }
     }.runOnQueue(Queues.MAIN)
     OnActivityResult { _, result ->
       if (result.requestCode != PICK_SOUND) return@OnActivityResult
       val (kind, promise) = picking ?: return@OnActivityResult
       picking = null
-      promise.resolve(if (result.resultCode == Activity.RESULT_OK) Sounds.picked(context, kind, result.data)?.toString() else null)
+      try {
+        promise.resolve(if (result.resultCode == Activity.RESULT_OK) Sounds.picked(context, kind, result.data)?.toString() else null)
+      } catch (e: Exception) {
+        promise.reject("ERR_SOUND_PICKER", "Could not read selected sound", e)
+      }
     }
     Function("previewSound") { sound: String -> Sounds.preview(context, JSONObject(sound)) }
     Function("stopPreview") { Sounds.stopPreview() }
