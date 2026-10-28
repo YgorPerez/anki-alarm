@@ -60,5 +60,11 @@ jobs:
       - name: Web
         run: vp run --filter @app/web build
 
+      - name: Browser for offline journeys
+        run: vp exec --filter @app/web playwright install --with-deps chromium
+
+      - name: Offline web journeys
+        run: vp run --filter @app/web test:e2e
+
       - name: Phone bundle
         run: vp exec --filter @app/mobile expo export --platform android --output-dir "$RUNNER_TEMP/mobile"
