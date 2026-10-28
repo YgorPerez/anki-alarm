@@ -35,9 +35,8 @@ export function AlarmSoundSettings({
       if (result) onChange({ ...alarm, sound: parseAlarmSound(JSON.parse(result)) });
     } catch {
       setError(t("soundError"));
-    } finally {
-      setPicking(false);
     }
+    setPicking(false);
   };
   return (
     <View className="gap-4">
