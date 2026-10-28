@@ -14,6 +14,10 @@ export interface Alarm {
   vibrate: boolean;
   rampSeconds: number;
   sound: AlarmSound;
+  /** The session's deck, subdecks included. Null until the user picks one. */
+  deckId: string | null;
+  /** N: the cards to rate Good or Easy before the alarm dismisses. */
+  need: number;
 }
 
 /** The sounds shipped in the app. Native plays each from `res/raw/alarm_<id>`. */
@@ -54,7 +58,30 @@ export const newAlarm = (id: string): Alarm => ({
   vibrate: true,
   rampSeconds: 30,
   sound: { kind: "bundled", id: "dawn" },
+  deckId: null,
+  need: 3,
 });
+
+/** The largest N the editor offers. */
+export const MAX_NEED = 50;
+
+type StoredAlarm = Omit<Alarm, "sound" | "deckId" | "need"> & {
+  sound?: unknown;
+  deckId?: unknown;
+  need?: unknown;
+};
+/** Reads a stored, synced or native alarm, filling in what older versions didn't save. */
+export function readAlarm({ sound, deckId, need, ...alarm }: StoredAlarm): Alarm {
+  return {
+    ...alarm,
+    sound: parseAlarmSound(sound),
+    deckId: typeof deckId === "string" && deckId ? deckId : null,
+    need:
+      typeof need === "number" && Number.isInteger(need)
+        ? Math.min(MAX_NEED, Math.max(1, need))
+        : newAlarm(alarm.id).need,
+  };
+}
 
 export const RING_POLICY = { leaveSeconds: 10, idleSeconds: 20, awakeCheckSeconds: 60 };
 
