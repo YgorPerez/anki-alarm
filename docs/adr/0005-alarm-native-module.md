@@ -78,6 +78,11 @@ gives each ring a UUIDv7 id.
   missed, dismissed. JS drains it into SQLite with an ack on start and resume. Wake-up stats come
   from it, with durations from the monotonic clock.
 
+Amended in #59: the event kinds are named in Core's `ALARM_EVENTS`, which native writes verbatim.
+Snooze and awake-check events carry the ring's id, the awake check's included after dismissal; a
+failed check starts a new ring with its own id. A gap where `elapsedRealtime` went back (a reboot)
+is timed on the wall clock.
+
 ### Permissions
 
 `getPermissions()` reports notifications, exact alarm, full-screen intent, display over other apps

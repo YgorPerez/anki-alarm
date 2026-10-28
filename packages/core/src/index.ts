@@ -108,3 +108,11 @@ export {
   SYNC_KINDS,
 } from "./sync.ts";
 export type { FieldRecord, SyncChange, SyncKind } from "./sync.ts";
+export { ALARM_EVENTS, wakeUpStats } from "./wakeup.ts";
+export type {
+  AlarmEvent,
+  AlarmEventKind,
+  WakeUpOptions,
+  WakeUpStats,
+  WakeUpTally,
+} from "./wakeup.ts";
