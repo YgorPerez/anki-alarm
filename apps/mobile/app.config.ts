@@ -12,7 +12,7 @@ const config: ExpoConfig = {
   android: {
     package: "dev.ygorperez.ankialarm",
   },
-  plugins: ["expo-dev-client"],
+  plugins: ["expo-dev-client", "expo-sqlite", "expo-font"],
 };
 
 export default config;

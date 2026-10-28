@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScopedTheme } from "uniwind";
 
 import { copy } from "./copy.ts";
+import { bold, regular } from "./fonts.ts";
 import { resetTheme, setThemeField, useThemeChoice } from "./theme.ts";
 
 type T = ReturnType<typeof copy>;
@@ -40,13 +41,21 @@ export function ThemeSettings({ locale, onBack }: { locale: Locale; onBack: () =
     >
       <ScrollView contentContainerClassName="gap-6 p-6">
         <Pressable accessibilityRole="button" onPress={onBack} className="self-start py-2">
-          <Text className="text-label text-primary-ink">‹ {t("back")}</Text>
+          <Text style={regular} className="text-label text-primary-ink">
+            ‹ {t("back")}
+          </Text>
         </Pressable>
-        <Text className="text-title font-bold text-foreground">{t("theme")}</Text>
+        <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
+          {t("theme")}
+        </Text>
         {FIELDS.map((field) => (
           <FieldRow key={field} field={field} choice={choice} t={t} />
         ))}
-        <Text accessibilityLiveRegion="polite" className="text-label text-attention">
+        <Text
+          style={regular}
+          accessibilityLiveRegion="polite"
+          className="text-label text-attention"
+        >
           {warnings.join(" ")}
         </Text>
         <AlarmPreview t={t} />
@@ -55,7 +64,9 @@ export function ThemeSettings({ locale, onBack }: { locale: Locale; onBack: () =
           onPress={resetTheme}
           className="self-start rounded-full bg-surface px-5 py-3 active:opacity-80"
         >
-          <Text className="text-label font-medium text-foreground">{t("reset")}</Text>
+          <Text style={bold} className="text-label text-foreground">
+            {t("reset")}
+          </Text>
         </Pressable>
       </ScrollView>
     </View>
@@ -72,7 +83,9 @@ function FieldRow({ field, choice, t }: { field: ThemeField; choice: ThemeChoice
   };
   return (
     <View accessibilityRole="radiogroup" accessibilityLabel={t(field)} className="gap-3">
-      <Text className="text-body font-bold text-foreground">{t(field)}</Text>
+      <Text style={bold} className="text-body text-foreground">
+        {t(field)}
+      </Text>
       <View className="flex-row flex-wrap items-center gap-3">
         {THEME_SWATCHES[field].map((swatch) => (
           <Pressable
@@ -97,6 +110,7 @@ function FieldRow({ field, choice, t }: { field: ThemeField; choice: ThemeChoice
           autoCapitalize="none"
           autoCorrect={false}
           maxLength={7}
+          style={regular}
           className="h-11 min-w-28 rounded-full border border-border px-4 text-body text-foreground"
           placeholderTextColorClassName="accent-muted-foreground"
         />
@@ -111,8 +125,13 @@ function AlarmPreview({ t }: { t: T }) {
     <ScopedTheme theme="dark">
       <View className="gap-4 rounded-xl bg-background p-4">
         <View className="flex-row items-center justify-between">
-          <Text className="text-label text-muted-foreground">{t("onTheAlarm")}</Text>
-          <Text className="rounded-full bg-attention-tint px-3 py-1 text-label font-bold text-attention">
+          <Text style={regular} className="text-label text-muted-foreground">
+            {t("onTheAlarm")}
+          </Text>
+          <Text
+            style={bold}
+            className="rounded-full bg-attention-tint px-3 py-1 text-label text-attention"
+          >
             {t("cardsLeft")}
           </Text>
         </View>
@@ -130,7 +149,9 @@ function AlarmPreview({ t }: { t: T }) {
 function Grade({ label, pill, ink }: { label: string; pill: string; ink: string }) {
   return (
     <View className={`h-16 flex-1 items-center justify-center rounded-full ${pill}`}>
-      <Text className={`text-label font-bold ${ink}`}>{label}</Text>
+      <Text style={bold} className={`text-label ${ink}`}>
+        {label}
+      </Text>
     </View>
   );
 }
