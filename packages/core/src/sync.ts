@@ -51,9 +51,7 @@ export function mergeRecord<R extends FieldRecord>(current: R | undefined, incom
     const mine = fields[key];
     if (!mine || compareHlc(field.hlc, mine.hlc) > 0) fields[key] = field;
   }
-  // Every key of both records of the same kind is kept with its own field type.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  return { ...current, fields } as R;
+  return { ...current, fields };
 }
 
 /**

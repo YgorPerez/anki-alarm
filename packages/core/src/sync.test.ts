@@ -133,8 +133,11 @@ describe("alarm records", () => {
   });
 
   test("a synced sound this phone can't read falls back to the default sound", () => {
-    const record = stampAlarm(undefined, newAlarm("alarm"), env);
-    const synced = { ...record, fields: { ...record.fields, sound: { ...record.fields.sound } } };
+    const stamped = stampAlarm(undefined, newAlarm("alarm"), env);
+    const synced = {
+      ...stamped,
+      fields: { ...stamped.fields, sound: { ...stamped.fields.sound } },
+    };
     Object.assign(synced.fields.sound, { value: { kind: "mystery" } });
     expect(alarmFromRecord(synced).sound).toEqual({ kind: "default" });
   });

@@ -94,7 +94,7 @@ export function stampAlarm(
 /** The alarm a synced record describes. A property it lacks takes the new-alarm default. */
 export function alarmFromRecord(record: AlarmRecord): Alarm {
   const defaults = newAlarm(record.id);
-  const value = <K extends keyof AlarmProperties>(key: K): Alarm[K] =>
+  const value = <K extends keyof AlarmProperties>(key: K): AlarmProperties[K] =>
     record.fields[key]?.value ?? defaults[key];
   return {
     id: record.id,

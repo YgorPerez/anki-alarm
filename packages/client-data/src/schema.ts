@@ -8,6 +8,7 @@ import type {
   Tombstone,
   Settings,
   Alarm,
+  AlarmRecord,
   LogEntry,
 } from "@app/core";
 import type { AlarmEvent } from "./index.ts";
@@ -63,4 +64,9 @@ export const outbox = sqliteTable("outbox", {
 export const reviewLog = sqliteTable("review_log", {
   id: text().primaryKey(),
   body: text({ mode: "json" }).$type<LogEntry>().notNull(),
+});
+
+export const alarmRecords = sqliteTable("alarm_records", {
+  id: text().primaryKey(),
+  body: text({ mode: "json" }).$type<AlarmRecord>().notNull(),
 });
