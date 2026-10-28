@@ -32,34 +32,33 @@ export function ThemeSettings({ locale, onBack }: { locale: Locale; onBack: () =
   const t = copy(locale);
   const choice = useThemeChoice();
   const insets = useSafeAreaInsets();
-  const warnings = lookAlikes(choice).map(([a, b]) =>
-    t("lookAlike").replace("{a}", t(a)).replace("{b}", t(b)),
-  );
+  const warnings = lookAlikes(choice).map(([a, b]) => t("lookAlike", { a: t(a), b: t(b) }));
   return (
-    <ScrollView
+    <View
       className="flex-1 bg-background"
-      contentContainerClassName="gap-6 p-6"
-      contentContainerStyle={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
+      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      <Pressable accessibilityRole="button" onPress={onBack} className="self-start py-2">
-        <Text className="text-label text-primary-ink">‹ {t("back")}</Text>
-      </Pressable>
-      <Text className="text-title font-bold text-foreground">{t("theme")}</Text>
-      {FIELDS.map((field) => (
-        <FieldRow key={field} field={field} choice={choice} t={t} />
-      ))}
-      <Text accessibilityLiveRegion="polite" className="text-label text-attention">
-        {warnings.join(" ")}
-      </Text>
-      <AlarmPreview t={t} />
-      <Pressable
-        accessibilityRole="button"
-        onPress={resetTheme}
-        className="self-start rounded-full bg-surface px-5 py-3 active:opacity-80"
-      >
-        <Text className="text-label font-medium text-foreground">{t("reset")}</Text>
-      </Pressable>
-    </ScrollView>
+      <ScrollView contentContainerClassName="gap-6 p-6">
+        <Pressable accessibilityRole="button" onPress={onBack} className="self-start py-2">
+          <Text className="text-label text-primary-ink">‹ {t("back")}</Text>
+        </Pressable>
+        <Text className="text-title font-bold text-foreground">{t("theme")}</Text>
+        {FIELDS.map((field) => (
+          <FieldRow key={field} field={field} choice={choice} t={t} />
+        ))}
+        <Text accessibilityLiveRegion="polite" className="text-label text-attention">
+          {warnings.join(" ")}
+        </Text>
+        <AlarmPreview t={t} />
+        <Pressable
+          accessibilityRole="button"
+          onPress={resetTheme}
+          className="self-start rounded-full bg-surface px-5 py-3 active:opacity-80"
+        >
+          <Text className="text-label font-medium text-foreground">{t("reset")}</Text>
+        </Pressable>
+      </ScrollView>
+    </View>
   );
 }
 
