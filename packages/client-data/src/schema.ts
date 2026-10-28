@@ -1,10 +1,9 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import type {
   Deck,
-  Note,
+  StoredCollection,
   Card,
   NoteType,
-  Preset,
   Tombstone,
   Settings,
   Alarm,
@@ -18,7 +17,7 @@ export const decks = sqliteTable("decks", {
 });
 export const notes = sqliteTable("notes", {
   id: text().primaryKey(),
-  body: text({ mode: "json" }).$type<Note>().notNull(),
+  body: text({ mode: "json" }).$type<StoredCollection["notes"][number]>().notNull(),
 });
 export const cards = sqliteTable("cards", {
   id: text().primaryKey(),
@@ -30,7 +29,7 @@ export const noteTypes = sqliteTable("noteTypes", {
 });
 export const presets = sqliteTable("presets", {
   id: text().primaryKey(),
-  body: text({ mode: "json" }).$type<Preset>().notNull(),
+  body: text({ mode: "json" }).$type<StoredCollection["presets"][number]>().notNull(),
 });
 export const tombstones = sqliteTable("tombstones", {
   id: text().primaryKey(),

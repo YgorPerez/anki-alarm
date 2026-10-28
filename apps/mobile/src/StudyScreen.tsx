@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { renderCard, studyQueue, type Grade, type Locale } from "@app/core";
+import { renderCard, studyQueue, type Grade, type Locale, type LogEntry } from "@app/core";
 import { Effect } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { BackHandler, Pressable, Text, View, useColorScheme } from "react-native";
@@ -7,6 +7,7 @@ import { WebView } from "react-native-webview";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { localData } from "./database.ts";
 import { copy } from "./copy.ts";
+import { editingCopy } from "./editing-copy.ts";
 
 export function StudyScreen({
   deckId,
@@ -20,23 +21,35 @@ export function StudyScreen({
   const t = copy(locale);
   const insets = useSafeAreaInsets();
   const dark = useColorScheme() === "dark";
-  const { query, cardId, note, type, busy, error, revealed, reveal, answer } = useStudySession(
-    deckId,
-    onExit,
-  );
+  const { query, cardId, note, type, busy, error, revealed, reveal, answer, canUndo, undo } =
+    useStudySession(deckId, onExit);
   return (
     <View
       className="flex-1 gap-4 bg-background px-6"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom + 16 }}
     >
-      <Pressable
-        accessibilityRole="button"
-        disabled={busy}
-        onPress={onExit}
-        className="min-h-12 justify-center"
-      >
-        <Text className="text-body text-foreground">{t("back")}</Text>
-      </Pressable>
+      <View className="flex-row items-center justify-between">
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={onExit}
+          className="min-h-12 justify-center"
+        >
+          <Text className="text-body text-foreground">{t("back")}</Text>
+        </Pressable>
+        {canUndo && (
+          <Pressable
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={() => {
+              void undo();
+            }}
+            className="min-h-12 justify-center px-2"
+          >
+            <Text className="text-body text-foreground">{editingCopy(locale)("undo")}</Text>
+          </Pressable>
+        )}
+      </View>
       <Text
         accessibilityRole="header"
         className="text-title text-foreground"
@@ -144,6 +157,9 @@ function useStudySession(deckId: string, onExit: () => void) {
   const [revealedId, setRevealedId] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  /** This session's answers, newest last: what Undo voids. */
+  const [answers, setAnswers] = useState<LogEntry[]>([]);
+  const [undone, setUndone] = useState<string>();
   const lock = useRef(false);
   const query = useQuery({
     queryKey: ["study", deckId],
@@ -156,9 +172,11 @@ function useStudySession(deckId: string, onExit: () => void) {
       return { ...snapshot, now, started: performance.now() };
     },
   });
-  const item = query.data
-    ? studyQueue(query.data.collection, query.data.log, deckId, query.data.now)[0]
-    : undefined;
+  const queue = query.data
+    ? studyQueue(query.data.collection, query.data.log, deckId, query.data.now)
+    : [];
+  // An undone card comes back first, as it was before the answer.
+  const item = queue.find((c) => c.card.id === undone) ?? queue[0];
   const cardId = item?.card.id;
   const revealed = Boolean(cardId && revealedId === cardId);
   useEffect(() => {
@@ -174,7 +192,7 @@ function useStudySession(deckId: string, onExit: () => void) {
     setBusy(true);
     setError(false);
     try {
-      await Effect.runPromise(
+      const entry = await Effect.runPromise(
         localData((data) =>
           data.answerCard(
             cardId,
@@ -183,6 +201,26 @@ function useStudySession(deckId: string, onExit: () => void) {
           ),
         ),
       );
+      setAnswers((list) => [...list, entry]);
+      setUndone(undefined);
+      setRevealedId(undefined);
+      await client.invalidateQueries({ queryKey: ["study", deckId] });
+    } catch {
+      setError(true);
+    }
+    lock.current = false;
+    setBusy(false);
+  }
+  async function undo() {
+    const last = answers.at(-1);
+    if (!last || lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setError(false);
+    try {
+      await Effect.runPromise(localData((data) => data.undo(last.id)));
+      setAnswers((list) => list.slice(0, -1));
+      setUndone(last.cardId);
       setRevealedId(undefined);
       await client.invalidateQueries({ queryKey: ["study", deckId] });
     } catch {
@@ -204,5 +242,7 @@ function useStudySession(deckId: string, onExit: () => void) {
     revealed,
     reveal: () => setRevealedId(cardId),
     answer,
+    canUndo: answers.length > 0,
+    undo,
   };
 }

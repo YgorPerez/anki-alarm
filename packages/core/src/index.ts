@@ -12,8 +12,10 @@ export {
 } from "./theme.ts";
 export type { Hex, Theme, ThemeChoice, ThemeField, ThemeMode } from "./theme.ts";
 export { uuid7, cardId } from "./ids.ts";
-export { Collection } from "./collection.ts";
+export { Collection, DEFAULT_FSRS_PARAMETERS, parseCollection, validOption } from "./collection.ts";
 export type {
+  PresetOptions,
+  StoredCollection,
   Hlc,
   Field,
   Deck,
@@ -50,5 +52,14 @@ export type {
   ReliabilityKind,
   ReliabilityStep,
 } from "./reliability.ts";
-export { replayCard, studyQueue, studyDayStart, renderCard } from "./study.ts";
+export {
+  replayCard,
+  studyQueue,
+  studyDayStart,
+  renderCard,
+  checkLogEntry,
+  cardMemory,
+  CardState,
+  dueInDays,
+} from "./study.ts";
 export type { LogEntry, MemoryState, Grade } from "./study.ts";

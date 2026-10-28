@@ -41,8 +41,21 @@ export const Platform = {
   select: (choices: { android?: unknown }) => choices.android,
 };
 
-// No dialogs or Back button in the tests yet: a test that needs one adds a way to answer it here.
-export const Alert = { alert: () => {} };
+type AlertButton = { text?: string; style?: string; onPress?: () => void };
+/** Dialogs a screen opened, newest last. A test answers one by pressing its button. */
+export const alerts: { title: string; message?: string; buttons: AlertButton[] }[] = [];
+export const Alert = {
+  alert: (title: string, message?: string, buttons: AlertButton[] = []) => {
+    alerts.push({ title, message, buttons });
+  },
+};
+/** Presses a button of the newest dialog, as the user would. */
+export function answerAlert(text: string) {
+  const button = alerts.at(-1)?.buttons.find((b) => b.text === text);
+  if (!button) throw new Error(`No dialog button "${text}"`);
+  button.onPress?.();
+}
+// No Back button in the tests yet: a test that needs one adds a way to press it here.
 export const BackHandler = {
   addEventListener: () => ({ remove: () => {} }),
 };

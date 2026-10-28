@@ -1,5 +1,11 @@
 /* oxlint-disable eslint/no-await-in-loop -- SQLite transaction writes must stop in order on failure. */
-import { Collection, uuid7, type CollectionEnvironment, type CollectionState } from "@app/core";
+import {
+  Collection,
+  parseCollection,
+  uuid7,
+  type CollectionEnvironment,
+  type CollectionState,
+} from "@app/core";
 import { migrationStatements } from "./migrations.ts";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
@@ -38,14 +44,15 @@ export async function openCollectionStore(
     .where(sql`id = 'deviceId'`);
   if (!device) throw new Error("Device identity missing");
   const environment = { ...env, deviceId: device.value };
-  const read = async (): Promise<CollectionState> => ({
-    decks: (await db.select().from(decks)).map((r) => r.body),
-    notes: (await db.select().from(notes)).map((r) => r.body),
-    cards: (await db.select().from(cards)).map((r) => r.body),
-    noteTypes: (await db.select().from(noteTypes)).map((r) => r.body),
-    presets: (await db.select().from(presets)).map((r) => r.body),
-    tombstones: (await db.select().from(tombstones)).map((r) => r.body),
-  });
+  const read = async (): Promise<CollectionState> =>
+    parseCollection({
+      decks: (await db.select().from(decks)).map((r) => r.body),
+      notes: (await db.select().from(notes)).map((r) => r.body),
+      cards: (await db.select().from(cards)).map((r) => r.body),
+      noteTypes: (await db.select().from(noteTypes)).map((r) => r.body),
+      presets: (await db.select().from(presets)).map((r) => r.body),
+      tombstones: (await db.select().from(tombstones)).map((r) => r.body),
+    });
   let queue: Promise<unknown> = Promise.resolve();
   const change = (command: (collection: Collection) => void): Promise<CollectionState> => {
     const operation = queue.then(async () => {

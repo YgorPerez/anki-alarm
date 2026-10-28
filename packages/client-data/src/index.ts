@@ -8,6 +8,8 @@ import { Context, Effect, Layer } from "effect";
 import {
   uuid7,
   studyQueue,
+  checkLogEntry,
+  dueInDays,
   type LogEntry,
   type Grade,
   updateThemeSettings,
@@ -38,6 +40,12 @@ interface Data {
   collection: Effect.Effect<CollectionState, Error>;
   reviewLog: Effect.Effect<LogEntry[], Error>;
   answerCard: (cardId: string, grade: Grade, durationMs: number) => Effect.Effect<LogEntry, Error>;
+  /** Forget: appends a reset. */
+  forgetCard: (cardId: string) => Effect.Effect<LogEntry, Error>;
+  /** Appends a set due date at the start of the study day `days` from today. */
+  setDueDate: (cardId: string, days: number) => Effect.Effect<LogEntry, Error>;
+  /** Appends a void for one earlier review, reset or set due date. */
+  undo: (entryId: string) => Effect.Effect<LogEntry, Error>;
   changeCollection: (
     command: (collection: Collection) => void,
   ) => Effect.Effect<CollectionState, Error>;
@@ -105,39 +113,54 @@ async function open(driver: SQLiteConnection): Promise<Data> {
     });
   }
   const readLog = async () => (await collectionDb.select().from(reviewLog)).map((r) => r.body);
+  /** Appends one entry Core accepts, with its outbox record, in one transaction. */
+  const append = (
+    build: (state: CollectionState, log: LogEntry[], entry: { id: string; at: number }) => LogEntry,
+  ) =>
+    serial(() =>
+      transaction(collectionSql, async () => {
+        const state = await store.read();
+        const log = await readLog();
+        const at = driver.now();
+        const entry = build(state, log, { id: uuid7(at, driver.random()), at });
+        checkLogEntry(state, log, entry);
+        await collectionDb.insert(reviewLog).values({ id: entry.id, body: entry });
+        await collectionDb
+          .insert(outbox)
+          .values({ kind: "reviewLog", recordId: entry.id, body: entry });
+        return entry;
+      }),
+    );
   return {
     reviewLog: serial(readLog),
     answerCard: (cardId, grade, durationMs) =>
-      serial(() =>
-        transaction(collectionSql, async () => {
-          if (![1, 2, 3, 4].includes(grade) || !Number.isFinite(durationMs) || durationMs < 0)
-            throw new Error("Invalid answer");
-          const state = await store.read();
-          const card = state.cards.find((c) => c.id === cardId);
-          const at = driver.now();
-          if (
-            !card ||
-            !studyQueue(state, await readLog(), card.fields.deckId.value, at).some(
-              (c) => c.card.id === cardId,
-            )
+      append((state, log, base) => {
+        if (![1, 2, 3, 4].includes(grade) || !Number.isFinite(durationMs) || durationMs < 0)
+          throw new Error("Invalid answer");
+        const card = state.cards.find((c) => c.id === cardId);
+        if (
+          !card ||
+          !studyQueue(state, log, card.fields.deckId.value, base.at).some(
+            (c) => c.card.id === cardId,
           )
-            throw new Error("Card is not available for study");
-          const entry: LogEntry = {
-            kind: "review",
-            id: uuid7(at, driver.random()),
-            cardId,
-            at,
-            grade,
-            durationMs,
-            origin: "phone",
-          };
-          await collectionDb.insert(reviewLog).values({ id: entry.id, body: entry });
-          await collectionDb
-            .insert(outbox)
-            .values({ kind: "reviewLog", recordId: entry.id, body: entry });
-          return entry;
-        }),
-      ),
+        )
+          throw new Error("Card is not available for study");
+        return { ...base, kind: "review", cardId, grade, durationMs, origin: "phone" };
+      }),
+    forgetCard: (cardId) => append((_, __, base) => ({ ...base, kind: "reset", cardId })),
+    setDueDate: (cardId, days) =>
+      append((_, __, base) => ({
+        ...base,
+        kind: "setDueDate",
+        cardId,
+        due: dueInDays(days, base.at),
+      })),
+    undo: (targetId) =>
+      append((_, log, base) => {
+        const target = log.find((e) => e.id === targetId);
+        if (!target) throw new Error("Nothing to undo");
+        return { ...base, kind: "void", cardId: target.cardId, targetId };
+      }),
     collection: serial(store.read),
     changeCollection: (command) => serial(() => store.change(command)),
     alarms: serial(async () =>

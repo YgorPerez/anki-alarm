@@ -1,10 +1,13 @@
 import {
+  cardMemory,
   type Collection,
   type CollectionState,
   type Deck,
-  type Note,
   type Locale,
+  type Note,
 } from "@app/core";
+import type { ClientData } from "@app/client-data";
+import { useForm } from "@tanstack/react-form";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -13,7 +16,6 @@ import {
   Pressable,
   ScrollView,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,80 +23,17 @@ import { copy } from "./copy.ts";
 import { localData } from "./database.ts";
 import { Effect } from "effect";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-
+import { Button, SaveButtons, TextField } from "./controls.tsx";
+import { CardActions } from "./CardActions.tsx";
+import { DeckOptionsEditor } from "./DeckOptionsEditor.tsx";
+import { editingCopy } from "./editing-copy.ts";
+import { bold, regular } from "./fonts.ts";
+import { NoteEditor, type NoteDraft } from "./NoteEditor.tsx";
 import { StudyScreen } from "./StudyScreen.tsx";
 
-type Form = { kind: "deck" | "note"; id?: string; first: string; second: string };
-const regular = { fontFamily: "AtkinsonHyperlegible_400Regular" };
-const bold = { fontFamily: "AtkinsonHyperlegible_700Bold" };
-function Button({
-  label,
-  onPress,
-  primary = false,
-  destructive = false,
-  disabled = false,
-}: {
-  label: string;
-  onPress: () => void;
-  primary?: boolean;
-  destructive?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      className={
-        primary
-          ? "min-h-12 justify-center rounded-full bg-primary px-5 py-3 active:opacity-80 disabled:opacity-40"
-          : "min-h-12 justify-center rounded-full bg-surface px-5 py-3 active:opacity-80 disabled:opacity-40"
-      }
-    >
-      <Text
-        style={regular}
-        className={
-          destructive
-            ? "text-body text-destructive"
-            : primary
-              ? "text-body text-primary-foreground"
-              : "text-body text-foreground"
-        }
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-function Field({
-  label,
-  value,
-  onChange,
-  multiline = false,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  multiline?: boolean;
-}) {
-  return (
-    <View className="gap-2">
-      <Text style={regular} className="text-label text-muted-foreground">
-        {label}
-      </Text>
-      <TextInput
-        accessibilityLabel={label}
-        value={value}
-        onChangeText={onChange}
-        multiline={multiline}
-        textAlignVertical="top"
-        style={regular}
-        className="min-h-12 rounded-lg border border-border bg-surface p-4 text-body text-foreground"
-      />
-    </View>
-  );
-}
+type Form = { kind: "deck"; id?: string } | { kind: "note"; id?: string } | { kind: "options" };
+type Translate = ReturnType<typeof copy>;
+
 export function CollectionScreen({
   locale,
   onExit,
@@ -109,6 +48,10 @@ export function CollectionScreen({
     queryKey: ["collection"],
     queryFn: () => Effect.runPromise(localData((data) => data.collection)),
   });
+  const log = useQuery({
+    queryKey: ["reviewLog"],
+    queryFn: () => Effect.runPromise(localData((data) => data.reviewLog)),
+  });
   const state = query.data;
   const [studying, setStudying] = useState(false);
   const [deckId, setDeckId] = useState<string>();
@@ -118,9 +61,6 @@ export function CollectionScreen({
   const [error, setError] = useState(false);
   const t = copy(locale);
   const insets = useSafeAreaInsets();
-  const load = () => {
-    void query.refetch();
-  };
   const goBack = useCallback(() => {
     if (studying) return false;
     if (locked.current) return true;
@@ -149,14 +89,22 @@ export function CollectionScreen({
     const handler = BackHandler.addEventListener("hardwareBackPress", goBack);
     return () => handler.remove();
   }, [goBack]);
-  async function change(command: (collection: Collection) => void, onSaved: () => void) {
+  /** Runs one write at a time; the previous data stays on screen when it fails. */
+  async function write(
+    task: (data: ClientData["Service"]) => Effect.Effect<unknown, Error>,
+    onSaved: () => void = () => {},
+  ) {
     if (locked.current) return;
     locked.current = true;
     setBusy(true);
     setError(false);
     try {
-      await Effect.runPromise(localData((data) => data.changeCollection(command)));
-      await queryClient.invalidateQueries({ queryKey: ["collection"] });
+      await Effect.runPromise(localData(task));
+      await Promise.all(
+        ["collection", "reviewLog", "study"].map((key) =>
+          queryClient.invalidateQueries({ queryKey: [key] }),
+        ),
+      );
       onSaved();
     } catch {
       setError(true);
@@ -164,17 +112,21 @@ export function CollectionScreen({
     locked.current = false;
     setBusy(false);
   }
+  const change = (command: (collection: Collection) => void, onSaved: () => void) =>
+    write((data) => data.changeCollection(command), onSaved);
   const deck = state?.decks.find((d) => d.id === deckId);
-  const notes = state?.notes.filter((n) => n.fields.deckId.value === deckId) ?? [];
-  function save() {
-    if (!form) return;
+  const cancel = () => {
+    setError(false);
+    setForm(undefined);
+  };
+  function saveNote(draft: NoteDraft, id: string | undefined) {
     void change(
-      (c) => {
-        if (form.kind === "deck") {
-          if (form.id) c.renameDeck(form.id, form.first);
-          else c.createDeck(form.first);
-        } else if (form.id) c.editBasicNote(form.id, form.first, form.second);
-        else if (deckId) c.addBasicNote(deckId, form.first, form.second);
+      (c: Collection) => {
+        if (id) {
+          c.editNote(id, draft.values);
+          c.moveCards(cardsOf(state, id), draft.deckId);
+        } else if (draft.noteTypeId) c.addNote(draft.deckId, draft.noteTypeId, draft.values);
+        else c.addBasicNote(draft.deckId, draft.values[0] ?? "", draft.values[1] ?? "");
       },
       () => setForm(undefined),
     );
@@ -197,6 +149,107 @@ export function CollectionScreen({
   }
   if (studying && deckId)
     return <StudyScreen deckId={deckId} locale={locale} onExit={() => setStudying(false)} />;
+  const content = () => {
+    if (!state)
+      return (
+        <>
+          <Text style={regular} className="text-body text-muted-foreground">
+            {query.isError ? "" : t("loading")}
+          </Text>
+          {query.isError && <Button label={t("retry")} onPress={() => void query.refetch()} />}
+        </>
+      );
+    if (form?.kind === "deck")
+      return (
+        <DeckNameEditor
+          locale={locale}
+          busy={busy}
+          name={state.decks.find((d) => d.id === form.id)?.fields.name.value ?? ""}
+          onCancel={cancel}
+          onSave={(name) =>
+            void change(
+              (c) => {
+                if (form.id) c.renameDeck(form.id, name);
+                else c.createDeck(name);
+              },
+              () => setForm(undefined),
+            )
+          }
+        />
+      );
+    if (form?.kind === "note" && deck) {
+      const note = state.notes.find((n) => n.id === form.id);
+      const cards = state.cards.filter((c) => c.fields.noteId.value === note?.id);
+      return (
+        <>
+          <NoteEditor
+            note={note}
+            noteTypes={state.noteTypes}
+            decks={state.decks}
+            deckId={cards[0]?.fields.deckId.value ?? deck.id}
+            locale={locale}
+            busy={busy}
+            onCancel={cancel}
+            onSave={(draft) => saveNote(draft, note?.id)}
+          />
+          {note && (
+            <CardActions
+              cards={cards}
+              memory={(cardId) => cardMemory(state, log.data ?? [], cardId, Date.now())}
+              locale={locale}
+              busy={busy || !log.data}
+              onForget={(cardId) => void write((data) => data.forgetCard(cardId))}
+              onSetDueDate={(cardId, days) => void write((data) => data.setDueDate(cardId, days))}
+            />
+          )}
+        </>
+      );
+    }
+    const preset = state.presets.find((p) => p.id === deck?.fields.presetId.value);
+    if (form?.kind === "options" && preset)
+      return (
+        <DeckOptionsEditor
+          preset={preset}
+          deckCount={state.decks.filter((d) => d.fields.presetId.value === preset.id).length}
+          locale={locale}
+          busy={busy}
+          onCancel={cancel}
+          onSave={(options) =>
+            void change(
+              (c: Collection) => c.updatePreset(preset.id, options),
+              () => setForm(undefined),
+            )
+          }
+        />
+      );
+    if (deck)
+      return (
+        <DeckDetails
+          t={t}
+          locale={locale}
+          deck={deck}
+          notes={notesIn(state, deck.id)}
+          busy={busy}
+          edit={(next) => {
+            setError(false);
+            setForm(next);
+          }}
+          study={() => setStudying(true)}
+          remove={confirmDelete}
+        />
+      );
+    return (
+      <DeckList
+        t={t}
+        state={state}
+        create={() => setForm({ kind: "deck" })}
+        select={(id) => {
+          setError(false);
+          setDeckId(id);
+        }}
+      />
+    );
+  };
   return (
     <KeyboardAvoidingView
       behavior="padding"
@@ -213,124 +266,99 @@ export function CollectionScreen({
           {!form && !deck && <Button label={t("theme")} disabled={busy} onPress={onTheme} />}
         </View>
         <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
-          {screenTitle(t, form, deck)}
+          {screenTitle(t, locale, form, deck)}
         </Text>
         {error || query.isError ? (
           <Text accessibilityRole="alert" style={regular} className="text-body text-destructive">
             {t(state ? "error" : "loadError")}
           </Text>
         ) : null}
-        {deck && !form && <Button label={t("study")} primary onPress={() => setStudying(true)} />}
-        <ScreenContent
-          state={state}
-          form={form}
-          deck={deck}
-          t={t}
-          error={error || query.isError}
-          busy={busy}
-          notes={notes}
-          retry={() => {
-            setError(false);
-            load();
-          }}
-          setForm={(next) => {
-            setError(false);
-            setForm(next);
-          }}
-          save={save}
-          cancel={goBack}
-          remove={confirmDelete}
-          select={(id) => {
-            setError(false);
-            setDeckId(id);
-          }}
-        />
+        {content()}
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
-type Translate = ReturnType<typeof copy>;
-function Loading({ t, error, retry }: { t: Translate; error: boolean; retry: () => void }) {
-  return (
-    <>
-      <Text style={regular} className="text-body text-muted-foreground">
-        {error ? "" : t("loading")}
-      </Text>
-      {error && <Button label={t("retry")} onPress={retry} />}
-    </>
+const cardsOf = (state: CollectionState | undefined, noteId: string) =>
+  state?.cards.filter((c) => c.fields.noteId.value === noteId).map((c) => c.id) ?? [];
+/** Notes with a card in the deck. Cards, not notes, belong to decks. */
+const notesIn = (state: CollectionState, deckId: string) => {
+  const ids = new Set(
+    state.cards.filter((c) => c.fields.deckId.value === deckId).map((c) => c.fields.noteId.value),
   );
-}
-function Editor({
-  t,
-  form,
-  setForm,
+  return state.notes.filter((n) => ids.has(n.id));
+};
+function DeckNameEditor({
+  locale,
+  name,
   busy,
-  save,
-  cancel,
+  onSave,
+  onCancel,
 }: {
-  t: Translate;
-  form: Form;
-  setForm: (form: Form) => void;
+  locale: Locale;
+  name: string;
   busy: boolean;
-  save: () => void;
-  cancel: () => void;
+  onSave: (name: string) => void;
+  onCancel: () => void;
 }) {
+  const t = copy(locale);
+  const form = useForm({
+    defaultValues: { name },
+    onSubmit: ({ value }) => onSave(value.name),
+  });
   return (
     <View className="gap-6" pointerEvents={busy ? "none" : "auto"}>
-      {form.kind === "note" && (
-        <Text style={regular} className="text-label text-muted-foreground">
-          {t("basic")}
-        </Text>
-      )}
-      <Field
-        label={t(form.kind === "deck" ? "deckName" : "front")}
-        value={form.first}
-        onChange={(first) => setForm({ ...form, first })}
-        multiline={form.kind === "note"}
-      />
-      {form.kind === "note" && (
-        <Field
-          label={t("answer")}
-          value={form.second}
-          onChange={(second) => setForm({ ...form, second })}
-          multiline
-        />
-      )}
-      <Button
-        label={t(busy ? "saving" : "save")}
-        primary
-        disabled={busy || !form.first.trim()}
-        onPress={save}
-      />
-      <Button label={t("cancel")} disabled={busy} onPress={cancel} />
+      <form.Field name="name">
+        {(field) => (
+          <TextField
+            label={t("deckName")}
+            value={field.state.value}
+            onChange={field.handleChange}
+            onBlur={field.handleBlur}
+          />
+        )}
+      </form.Field>
+      <form.Subscribe selector={(s) => Boolean(s.values.name.trim())}>
+        {(named) => (
+          <SaveButtons
+            locale={locale}
+            busy={busy}
+            disabled={!named}
+            onSave={() => {
+              void form.handleSubmit();
+            }}
+            onCancel={onCancel}
+          />
+        )}
+      </form.Subscribe>
     </View>
   );
 }
 function DeckDetails({
   t,
+  locale,
   deck,
   notes,
   busy,
   edit,
+  study,
   remove,
 }: {
   t: Translate;
+  locale: Locale;
   deck: Deck;
   notes: Note[];
   busy: boolean;
   edit: (form: Form) => void;
+  study: () => void;
   remove: () => void;
 }) {
   return (
     <>
+      <Button label={t("study")} primary disabled={busy} onPress={study} />
       <Text style={regular} className="text-label text-muted-foreground">
         {notes.length} {t("cards")}
       </Text>
-      <Button
-        label={t("addNote")}
-        disabled={busy}
-        onPress={() => edit({ kind: "note", first: "", second: "" })}
-      />
+      <Button label={t("addNote")} disabled={busy} onPress={() => edit({ kind: "note" })} />
       {!notes.length && (
         <Text style={regular} className="text-body text-muted-foreground">
           {t("emptyDeck")}
@@ -341,31 +369,27 @@ function DeckDetails({
           key={note.id}
           accessibilityRole="button"
           disabled={busy}
-          accessibilityLabel={`${t("editNote")}: ${note.fields.front.value}`}
-          onPress={() =>
-            edit({
-              kind: "note",
-              id: note.id,
-              first: note.fields.front.value,
-              second: note.fields.back.value,
-            })
-          }
+          accessibilityLabel={`${t("editNote")}: ${note.values[0]?.value ?? ""}`}
+          onPress={() => edit({ kind: "note", id: note.id })}
           className="min-h-16 gap-2 border-b border-border py-4 active:opacity-80"
         >
           <Text style={bold} className="text-body text-foreground">
-            {note.fields.front.value}
+            {note.values[0]?.value}
           </Text>
           <Text style={regular} className="text-body text-answer">
-            {note.fields.back.value}
+            {note.values[1]?.value}
           </Text>
         </Pressable>
       ))}
       <Button
+        label={editingCopy(locale)("deckOptions")}
+        disabled={busy}
+        onPress={() => edit({ kind: "options" })}
+      />
+      <Button
         label={t("rename")}
         disabled={busy}
-        onPress={() =>
-          edit({ kind: "deck", id: deck.id, first: deck.fields.name.value, second: "" })
-        }
+        onPress={() => edit({ kind: "deck", id: deck.id })}
       />
       <Button label={t("delete")} destructive disabled={busy} onPress={remove} />
     </>
@@ -408,53 +432,9 @@ function DeckList({
     </>
   );
 }
-function screenTitle(t: Translate, form: Form | undefined, deck: Deck | undefined) {
+function screenTitle(t: Translate, locale: Locale, form: Form | undefined, deck: Deck | undefined) {
   if (!form) return deck?.fields.name.value ?? t("title");
+  if (form.kind === "options") return editingCopy(locale)("deckOptions");
   if (form.kind === "deck") return t(form.id ? "rename" : "newDeck");
   return t(form.id ? "editNote" : "addNote");
-}
-function ScreenContent({
-  state,
-  form,
-  deck,
-  t,
-  error,
-  busy,
-  notes,
-  retry,
-  setForm,
-  save,
-  cancel,
-  remove,
-  select,
-}: {
-  state: CollectionState | undefined;
-  form: Form | undefined;
-  deck: Deck | undefined;
-  t: Translate;
-  error: boolean;
-  busy: boolean;
-  notes: Note[];
-  retry: () => void;
-  setForm: (form: Form) => void;
-  save: () => void;
-  cancel: () => void;
-  remove: () => void;
-  select: (id: string) => void;
-}) {
-  if (!state) return <Loading t={t} error={error} retry={retry} />;
-  if (form)
-    return <Editor t={t} form={form} setForm={setForm} busy={busy} save={save} cancel={cancel} />;
-  if (deck)
-    return (
-      <DeckDetails t={t} deck={deck} notes={notes} busy={busy} edit={setForm} remove={remove} />
-    );
-  return (
-    <DeckList
-      t={t}
-      state={state}
-      create={() => setForm({ kind: "deck", first: "", second: "" })}
-      select={select}
-    />
-  );
 }
