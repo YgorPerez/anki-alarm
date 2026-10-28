@@ -1,6 +1,6 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only freshly filtered/mapped arrays are sorted. */
 import { createEmptyCard, fsrs, State, type Card as MemoryState, type Grade } from "ts-fsrs";
-import type { Card, CollectionState, Preset } from "./collection.ts";
+import type { Card, CollectionState, Deck, Preset } from "./collection.ts";
 export type { MemoryState, Grade };
 /** FSRS card states: New, Learning, Review, Relearning. */
 export { State as CardState };
@@ -143,6 +143,19 @@ export function studyDayStart(now: number, hour = 4): number {
   date.setHours(hour, 0, 0, 0);
   return date.getTime();
 }
+/** The preset a deck schedules with: its own, with the deck's desired retention when set. */
+export function deckPreset(collection: CollectionState, deck: Deck): Preset | undefined {
+  const base = collection.presets.find((p) => p.id === deck.fields.presetId.value);
+  const override = deck.fields.desiredRetention?.value;
+  if (!base || override == null) return base;
+  return {
+    ...base,
+    fields: {
+      ...base.fields,
+      desiredRetention: { ...base.fields.desiredRetention, value: override },
+    },
+  };
+}
 export function studyQueue(
   collection: CollectionState,
   log: readonly LogEntry[],
@@ -151,19 +164,8 @@ export function studyQueue(
   dayStart = studyDayStart(now),
 ) {
   const deck = collection.decks.find((d) => d.id === deckId);
-  const base = collection.presets.find((p) => p.id === deck?.fields.presetId.value);
-  if (!deck || !base) throw new Error("Deck preset missing");
-  const override = deck.fields.desiredRetention?.value;
-  const preset: Preset =
-    override == null
-      ? base
-      : {
-          ...base,
-          fields: {
-            ...base.fields,
-            desiredRetention: { ...base.fields.desiredRetention, value: override },
-          },
-        };
+  const preset = deck && deckPreset(collection, deck);
+  if (!deck || !preset) throw new Error("Deck preset missing");
   const cards = collection.cards.filter(
     (c) => c.fields.deckId.value === deckId && !c.fields.suspended?.value,
   );

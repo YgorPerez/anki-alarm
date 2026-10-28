@@ -213,17 +213,23 @@ function renderCloze(value: string, active: number, side: "front" | "back", only
   return answers.join(", ");
 }
 
+const SOURCE = /(<(?:img|audio|video|source)\b[^>]*?\bsrc=)(["']?)([^"'\s>]+)\2/gi;
+const SOUND = /\[sound:([^\]]+)\]/g;
+const REMOTE = /^(?:[a-z][\w+.-]*:|\/)/i;
 /** `[sound:…]` becomes a player and local `src` names become media URLs. */
 function resolveMedia(html: string, media: (name: string) => string) {
   const url = (name: string) => escape(media(plain(name)));
   return html
-    .replace(
-      /(<(?:img|audio|video|source)\b[^>]*?\bsrc=)(["']?)([^"'\s>]+)\2/gi,
-      (match, start: string, quote: string, name: string) =>
-        /^(?:[a-z][\w+.-]*:|\/)/i.test(name) ? match : `${start}"${url(name)}"`,
+    .replace(SOURCE, (match, start: string, quote: string, name: string) =>
+      REMOTE.test(name) ? match : `${start}"${url(name)}"`,
     )
     .replace(
-      /\[sound:([^\]]+)\]/g,
+      SOUND,
       (_, name: string) => `<audio controls preload="none" src="${url(name)}"></audio>`,
     );
+}
+/** The local media file names `html` uses, as `renderCard` resolves them. */
+export function mediaNames(html: string): string[] {
+  const names = [...html.matchAll(SOURCE)].map((m) => m[3]!).filter((name) => !REMOTE.test(name));
+  return [...names, ...[...html.matchAll(SOUND)].map((m) => m[1]!)].map(plain);
 }

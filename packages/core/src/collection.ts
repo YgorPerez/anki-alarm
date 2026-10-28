@@ -535,11 +535,16 @@ export class Collection {
 
   /**
    * Merges an Anki package. Ids come from Anki identities, so importing it again, here or on
-   * another device, finds the same records. Each property keeps the newer of its local clock and
-   * the Anki modification time. Deleted records stay deleted. Returns the package's review log as
-   * entries to append; their ids are stable too, so appending them again changes nothing.
+   * another device, finds the same records; records this app exported keep their own ids. Each
+   * property keeps the newer of its local clock and the Anki modification time. Deleted records
+   * stay deleted. Returns the package's review log as entries to append; their ids are stable too,
+   * so appending them again changes nothing. Entries `known` already holds under another id (this
+   * app's own answers, exported and imported back) are left out.
    */
-  importAnki(source: AnkiPackage): { log: LogEntry[]; notes: number; cards: number } {
+  importAnki(
+    source: AnkiPackage,
+    known: readonly LogEntry[] = [],
+  ): { log: LogEntry[]; notes: number; cards: number } {
     const dead = new Set(this.state.tombstones.map((t) => `${t.kind}:${t.id}`));
     /** Inserts or updates by property; undefined when the record was deleted here. */
     const merge = <R extends Mergeable>(
@@ -582,20 +587,26 @@ export class Collection {
     const presets = new Map<number, string>();
     for (const p of source.presets) {
       if (!source.decks.some((d) => d.presetId === p.id && usedDecks.has(d.id))) continue;
-      const id = importId("preset", p.id, p.name);
-      const { id: ankiId, mtime, ...options } = p;
-      const values = { ...options, fsrsParameters: [...DEFAULT_FSRS_PARAMETERS] };
-      const rest = { anki: { id: ankiId } };
+      const { id, rest } = identity(p.appId, importId("preset", p.id, p.name), { id: p.id });
+      const { name, newPerDay, reviewsPerDay, desiredRetention, learningSteps, mtime } = p;
+      const weights = p.fsrsParameters?.length === 21 ? p.fsrsParameters : DEFAULT_FSRS_PARAMETERS;
+      const values = {
+        name,
+        newPerDay,
+        reviewsPerDay,
+        desiredRetention,
+        learningSteps,
+        fsrsParameters: [...weights],
+      };
       if (merge("presets", this.state.presets, index.presets, { id, values, mtime, rest }))
         presets.set(p.id, id);
     }
     const decks = new Map<number, string>();
     for (const d of source.decks) {
       if (!usedDecks.has(d.id)) continue;
-      const id = importId("deck", d.id, d.name);
+      const { id, rest } = identity(d.appId, importId("deck", d.id, d.name), { id: d.id });
       const presetId = presets.get(d.presetId) ?? this.defaultPreset().id;
       const values = { name: d.name, presetId, desiredRetention: d.desiredRetention };
-      const rest = { anki: { id: d.id } };
       if (merge("decks", this.state.decks, index.decks, { id, values, mtime: d.mtime, rest }))
         decks.set(d.id, id);
     }
@@ -603,7 +614,6 @@ export class Collection {
     const usedTypes = new Set(source.notes.map((n) => n.noteTypeId));
     for (const t of source.noteTypes) {
       if (!usedTypes.has(t.id)) continue;
-      const id = importId("noteType", t.id);
       const values = {
         name: t.name,
         kind: t.kind,
@@ -611,12 +621,12 @@ export class Collection {
         templates: t.templates.map(({ name, front, back }) => ({ name, front, back })),
         css: t.css,
       };
-      const anki = {
+      const { id, rest } = identity(t.appId, importId("noteType", t.id), {
         id: t.id,
         fieldIds: t.fields.map((f) => f.id),
         templateIds: t.templates.map((x) => x.id),
-      };
-      const merged = { id, values, mtime: t.mtime, rest: { anki } };
+      });
+      const merged = { id, values, mtime: t.mtime, rest };
       if (merge("noteTypes", this.state.noteTypes, index.noteTypes, merged)) types.set(t.id, id);
     }
     const cardsOf = new Map<number, AnkiPackage["cards"]>();
@@ -632,9 +642,12 @@ export class Collection {
       const own = cardsOf.get(n.id)?.sort((a, b) => a.ordinal - b.ordinal);
       const noteTypeId = types.get(n.noteTypeId);
       if (!own?.length || !noteTypeId) continue;
-      const id = importId("note", n.guid);
+      const { id, rest: identified } = identity(n.appId, importId("note", n.guid), {
+        id: n.id,
+        guid: n.guid,
+      });
       const values = { noteTypeId, tags: n.tags };
-      const rest = { anki: { id: n.id, guid: n.guid }, values: [] };
+      const rest = { ...identified, values: [] };
       const note = merge("notes", this.state.notes, index.notes, {
         id,
         values,
@@ -660,16 +673,17 @@ export class Collection {
           id: cardId(id, c.ordinal),
           values: cardValues,
           mtime: c.mtime,
-          rest: { anki: { id: c.id } },
+          rest: n.appId ? {} : { anki: { id: c.id } },
         };
         const card = merge("cards", this.state.cards, index.cards, merged);
         if (card) cards.set(c.id, card.id);
       }
     }
     const log: LogEntry[] = [];
+    const ours = unmatched(known);
     for (const r of source.revlog) {
       const card = cards.get(r.cardId);
-      if (!card) continue;
+      if (!card || ours.take(card, r)) continue;
       const base = { id: importId("review", `${r.cardId}:${r.id}`), cardId: card, at: r.at };
       if (r.kind === "review")
         log.push({
@@ -686,10 +700,46 @@ export class Collection {
   }
 }
 
-/** Anki intervals are days when positive and seconds when negative. Days end at the study day. */
-function dueAfter(at: number, interval: number) {
+/** The app's own records come back under their own id and with no Anki identity. */
+const identity = <T extends object>(appId: string | undefined, id: string, anki: T) =>
+  appId ? { id: appId, rest: {} } : { id, rest: { anki } };
+const sameEntry = (entry: LogEntry, row: AnkiPackage["revlog"][number]) => {
+  if (entry.kind !== row.kind || row.at < entry.at || row.at - entry.at >= 1000) return false;
+  if (entry.kind === "review") {
+    const grade: number = entry.grade;
+    return row.kind === "review" && row.grade === grade;
+  }
+  if (entry.kind === "setDueDate")
+    return row.kind === "setDueDate" && dueAfter(row.at, row.interval) === entry.due;
+  return true;
+};
+/**
+ * Known entries an exported revlog row stands for, each taken once: same card, kind, grade or due,
+ * and an answer time no more than a second earlier (export moves rows that share a millisecond).
+ */
+function unmatched(known: readonly LogEntry[]) {
+  const byCard = new Map<string, LogEntry[]>();
+  for (const entry of known) {
+    const own = byCard.get(entry.cardId);
+    if (own) own.push(entry);
+    else byCard.set(entry.cardId, [entry]);
+  }
+  return {
+    take(card: string, row: AnkiPackage["revlog"][number]) {
+      const own = byCard.get(card) ?? [];
+      const index = own.findIndex((entry) => sameEntry(entry, row));
+      if (index >= 0) own.splice(index, 1);
+      return index >= 0;
+    },
+  };
+}
+
+/**
+ * Anki intervals are days when positive and seconds when negative. Days end at the study day; 0
+ * is due today.
+ */
+export function dueAfter(at: number, interval: number) {
   if (interval < 0) return at - interval * 1000;
-  if (interval === 0) return at;
   const due = new Date(studyDayStart(at));
   due.setDate(due.getDate() + interval);
   return due.getTime();

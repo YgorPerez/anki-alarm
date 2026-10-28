@@ -58,8 +58,8 @@ export function importId(kind: ImportKind, identity: string | number, name?: str
   return uuid5(IMPORT_NAMESPACE, key);
 }
 
-// SHA-1 is required by UUIDv5, not used for passwords or security decisions.
-function sha1(input: Uint8Array): Uint8Array {
+// SHA-1 is required by UUIDv5 and Anki's note checksum, not used for passwords or security decisions.
+export function sha1(input: Uint8Array): Uint8Array {
   const padded = new Uint8Array(Math.ceil((input.length + 9) / 64) * 64);
   padded.set(input);
   padded[input.length] = 128;

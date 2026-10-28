@@ -16,11 +16,15 @@ export interface AnkiDatabase {
   all: (query: string) => Promise<Record<string, unknown>[]>;
   close: () => Promise<void>;
 }
-/** Times are epoch milliseconds. Anki ids stay numbers; field and template ids are int64 strings. */
+/**
+ * Times are epoch milliseconds. Anki ids stay numbers; field and template ids are int64 strings.
+ * `appId` is the app's own id of a record it exported without an Anki identity (apkg-export.ts).
+ */
 export interface AnkiPackage {
   version: 1 | 2 | 3;
   noteTypes: {
     id: number;
+    appId?: string | undefined;
     name: string;
     mtime: number;
     kind: "standard" | "cloze";
@@ -31,6 +35,7 @@ export interface AnkiPackage {
   /** Normal decks only, with `::` between levels. Filtered decks are left out. */
   decks: {
     id: number;
+    appId?: string | undefined;
     name: string;
     mtime: number;
     presetId: number;
@@ -38,15 +43,19 @@ export interface AnkiPackage {
   }[];
   presets: {
     id: number;
+    appId?: string | undefined;
     name: string;
     mtime: number;
     newPerDay: number;
     reviewsPerDay: number;
     desiredRetention: number;
     learningSteps: number[];
+    /** FSRS-6 weights; absent or empty means the defaults. */
+    fsrsParameters?: number[];
   }[];
   notes: {
     id: number;
+    appId?: string | undefined;
     guid: string;
     noteTypeId: number;
     mtime: number;
@@ -191,6 +200,25 @@ const retention = (value: unknown, fallback: number) => {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 && n < 1 ? n : fallback;
 };
+/** FSRS-6 has 21 weights; older parameter sets don't fit the app's scheduler. */
+const fsrs6 = (weights: number[]) => (weights.length === 21 ? weights : []);
+const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+/** The JSON key an exported config record keeps its app id in. Part of the format: never rename. */
+export const APP_ID_KEY = "ankiAlarmId";
+const appId = (value: unknown) => {
+  const id = text(value);
+  return UUID.test(id) ? id.toLowerCase() : undefined;
+};
+/** Schema-15+ config blobs keep unknown schema-11 JSON keys as JSON bytes in field 255. */
+const otherAppId = (config: Message) => {
+  const other = config.bytes(255);
+  if (!other?.length) return undefined;
+  try {
+    return appId(record(JSON.parse(new TextDecoder().decode(other)))[APP_ID_KEY]);
+  } catch {
+    return undefined;
+  }
+};
 
 async function readCollection(db: AnkiDatabase): Promise<Omit<AnkiPackage, "version">> {
   const tables = new Set(
@@ -199,6 +227,8 @@ async function readCollection(db: AnkiDatabase): Promise<Omit<AnkiPackage, "vers
   const config = tables.has("notetypes") ? await readTables(db) : await readJson(db);
   const notes = (await db.all("SELECT id, guid, mid, mod, tags, flds FROM notes")).map((r) => ({
     id: int(r.id),
+    // The app exports its own notes with their id as the guid.
+    appId: appId(r.guid),
     guid: text(r.guid),
     noteTypeId: int(r.mid),
     mtime: int(r.mod) * 1000,
@@ -254,6 +284,7 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
       const m = record(model);
       return {
         id: int(m.id),
+        appId: appId(m[APP_ID_KEY]),
         name: text(m.name),
         mtime: int(m.mod) * 1000,
         kind: int(m.type) === 1 ? "cloze" : "standard",
@@ -281,6 +312,7 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
       .filter((d) => !int(d.dyn))
       .map((d) => ({
         id: int(d.id),
+        appId: appId(d[APP_ID_KEY]),
         name: text(d.name),
         mtime: int(d.mod) * 1000,
         presetId: int(d.conf) || 1,
@@ -291,12 +323,14 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
       .map(record)
       .map((c) => ({
         id: int(c.id),
+        appId: appId(c[APP_ID_KEY]),
         name: text(c.name),
         mtime: int(c.mod) * 1000,
         newPerDay: int(record(c.new).perDay),
         reviewsPerDay: int(record(c.rev).perDay),
         desiredRetention: retention(c.desiredRetention, 0.9),
         learningSteps: steps(record(c.new).delays),
+        fsrsParameters: fsrs6(steps(c.fsrsParams6)),
       })),
   };
 }
@@ -312,6 +346,7 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
       const config = new Message(blob(r.config));
       return {
         id: int(r.id),
+        appId: otherAppId(config),
         name: text(r.name),
         mtime: int(r.mtime_secs) * 1000,
         kind: config.number(1) === 1 ? "cloze" : "standard",
@@ -331,13 +366,14 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
         }),
       };
     }),
-    decks: (await db.all("SELECT id, name, mtime_secs, kind FROM decks")).flatMap((r) => {
+    decks: (await db.all("SELECT id, name, mtime_secs, common, kind FROM decks")).flatMap((r) => {
       const normal = new Message(blob(r.kind)).message(1);
       if (!normal) return [];
       const override = normal.float(10);
       return [
         {
           id: int(r.id),
+          appId: otherAppId(new Message(blob(r.common))),
           name: text(r.name).split("\x1f").join("::"),
           mtime: int(r.mtime_secs) * 1000,
           presetId: normal.number(1) || 1,
@@ -349,12 +385,14 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
       const c = new Message(blob(r.config));
       return {
         id: int(r.id),
+        appId: otherAppId(c),
         name: text(r.name),
         mtime: int(r.mtime_secs) * 1000,
         newPerDay: c.number(9) ?? 0,
         reviewsPerDay: c.number(10) ?? 0,
         desiredRetention: retention(c.float(37), 0.9),
         learningSteps: c.floats(1),
+        fsrsParameters: fsrs6(c.floats(6)),
       };
     }),
   };
