@@ -188,6 +188,9 @@ importers:
 
   packages/design-tokens:
     devDependencies:
+      '@app/core':
+        specifier: workspace:*
+        version: link:../core
       '@types/node':
         specifier: 'catalog:'
         version: 24.12.4
