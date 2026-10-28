@@ -1,14 +1,21 @@
+import type { Locale } from "@app/core";
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { copy } from "#/copy.ts";
+
 import css from "../styles.css?url";
 
+// The language is in the URL (`?lang=en`) on every page, so a link opens in the language it was
+// shared in. The account setting replaces it once there is one.
 export const Route = createRootRoute({
-  head: () => ({
+  validateSearch: (search: Record<string, unknown>): { lang?: Locale } =>
+    search["lang"] === "en" ? { lang: "en" } : {},
+  head: ({ match }) => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Despertador" },
+      { title: copy(match.search.lang ?? "pt-BR")("title") },
     ],
     links: [{ rel: "stylesheet", href: css }],
   }),
@@ -24,8 +31,9 @@ function RootComponent() {
 }
 
 function RootDocument({ children }: { children: ReactNode }) {
+  const { lang = "pt-BR" } = Route.useSearch();
   return (
-    <html lang="pt-BR">
+    <html lang={lang}>
       <head>
         <HeadContent />
       </head>

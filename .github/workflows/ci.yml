@@ -46,7 +46,7 @@ jobs:
         run: pnpm fallow
 
       - name: React Doctor
-        run: pnpm doctor
+        run: pnpm react-doctor
 
   # The apps build: the web for Workers, and the phone's JS bundle through Metro and uniwind.
   build:

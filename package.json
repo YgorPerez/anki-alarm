@@ -9,7 +9,7 @@
     "fmt": "vp fmt",
     "test": "vp test run",
     "fallow": "fallow dead-code && fallow dupes",
-    "doctor": "react-doctor --yes --no-score --no-supply-chain --blocking warning"
+    "react-doctor": "react-doctor --yes --no-score --no-supply-chain --blocking warning"
   },
   "devDependencies": {
     "@shadcn/lint": "^0.2.3",
