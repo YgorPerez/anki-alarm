@@ -12,6 +12,8 @@ interface NativeAlarm {
   getRing: () => string | null;
   drainJournal: () => string;
   ack: (ids: readonly string[]) => void;
+  sessionStarted: (ringId: string) => void;
+  activity: (ringId: string) => void;
   dismiss: (ringId: string) => void;
   getPermissions: () => AlarmPermissions;
   isOnboardingComplete: () => boolean;

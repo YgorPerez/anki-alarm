@@ -203,6 +203,8 @@ class AlarmService : Service() {
         "ringerMode=${getSystemService(AudioManager::class.java).ringerMode}",
     )
     AlarmActivityListener.applyLockFlags(true)
+    // A new or restarted service rings at full: the user taps Start again, keeping the progress.
+    if (!sessionStarted) AlarmStore.setPhase(this, null, "ringing")
     if (!sessionStarted) setTarget(1f, ramp = first)
     if (player == null && tone == null) startSound()
     if (vibrator == null && setting("vibrate") == 1 && setting("silent") == 0) startVibration()
@@ -379,7 +381,14 @@ class AlarmService : Service() {
 
   fun startSession() {
     sessionStarted = true
-    log("session started: sound at ${setting("lowLevel")}%, vibration off")
+    log("session started: sound and vibration off")
+    quiet()
+    restartIdle()
+  }
+
+  // An answer or tap: silence again if idle brought the sound back, and restart the idle timer.
+  fun onActivity() {
+    if (!sessionStarted) return
     quiet()
     restartIdle()
   }
