@@ -1,5 +1,6 @@
 import { AlarmSoundSettings } from "./AlarmSoundSettings.tsx";
 import { AlarmDeckSettings } from "./AlarmDeckSettings.tsx";
+import { AlarmReadAloudSettings } from "./AlarmReadAloudSettings.tsx";
 import { AlarmScreen } from "./AlarmScreen.tsx";
 import { ReliabilityScreen } from "./ReliabilityScreen.tsx";
 import { reliabilityCopy } from "./reliability-copy.ts";
@@ -418,6 +419,7 @@ function AlarmEditor({
       />
       <AlarmDeckSettings alarm={options} locale={locale} onChange={setOptions} />
       <AlarmSoundSettings alarm={options} locale={locale} onChange={setOptions} />
+      <AlarmReadAloudSettings alarm={options} locale={locale} onChange={setOptions} />
       <Text accessibilityRole="alert" className="text-body text-attention">
         {error}
       </Text>
