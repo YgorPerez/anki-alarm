@@ -295,9 +295,8 @@ function Home() {
                 locale={locale}
                 onSave={save}
                 onCancel={() => setEditing(null)}
-                {...(alarms.some((a) => a.id === editing.id)
-                  ? { onDelete: () => remove(editing.id) }
-                  : {})}
+                saved={alarms.some((a) => a.id === editing.id)}
+                onDelete={remove}
               />
             ) : (
               <>
@@ -395,6 +394,7 @@ function AlarmEditor({
   locale,
   onSave,
   onCancel,
+  saved,
   onDelete,
 }: {
   alarm: Alarm;
@@ -402,7 +402,8 @@ function AlarmEditor({
   onSave: (alarm: Alarm) => void;
   onCancel: () => void;
   /** A saved alarm can be deleted; a new one only cancelled. */
-  onDelete?: () => void;
+  saved: boolean;
+  onDelete: (alarmId: string) => void;
 }) {
   const [options, setOptions] = useState(alarm);
   const [label, setLabel] = useState(alarm.label);
@@ -484,14 +485,14 @@ function AlarmEditor({
       <Pressable accessibilityRole="button" onPress={onCancel}>
         <Text className="text-body text-foreground">{t("cancel")}</Text>
       </Pressable>
-      {onDelete ? (
+      {saved ? (
         <Pressable
           accessibilityRole="button"
           className="min-h-12 justify-center"
           onPress={() =>
             Alert.alert(t("deleteAlarmTitle"), t("deleteAlarmBody"), [
               { text: t("cancel"), style: "cancel" },
-              { text: t("deleteAlarm"), style: "destructive", onPress: onDelete },
+              { text: t("deleteAlarm"), style: "destructive", onPress: () => onDelete(alarm.id) },
             ])
           }
         >

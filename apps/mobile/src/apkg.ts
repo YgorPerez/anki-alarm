@@ -1,5 +1,4 @@
 import {
-  ClientData,
   exportApkg as exportPackage,
   importApkg as importPackage,
   type ImportSummary,
@@ -55,7 +54,7 @@ function importApkg(bytes: Uint8Array): Promise<ImportSummary> {
   return Effect.runPromise(
     localData((data) =>
       Effect.suspend(() =>
-        importPackage({
+        importPackage(data, {
           ...unzipped(bytes),
           openSqlite: async (database) => {
             const db = await deserializeDatabaseAsync(database);
@@ -65,7 +64,7 @@ function importApkg(bytes: Uint8Array): Promise<ImportSummary> {
             };
           },
         }),
-      ).pipe(Effect.provideService(ClientData, data)),
+      ),
     ),
   );
 }
@@ -76,9 +75,7 @@ function importApkg(bytes: Uint8Array): Promise<ImportSummary> {
  */
 export async function exportApkg(deckId: string): Promise<string | undefined> {
   const { name, entries } = await Effect.runPromise(
-    localData((data) =>
-      exportPackage(deckId, writeHost(), Date.now()).pipe(Effect.provideService(ClientData, data)),
-    ),
+    localData((data) => exportPackage(data, deckId, writeHost(), Date.now())),
   );
   const bytes = zipSync(entries);
   let folder: Directory;

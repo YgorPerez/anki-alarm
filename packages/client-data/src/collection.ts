@@ -130,4 +130,3 @@ export const openCollectionStore = (
       Effect.map(run(command), ({ state }) => state);
     return { read, change, run, deviceId: device.value };
   });
-export type CollectionStore = Effect.Success<ReturnType<typeof openCollectionStore>>;

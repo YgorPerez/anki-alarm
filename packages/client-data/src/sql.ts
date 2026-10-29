@@ -27,7 +27,7 @@ export class CommandRejected extends Data.TaggedError("CommandRejected")<{
 
 export const storageFailed = (cause: unknown) =>
   new StorageFailed({ message: messageOf(cause), cause });
-export const commandRejected = (cause: unknown) =>
+const commandRejected = (cause: unknown) =>
   new CommandRejected({ message: messageOf(cause), cause });
 
 /** One database call (a drizzle query or a raw statement). */
@@ -58,7 +58,7 @@ export const migrate = (execute: ExecuteSql, database: "collection.db" | "anki-a
   );
 
 /** Rows per statement: two or three parameters each stays under SQLite's oldest 999 limit. */
-export const BATCH = 200;
+const BATCH = 200;
 export function chunks<T>(items: readonly T[], size = BATCH): T[][] {
   const result: T[][] = [];
   for (let i = 0; i < items.length; i += size) result.push(items.slice(i, i + size));

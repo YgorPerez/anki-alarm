@@ -22,12 +22,12 @@ const LONG_OPERATIONS: Partial<Record<Kind, number>> = {
 };
 
 /** No offline storage in this browser, no leader answered in time, or the tab closed. */
-export class StorageUnavailable extends Data.TaggedError("StorageUnavailable")<{
+class StorageUnavailable extends Data.TaggedError("StorageUnavailable")<{
   message: string;
 }> {}
-export type WebDataError = LeaderFailed | StorageUnavailable;
+type WebDataError = LeaderFailed | StorageUnavailable;
 
-export interface WebData {
+interface WebData {
   request: <K extends Kind>(kind: K, ...args: Args<K>) => Effect.Effect<Output<K>, WebDataError>;
   /** After any tab's write or a sync that changed something: refresh what's shown. */
   subscribe: (listener: () => void) => () => void;

@@ -3,7 +3,7 @@
 import { apkgFileName, readApkg, writeApkg, type ApkgHost, type ApkgWriteHost } from "@app/core";
 import { Data, Effect } from "effect";
 
-import { ClientData, type ImportSummary } from "./index.ts";
+import type { ClientData, ImportSummary } from "./index.ts";
 
 /** The file isn't an Anki package Core can read. */
 export class ApkgUnreadable extends Data.TaggedError("ApkgUnreadable")<{ cause: unknown }> {}
@@ -16,9 +16,8 @@ export class ApkgWriteFailed extends Data.TaggedError("ApkgWriteFailed")<{ cause
  * Lets Core read the unzipped package, stores its media files and then merges its records. Media
  * go first, so no imported card points at a missing file.
  */
-export const importApkg = (host: ApkgHost) =>
+export const importApkg = (data: ClientData["Service"], host: ApkgHost) =>
   Effect.gen(function* () {
-    const data = yield* ClientData;
     const { package: source, media } = yield* Effect.tryPromise({
       try: () => readApkg(host),
       catch: (cause) => new ApkgUnreadable({ cause }),
@@ -29,9 +28,13 @@ export const importApkg = (host: ApkgHost) =>
   });
 
 /** A deck with its subdecks, scheduling, history and media: the zip entries and the file name. */
-export const exportApkg = (deckId: string, host: ApkgWriteHost, now: number) =>
+export const exportApkg = (
+  data: ClientData["Service"],
+  deckId: string,
+  host: ApkgWriteHost,
+  now: number,
+) =>
   Effect.gen(function* () {
-    const data = yield* ClientData;
     const [collection, log] = yield* Effect.all([data.collection, data.reviewLog]);
     const deck = collection.decks.find((d) => d.id === deckId);
     if (!deck) return yield* new DeckMissing({ deckId });

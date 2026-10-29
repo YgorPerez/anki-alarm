@@ -1,8 +1,8 @@
 // `.apkg` import and export in the leader's database Worker, through Core's reader and writer.
 import {
-  ClientData,
   exportApkg,
   importApkg,
+  type ClientData,
   type ImportSummary,
   type MediaFiles,
 } from "@app/client-data";
@@ -29,13 +29,11 @@ export interface ApkgExport {
 
 /** The shared flow of `@app/client-data`, with the Worker's zip and sqlite-wasm. */
 export function apkgOperations(data: ClientData["Service"], files: ApkgFiles) {
-  const run = <A, E>(effect: Effect.Effect<A, E, ClientData>) =>
-    Effect.runPromise(Effect.provideService(effect, ClientData, data));
   return {
     importApkg: (bytes: Uint8Array): Promise<ImportSummary> =>
-      run(
+      Effect.runPromise(
         Effect.suspend(() =>
-          importApkg({
+          importApkg(data, {
             ...packageEntries(unzipSync(bytes)),
             decompressZstd: (compressed) => decompress(compressed),
             openSqlite: files.sqlite.open,
@@ -43,8 +41,9 @@ export function apkgOperations(data: ClientData["Service"], files: ApkgFiles) {
         ),
       ),
     exportApkg: (deckId: string): Promise<ApkgExport> =>
-      run(
+      Effect.runPromise(
         exportApkg(
+          data,
           deckId,
           {
             createSqlite: files.sqlite.create,

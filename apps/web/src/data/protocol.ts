@@ -86,6 +86,8 @@ export const toFailure = (error: unknown): Failure => {
  * so the sync scheduler reads it as it would on the phone; `LeaderFailed` when it had none.
  */
 export class LeaderFailed extends Error {
+  // Read by tag, as every Effect error's is (the sync scheduler's `tagOf`).
+  // fallow-ignore-next-line unused-class-member
   readonly ["_tag"]: string;
   constructor(failure: Failure) {
     super(failure.message);
