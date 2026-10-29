@@ -34,8 +34,13 @@ export interface ReliabilityStep {
   kind: ReliabilityKind;
   state: PermissionState;
   restrictedSettings: boolean;
+  /** The app can't read this setting and the user said it's done. */
+  confirmed: boolean;
 }
-export function reliabilitySteps(p: AlarmPermissions): ReliabilityStep[] {
+function reliabilitySteps(
+  p: AlarmPermissions,
+  confirmed: ReadonlySet<ReliabilityKind>,
+): ReliabilityStep[] {
   const kinds: ReliabilityKind[] = [
     "notifications",
     "overlay",
@@ -54,16 +59,47 @@ export function reliabilitySteps(p: AlarmPermissions): ReliabilityStep[] {
     if (["realme", "vivo"].includes(brand)) kinds.push("backgroundPopups");
     kinds.push("recents");
   }
-  return kinds.map((kind) => ({
-    kind,
-    state:
+  return kinds.map((kind) => {
+    const state =
       kind === "recents" || kind === "neverSleeping" || kind === "motorolaBattery"
         ? "unknown"
-        : (p[kind] ?? "unknown"),
-    restrictedSettings:
-      kind === "overlay" &&
-      p.overlay !== "granted" &&
-      p.sdk >= 35 &&
-      (p.installSource === "local" || p.installSource === "downloaded"),
-  }));
+        : (p[kind] ?? "unknown");
+    return {
+      kind,
+      state,
+      restrictedSettings:
+        kind === "overlay" &&
+        p.overlay !== "granted" &&
+        p.sdk >= 35 &&
+        (p.installSource === "local" || p.installSource === "downloaded"),
+      confirmed: state === "unknown" && confirmed.has(kind),
+    };
+  });
+}
+
+const essential: ReadonlySet<ReliabilityKind> = new Set([
+  "notifications",
+  "overlay",
+  "fullScreenIntent",
+  "exactAlarm",
+]);
+export interface ReliabilityChecklist {
+  /** The settings an alarm can't ring or show without. */
+  essentials: ReliabilityStep[];
+  /** Battery and manufacturer settings: they help, and never block. */
+  recommended: ReliabilityStep[];
+  /** Every essential is granted: onboarding can finish and Home needs no warning. */
+  ready: boolean;
+}
+export function reliabilityChecklist(
+  p: AlarmPermissions,
+  confirmed: ReadonlySet<ReliabilityKind>,
+): ReliabilityChecklist {
+  const steps = reliabilitySteps(p, confirmed);
+  const essentials = steps.filter((step) => essential.has(step.kind));
+  return {
+    essentials,
+    recommended: steps.filter((step) => !essential.has(step.kind)),
+    ready: essentials.every((step) => step.state === "granted" || step.confirmed),
+  };
 }

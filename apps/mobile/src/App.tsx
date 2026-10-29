@@ -10,7 +10,14 @@ import { reliabilityCopy } from "./reliability-copy.ts";
 import { UpdateOffer } from "./UpdateOffer.tsx";
 import { AccountPanel } from "./AccountPanel.tsx";
 import { appSync } from "./app-sync.ts";
-import { newAlarm, nextRing, themeFor, type Alarm, type Locale } from "@app/core";
+import {
+  newAlarm,
+  nextRing,
+  reliabilityChecklist,
+  themeFor,
+  type Alarm,
+  type Locale,
+} from "@app/core";
 import {
   AtkinsonHyperlegible_400Regular,
   AtkinsonHyperlegible_700Bold,
@@ -89,7 +96,8 @@ function Home() {
     queryFn: () => Effect.runPromise(controller.list),
   });
   const alarms = alarmsQuery.data ?? [];
-  const { locale, setLocale } = useUI();
+  const { locale, setLocale, confirmedSettings: confirmedList, confirmSetting } = useUI();
+  const confirmedSettings = new Set(confirmedList);
   const [ring, setRing] = useState<Ring | null>(null);
   const [awakeCheck, setAwakeCheck] = useState<AwakeCheck | null>(null);
   const [editing, setEditing] = useState<Alarm | null>(null);
@@ -238,13 +246,18 @@ function Home() {
         permissions={permissions}
         onboarding={onboarding}
         locale={locale}
+        layer={androidAlarmService}
+        confirmed={confirmedSettings}
+        onConfirm={confirmSetting}
         refresh={() => setPermissions(native.getPermissions())}
         onExit={() => {
           setOnboarding(false);
           setShowSettings(false);
         }}
         switchLanguage={() => setLocale(locale === "en" ? "pt-BR" : "en")}
-      />
+      >
+        <UpdateOffer locale={locale} dismissible={false} />
+      </ReliabilityScreen>
     );
   if (showTheme) return <ThemeSettings locale={locale} onBack={() => setShowTheme(false)} />;
   if (showStats)
@@ -289,6 +302,20 @@ function Home() {
             <Pressable accessibilityRole="button" onPress={() => setShowTheme(true)}>
               <Text className="text-body text-primary-ink">{t("theme")}</Text>
             </Pressable>
+            {!reliabilityChecklist(permissions, confirmedSettings).ready && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setShowSettings(true)}
+                className="min-h-12 flex-row items-center justify-between gap-4 rounded-lg bg-surface p-4"
+              >
+                <Text className="shrink text-body text-attention">
+                  {reliabilityCopy(locale)("atRisk")}
+                </Text>
+                <Text className="text-body font-bold text-primary-ink">
+                  {reliabilityCopy(locale)("fix")}
+                </Text>
+              </Pressable>
+            )}
             {editing ? (
               <AlarmEditor
                 alarm={editing}

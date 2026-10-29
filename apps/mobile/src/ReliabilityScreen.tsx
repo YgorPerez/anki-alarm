@@ -1,281 +1,266 @@
-import { UpdateOffer } from "./UpdateOffer.tsx";
 import {
-  reliabilitySteps,
+  reliabilityChecklist,
   type AlarmPermissions,
   type Locale,
   type ReliabilityKind,
   type ReliabilityStep,
 } from "@app/core";
-import { Effect } from "effect";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ListRenderItemInfo } from "react-native";
-import { BackHandler, Pressable, FlatList, Text, View } from "react-native";
+import { Effect, type Layer } from "effect";
+import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
+import { Alert, BackHandler, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AlarmService } from "./alarms.ts";
-import { androidAlarmService } from "./alarm-android.ts";
-import { reliabilityCopy } from "./reliability-copy.ts";
+import { Button } from "./controls.tsx";
 import { copy } from "./copy.ts";
+import { bold, regular } from "./fonts.ts";
+import { reliabilityCopy } from "./reliability-copy.ts";
 
-const run = <A,>(effect: Effect.Effect<A, Error, AlarmService>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(androidAlarmService)));
-const regular = { fontFamily: "AtkinsonHyperlegible_400Regular" };
-const bold = { fontFamily: "AtkinsonHyperlegible_700Bold" };
-function Button({
-  label,
-  onPress,
-  primary = false,
-}: {
-  label: string;
-  onPress: () => void;
-  primary?: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      className={
-        primary
-          ? "min-h-12 justify-center rounded-pill bg-primary p-4"
-          : "min-h-12 justify-center rounded-pill bg-surface p-4"
-      }
-    >
-      <Text
-        style={regular}
-        className={primary ? "text-body text-primary-foreground" : "text-body text-foreground"}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
+type Open = (kind: ReliabilityKind | "appInfo") => void;
+
+/**
+ * The reliability checklist: the four essentials first, then what helps on this phone. Onboarding
+ * finishes once the essentials are granted; Settings shows the same list.
+ */
 export function ReliabilityScreen({
   permissions,
   onboarding,
   locale,
+  layer,
+  confirmed,
+  onConfirm,
   refresh,
   onExit,
   switchLanguage,
+  children,
 }: {
   permissions: AlarmPermissions;
   onboarding: boolean;
   locale: Locale;
+  layer: Layer.Layer<AlarmService>;
+  /** Unreadable settings the user marked as done. */
+  confirmed: ReadonlySet<ReliabilityKind>;
+  onConfirm: (kind: ReliabilityKind, done: boolean) => void;
+  /** Re-reads the permissions; App also does it when the app returns to the foreground. */
   refresh: () => void;
   onExit: () => void;
   switchLanguage: () => void;
+  /** Settings-only extras, under the list. */
+  children?: ReactNode;
 }) {
-  const list = useRef<FlatList<ReliabilityRowProps>>(null);
-  const [index, setIndex] = useState(0);
-  const [confirmed, setConfirmed] = useState<ReadonlySet<ReliabilityKind>>(new Set());
-  const [error, setError] = useState(false);
   const t = reliabilityCopy(locale);
   const insets = useSafeAreaInsets();
-  const steps = useMemo(() => reliabilitySteps(permissions), [permissions]);
-  const back = useCallback(() => {
-    if (!onboarding) onExit();
-    else {
-      list.current?.scrollToOffset({ offset: 0, animated: false });
-      setIndex((i) => Math.max(0, i - 1));
-    }
+  const [failed, setFailed] = useState<ReliabilityKind | "appInfo" | "finish" | null>(null);
+  const [triedOverlay, setTriedOverlay] = useState(false);
+  const list = reliabilityChecklist(permissions, confirmed);
+  const run = <A,>(effect: Effect.Effect<A, Error, AlarmService>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(layer)));
+  const back = useEffectEvent(() => {
+    onExit();
     return true;
-  }, [onboarding, onExit]);
+  });
   useEffect(() => {
+    if (onboarding) return undefined;
     const sub = BackHandler.addEventListener("hardwareBackPress", back);
     return () => sub.remove();
-  }, [back]);
-  const open = useCallback(
-    (kind: ReliabilityKind | "appInfo") => {
-      setError(false);
-      void run(Effect.flatMap(AlarmService, (service) => service.getPermissions))
-        .then((p) => {
-          refresh();
-          // Re-check overlay before sending a user who already granted it back to Settings.
-          if (kind === "overlay" && p.overlay === "granted") return true;
-          return run(Effect.flatMap(AlarmService, (service) => service.request(kind)));
-        })
-        .then((ok) => {
-          if (!ok) setError(true);
-        })
-        .catch(() => setError(true));
-    },
-    [refresh],
-  );
-  const next = useCallback(() => {
-    if (index < steps.length - 1) {
-      list.current?.scrollToOffset({ offset: 0, animated: false });
-      setIndex(index + 1);
-      return;
-    }
+  }, [onboarding]);
+  const open: Open = (kind) => {
+    setFailed(null);
+    if (kind === "overlay") setTriedOverlay(true);
+    void run(Effect.flatMap(AlarmService, (service) => service.request(kind)))
+      .then((ok) => {
+        refresh();
+        if (!ok) setFailed(kind);
+      })
+      .catch(() => setFailed(kind));
+  };
+  const finish = () => {
     void run(Effect.flatMap(AlarmService, (service) => service.completeOnboarding))
       .then((ok) => {
         if (ok) onExit();
-        else setError(true);
+        else setFailed("finish");
       })
-      .catch(() => setError(true));
-  }, [index, steps.length, onExit]);
-  const rows = useMemo(
-    () =>
-      (onboarding ? steps.slice(index, index + 1) : steps).map((step) => ({
-        step,
-        locale,
-        onboarding,
-        index,
-        total: steps.length,
-        confirmed: confirmed.has(step.kind),
-        open,
-        next,
-        confirm: () => {
-          setConfirmed((previous) => new Set([...previous, step.kind]));
-          if (onboarding) next();
-        },
-      })),
-    [onboarding, steps, index, locale, confirmed, open, next],
+      .catch(() => setFailed("finish"));
+  };
+  const skip = () =>
+    Alert.alert(t("skipTitle"), t("skipMessage"), [
+      { text: t("close"), style: "cancel" },
+      { text: t("skip"), style: "destructive", onPress: finish },
+    ]);
+  const row = (step: ReliabilityStep) => (
+    <ChecklistRow
+      key={step.kind}
+      step={step}
+      locale={locale}
+      failed={failed === step.kind}
+      restrictedHelp={step.restrictedSettings && triedOverlay}
+      appInfoFailed={failed === "appInfo"}
+      open={open}
+      onConfirm={onConfirm}
+    />
   );
   return (
     <View
       className="flex-1 bg-background"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      <FlatList
-        ref={list}
-        contentContainerStyle={{ padding: 24, gap: 20 }}
-        data={rows}
-        keyExtractor={(row) => row.step.kind}
-        ListHeaderComponent={
-          <View className="gap-5">
-            <Text style={bold} accessibilityRole="header" className="text-title text-foreground">
-              {t(onboarding ? "setup" : "settings")}
+      <ScrollView contentContainerStyle={{ padding: 24, gap: 24 }}>
+        <View className="gap-2">
+          <View className="flex-row items-center justify-between gap-4">
+            <Text
+              style={bold}
+              accessibilityRole="header"
+              className="shrink text-title text-foreground"
+            >
+              {t(onboarding ? "setup" : "reliability")}
             </Text>
-            {!onboarding && (
-              <Text
-                style={bold}
-                accessibilityRole="header"
-                className="text-question text-foreground"
-              >
-                {t("reliability")}
+            <Pressable
+              accessibilityRole="button"
+              onPress={switchLanguage}
+              className="min-h-12 justify-center px-2"
+            >
+              <Text style={regular} className="text-label text-primary-ink">
+                {copy(locale)("switchLanguage")}
               </Text>
-            )}
-            <Text style={regular} className="text-body text-foreground">
-              {t("intro")}
-            </Text>
-            <Button label={copy(locale)("switchLanguage")} onPress={switchLanguage} />
+            </Pressable>
           </View>
-        }
-        renderItem={renderReliabilityRow}
-        ListFooterComponent={
-          <View className="gap-5">
-            {error && (
+          <Text style={regular} className="text-body text-muted-foreground">
+            {t("intro")}
+          </Text>
+        </View>
+        <View>{list.essentials.map(row)}</View>
+        {list.recommended.length > 0 && (
+          <View className="gap-2">
+            <Text style={bold} accessibilityRole="header" className="text-question text-foreground">
+              {t("recommended")}
+            </Text>
+            <View>{list.recommended.map(row)}</View>
+          </View>
+        )}
+        {onboarding ? (
+          <View className="gap-3">
+            {failed === "finish" && (
               <Text accessibilityRole="alert" style={regular} className="text-body text-attention">
                 {t("error")}
               </Text>
             )}
-            <Button
-              label={t("refresh")}
-              onPress={() => {
-                setConfirmed(new Set());
-                refresh();
-              }}
-            />
+            <Button primary label={t("finish")} disabled={!list.ready} onPress={finish} />
+            {!list.ready && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={skip}
+                className="min-h-12 items-center justify-center"
+              >
+                <Text style={regular} className="text-label text-muted-foreground">
+                  {t("skip")}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        ) : (
+          <View className="gap-4">
             <Text style={regular} className="text-body text-attention">
               {t("forceStop")}
             </Text>
-            {onboarding ? (
-              <>
-                <Button
-                  primary
-                  label={t(index === steps.length - 1 ? "finish" : "next")}
-                  onPress={next}
-                />
-                {index > 0 && <Button label={t("close")} onPress={back} />}
-              </>
-            ) : (
-              <>
-                <UpdateOffer locale={locale} dismissible={false} />
-                <Button label={t("close")} onPress={onExit} />
-              </>
-            )}
+            {children}
+            <Button label={t("close")} onPress={onExit} />
           </View>
-        }
-      />
+        )}
+      </ScrollView>
     </View>
   );
 }
 
-interface ReliabilityRowProps {
-  step: ReliabilityStep;
-  locale: Locale;
-  onboarding: boolean;
-  index: number;
-  total: number;
-  confirmed: boolean;
-  open: (kind: ReliabilityKind | "appInfo") => void;
-  next: () => void;
-  confirm: () => void;
-}
-function renderReliabilityRow({ item }: ListRenderItemInfo<ReliabilityRowProps>) {
-  return <ReliabilityRow {...item} />;
-}
-function ReliabilityRow({
+/** One setting: tap to open it; a check once granted; a "Done" box when the app can't read it. */
+function ChecklistRow({
   step,
   locale,
-  onboarding,
-  index,
-  total,
-  confirmed,
+  failed,
+  restrictedHelp,
+  appInfoFailed,
   open,
-  next,
-  confirm,
-}: ReliabilityRowProps) {
+  onConfirm,
+}: {
+  step: ReliabilityStep;
+  locale: Locale;
+  failed: boolean;
+  restrictedHelp: boolean;
+  appInfoFailed: boolean;
+  open: Open;
+  onConfirm: (kind: ReliabilityKind, done: boolean) => void;
+}) {
   const t = reliabilityCopy(locale);
-  return (
-    <View className="gap-4 border-b border-border pb-6">
-      {onboarding && (
-        <Text style={regular} className="text-label text-muted-foreground">
-          {index + 1} / {total}
-        </Text>
-      )}
-      <Text style={bold} accessibilityRole="header" className="text-question text-foreground">
+  const granted = step.state === "granted";
+  const manual = step.state === "unknown";
+  const ok = granted || step.confirmed;
+  const label = (
+    <View className="min-h-12 flex-row items-center justify-between gap-4">
+      <Text style={bold} className="shrink text-body text-foreground">
         {t(step.kind)}
-      </Text>
-      <Text style={regular} className="text-body text-foreground">
-        {t(`${step.kind}Hint`)}
       </Text>
       <Text
         accessibilityLiveRegion="polite"
         style={regular}
-        className={step.state === "granted" ? "text-body text-primary" : "text-body text-attention"}
+        className={ok ? "text-label text-primary-ink" : "text-label text-attention"}
       >
-        {t(step.state)}
+        {ok ? `✓ ${t(granted ? "granted" : "done")}` : t(manual ? "manual" : "denied")}
       </Text>
-      {step.restrictedSettings && (
+    </View>
+  );
+  // Recents has no setting to open: it's done from the Recents screen.
+  const openable = !granted && step.kind !== "recents";
+  return (
+    <View className="gap-2 border-b border-border py-3">
+      {openable ? (
+        <Pressable accessibilityRole="button" onPress={() => open(step.kind)}>
+          {label}
+        </Pressable>
+      ) : (
+        label
+      )}
+      {manual && (
         <>
+          <Text style={regular} className="text-body text-muted-foreground">
+            {t(`${step.kind}Hint`)}
+          </Text>
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityLabel={t("done")}
+            accessibilityState={{ checked: step.confirmed }}
+            onPress={() => onConfirm(step.kind, !step.confirmed)}
+            className="min-h-12 flex-row items-center gap-3"
+          >
+            <View
+              className={
+                step.confirmed
+                  ? "size-6 items-center justify-center rounded-sm bg-primary"
+                  : "size-6 rounded-sm border-2 border-border"
+              }
+            >
+              {step.confirmed && <Text className="text-label text-primary-foreground">✓</Text>}
+            </View>
+            <Text style={regular} className="text-body text-foreground">
+              {t("done")}
+            </Text>
+          </Pressable>
+        </>
+      )}
+      {restrictedHelp && (
+        <View className="gap-2">
           <Text style={regular} className="text-body text-attention">
             {t("restricted")}
           </Text>
           <Button label={t("appInfo")} onPress={() => open("appInfo")} />
-        </>
-      )}
-      {step.kind !== "recents" && <Button label={t("open")} onPress={() => open(step.kind)} />}
-      {step.state === "unknown" && (
-        <>
-          {confirmed && (
-            <Text style={regular} className="text-body text-muted-foreground">
-              {t("confirmed")}
+          {appInfoFailed && (
+            <Text accessibilityRole="alert" style={regular} className="text-body text-attention">
+              {t("error")}
             </Text>
           )}
-          <Button
-            label={t("manual")}
-            onPress={() => {
-              confirm();
-            }}
-          />
-          <Button
-            label={t("missing")}
-            onPress={() => {
-              if (onboarding) next();
-              else open("appInfo");
-            }}
-          />
-        </>
+        </View>
+      )}
+      {failed && (
+        <Text accessibilityRole="alert" style={regular} className="text-body text-attention">
+          {t("error")}
+        </Text>
       )}
     </View>
   );
