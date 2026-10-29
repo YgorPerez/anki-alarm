@@ -235,8 +235,10 @@ Phone first, one column, 16–24px side margins. The alarm screen is fixed, so t
 - Bottom, at the thumb: one row of four 64px grade pills, or one full-width 64px button (Start,
   Show answer, Answer now, Close). The snooze link sits below them, apart from every grade.
 
-App screens: a top title, then content, then Material's bottom navigation bar (Baralhos, Alarmes,
-Estatísticas, Ajustes) on the phone. The web uses the same order with shadcn's sidebar.
+Phone screens use Expo Router with three bottom tabs, in order: Alarmes, Baralhos, Estatísticas
+(Alarms, Decks, Stats). Every tab has a Settings gear at the top. Settings groups alarm reliability,
+theme, language, account and the update offer; theme and reliability open within its stack. The web
+uses shadcn's sidebar.
 
 ### Named Rules
 
@@ -291,8 +293,10 @@ atingido"), then three tabular counts: new in `easy-ink`, learning in `again-ink
 
 ### Navigation
 
-Material 3 navigation bar on the phone: four destinations, the active one with a `primary-tint`
-indicator and bold label. System Back always works; it never dismisses an alarm session.
+Material 3 navigation bar on the phone: three destinations, the active one with a `primary-tint`
+indicator and bold label. System Back goes back within the current tab and exits from a tab root.
+Settings returns to the tab that opened it. A ring or shown awake check takes over outside the
+navigator and consumes Back; it never dismisses an alarm session.
 
 ## Do's and Don'ts
 

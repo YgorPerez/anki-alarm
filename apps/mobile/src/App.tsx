@@ -27,10 +27,22 @@ import { CollectionScreen } from "./CollectionScreen.tsx";
 import { androidAnkiDroid } from "./ankidroid-android.ts";
 import { syncBackAfterSession } from "./ankidroid.ts";
 import { StatsScreen } from "./StatsScreen.tsx";
-import { statsCopy } from "@app/stats-ui";
+
 import { Effect } from "effect";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import { ScreenActivity } from "./screen-activity.ts";
+import { useRouter, useIsFocused, useFocusEffect } from "expo-router";
+import { NavigationGate } from "./NavigationGate.tsx";
+import { SettingsScreen } from "./SettingsScreen.tsx";
 import type { ListRenderItemInfo } from "react-native";
 import {
   Alert,
@@ -64,7 +76,92 @@ const repository = {
   events: localData((data) => data.events),
 };
 
-export function App() {
+const RuntimeContext = createContext<{
+  alarms: ReactNode;
+  cancelEditing: (() => void) | null;
+  reliability: (onExit: () => void) => ReactNode;
+} | null>(null);
+function RuntimeProvider({
+  alarms,
+  cancelEditing,
+  reliability,
+  children,
+}: {
+  alarms: ReactNode;
+  cancelEditing: (() => void) | null;
+  reliability: (onExit: () => void) => ReactNode;
+  children: ReactNode;
+}) {
+  const value = useMemo(
+    () => ({ alarms, cancelEditing, reliability }),
+    [alarms, cancelEditing, reliability],
+  );
+  return <RuntimeContext value={value}>{children}</RuntimeContext>;
+}
+function useRuntime() {
+  const runtime = useContext(RuntimeContext);
+  if (!runtime) throw new Error("Routes must be inside App");
+  return runtime;
+}
+export function AlarmsRoute() {
+  const { alarms, cancelEditing } = useRuntime();
+  useFocusEffect(
+    useCallback(() => {
+      if (!cancelEditing) return undefined;
+      const back = BackHandler.addEventListener("hardwareBackPress", () => {
+        cancelEditing();
+        return true;
+      });
+      return () => back.remove();
+    }, [cancelEditing]),
+  );
+  return alarms;
+}
+export function ReliabilityRoute() {
+  const router = useRouter();
+  return useRuntime().reliability(() => router.back());
+}
+export function SettingsRoute() {
+  const router = useRouter();
+  const { locale, setLocale } = useUI();
+  return (
+    <SettingsScreen
+      locale={locale}
+      onReliability={() => router.push("/settings/reliability")}
+      onTheme={() => router.push("/settings/theme")}
+      switchLanguage={() => setLocale(locale === "en" ? "pt-BR" : "en")}
+      account={<AccountPanel sync={appSync} locale={locale} />}
+      update={<UpdateOffer locale={locale} dismissible={false} />}
+    />
+  );
+}
+export function ThemeRoute() {
+  const router = useRouter();
+  return <ThemeSettings locale={useUI().locale} onBack={() => router.back()} />;
+}
+export function DecksRoute() {
+  const router = useRouter();
+  const focused = useIsFocused();
+  return (
+    <ScreenActivity value={focused}>
+      <CollectionScreen
+        locale={useUI().locale}
+        ankiDroid={androidAnkiDroid}
+        onTheme={() => router.push("/settings/theme")}
+      />
+    </ScreenActivity>
+  );
+}
+export function StatsRoute() {
+  const scheme = useColorScheme();
+  return (
+    <StatsScreen
+      locale={useUI().locale}
+      theme={themeFor(useThemeChoice(), scheme === "dark" ? "dark" : "light")}
+    />
+  );
+}
+export function App({ children }: { children: ReactNode }) {
   const [fontsLoaded, fontError] = useFonts({
     AtkinsonHyperlegible_400Regular,
     AtkinsonHyperlegible_700Bold,
@@ -72,7 +169,11 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
-        {fontsLoaded || fontError ? <Home /> : <View className="flex-1 bg-background" />}
+        {fontsLoaded || fontError ? (
+          <Home>{children}</Home>
+        ) : (
+          <View className="flex-1 bg-background" />
+        )}
         <StatusBar style="auto" />
       </SafeAreaProvider>
     </QueryClientProvider>
@@ -82,15 +183,13 @@ const run = <A,>(effect: Effect.Effect<A, Error, AlarmService>) =>
   Effect.runPromise(effect.pipe(Effect.provide(androidAlarmService)));
 
 const currentTime = () => Date.now();
-function Home() {
+function Home({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const [onboarding, setOnboarding] = useState(() => !native.isOnboardingComplete());
-  const [showSettings, setShowSettings] = useState(false);
-  const [showDecks, setShowDecks] = useState(false);
-  const [showStats, setShowStats] = useState(false);
-  const scheme = useColorScheme();
+
   const [controller] = useState(() => alarmController(repository));
   const client = useQueryClient();
-  const [showTheme, setShowTheme] = useState(false);
+
   const alarmsQuery = useQuery({
     queryKey: ["alarms"],
     queryFn: () => Effect.runPromise(controller.list),
@@ -105,14 +204,6 @@ function Home() {
   useEffect(() => {
     void initializeTheme().catch(() => setError(copy(locale)("error")));
   }, [locale]);
-  useEffect(() => {
-    if (!showTheme || ring) return undefined;
-    const back = BackHandler.addEventListener("hardwareBackPress", () => {
-      setShowTheme(false);
-      return true;
-    });
-    return () => back.remove();
-  }, [showTheme, ring]);
   const [permissions, setPermissions] = useState(() => native.getPermissions());
   const t = copy(locale);
   const insets = useSafeAreaInsets();
@@ -182,7 +273,7 @@ function Home() {
         })
         .catch(() => setError(copy(locale)("alarmError")));
     },
-    [controller, locale, client],
+    [controller, locale, client, setEditing],
   );
   const remove = useCallback(
     (alarmId: string) => {
@@ -194,13 +285,13 @@ function Home() {
         })
         .catch(() => setError(copy(locale)("alarmError")));
     },
-    [controller, locale, client],
+    [controller, locale, client, setEditing],
   );
   const renderAlarm = useCallback(
     ({ item }: ListRenderItemInfo<Alarm>) => (
       <AlarmRow alarm={item} locale={locale} onEdit={setEditing} onSave={save} />
     ),
-    [locale, save],
+    [locale, save, setEditing],
   );
   // After each alarm session and awake check: its reviews reach the other devices.
   const afterAlarm = () => {
@@ -215,74 +306,43 @@ function Home() {
       })
       .catch(() => setError(t("alarmError")));
   };
-  if (ring)
-    return (
-      <ScopedTheme theme="dark">
-        <AlarmScreen
-          key={ring.id}
-          ring={ring}
-          locale={locale}
-          layer={androidAlarmService}
-          onDismissed={afterAlarm}
-        />
-      </ScopedTheme>
-    );
-  // A check still waiting for its delay leaves the app as usual.
-  if (awakeCheck?.shownAt)
-    return (
-      <ScopedTheme theme="dark">
-        <AwakeCheckScreen
-          key={awakeCheck.id}
-          check={awakeCheck}
-          locale={locale}
-          layer={androidAlarmService}
-          onPassed={afterAlarm}
-        />
-      </ScopedTheme>
-    );
-  if (onboarding || showSettings)
-    return (
-      <ReliabilityScreen
-        permissions={permissions}
-        onboarding={onboarding}
+  const reliability = (onExit: () => void, setup = false) => (
+    <ReliabilityScreen
+      permissions={permissions}
+      onboarding={setup}
+      locale={locale}
+      layer={androidAlarmService}
+      confirmed={confirmedSettings}
+      onConfirm={confirmSetting}
+      refresh={() => setPermissions(native.getPermissions())}
+      onExit={onExit}
+      switchLanguage={() => setLocale(locale === "en" ? "pt-BR" : "en")}
+    />
+  );
+  const takeover = ring ? (
+    <ScopedTheme theme="dark">
+      <AlarmScreen
+        key={ring.id}
+        ring={ring}
         locale={locale}
         layer={androidAlarmService}
-        confirmed={confirmedSettings}
-        onConfirm={confirmSetting}
-        refresh={() => setPermissions(native.getPermissions())}
-        onExit={() => {
-          setOnboarding(false);
-          setShowSettings(false);
-        }}
-        switchLanguage={() => setLocale(locale === "en" ? "pt-BR" : "en")}
-      >
-        <UpdateOffer locale={locale} dismissible={false} />
-      </ReliabilityScreen>
-    );
-  if (showTheme) return <ThemeSettings locale={locale} onBack={() => setShowTheme(false)} />;
-  if (showStats)
-    return (
-      <StatsScreen
-        locale={locale}
-        theme={themeFor(theme, scheme === "dark" ? "dark" : "light")}
-        onExit={() => setShowStats(false)}
+        onDismissed={afterAlarm}
       />
-    );
-  if (showDecks)
-    return (
-      <CollectionScreen
+    </ScopedTheme>
+  ) : awakeCheck?.shownAt ? (
+    <ScopedTheme theme="dark">
+      <AwakeCheckScreen
+        key={awakeCheck.id}
+        check={awakeCheck}
         locale={locale}
-        onExit={() => setShowDecks(false)}
-        onTheme={() => setShowTheme(true)}
-        ankiDroid={androidAnkiDroid}
+        layer={androidAlarmService}
+        onPassed={afterAlarm}
       />
-    );
+    </ScopedTheme>
+  ) : null;
 
-  return (
-    <View
-      className="flex-1 bg-background"
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
-    >
+  const alarmsContent = (
+    <View className="flex-1 bg-background" style={{ paddingBottom: insets.bottom }}>
       <FlatList
         contentContainerStyle={{ padding: 24, gap: 20 }}
         data={editing ? [] : alarms}
@@ -293,19 +353,10 @@ function Home() {
         ListHeaderComponent={
           <View className="gap-4">
             <Text className="text-title font-bold text-foreground">{t("alarms")}</Text>
-            <Pressable accessibilityRole="button" onPress={() => setShowDecks(true)}>
-              <Text className="text-body text-primary">{t("title")}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={() => setShowStats(true)}>
-              <Text className="text-body text-primary-ink">{statsCopy(locale)("stats")}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={() => setShowTheme(true)}>
-              <Text className="text-body text-primary-ink">{t("theme")}</Text>
-            </Pressable>
             {!reliabilityChecklist(permissions, confirmedSettings).ready && (
               <Pressable
                 accessibilityRole="button"
-                onPress={() => setShowSettings(true)}
+                onPress={() => router.push("/settings/reliability")}
                 className="min-h-12 flex-row items-center justify-between gap-4 rounded-lg bg-surface p-4"
               >
                 <Text className="shrink text-body text-attention">
@@ -340,28 +391,29 @@ function Home() {
         }
         ListFooterComponent={
           <View className="gap-4">
-            <UpdateOffer locale={locale} />
-            <AccountPanel sync={appSync} locale={locale} />
             <Text accessibilityRole="alert" className="text-body text-attention">
               {error || (alarmsQuery.isError ? t("alarmError") : "")}
             </Text>
-            <Pressable
-              accessibilityRole="button"
-              className="min-h-12 justify-center"
-              onPress={() => setShowSettings(true)}
-            >
-              <Text className="text-body text-primary">{reliabilityCopy(locale)("settings")}</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setLocale(locale === "en" ? "pt-BR" : "en")}
-            >
-              <Text className="text-body text-primary">{t("switchLanguage")}</Text>
-            </Pressable>
           </View>
         }
       />
     </View>
+  );
+
+  return (
+    <NavigationGate takeover={takeover}>
+      {onboarding ? (
+        reliability(() => setOnboarding(false), true)
+      ) : (
+        <RuntimeProvider
+          alarms={alarmsContent}
+          cancelEditing={editing ? () => setEditing(null) : null}
+          reliability={(onExit) => reliability(onExit)}
+        >
+          {children}
+        </RuntimeProvider>
+      )}
+    </NavigationGate>
   );
 }
 function AlarmRow({

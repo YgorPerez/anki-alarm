@@ -1,29 +1,80 @@
 appId: dev.ygorperez.ankialarm
 ---
-# Labels match pt-BR or English: the app follows the device's language, and the CI emulator's is
-# English.
+# The default locale is pt-BR; both languages are checked below.
 - launchApp:
     clearState: true
+    permissions:
+      all: deny
 - extendedWaitUntil:
     visible: "Prepare seus alarmes|Prepare your alarms"
     timeout: 30000
-# A fresh emulator lacks the essentials, so Finish stays locked: skip, then confirm in the dialog
-# (case-insensitive, as Android may draw dialog buttons in capitals).
-- runFlow:
-    when:
-      visible: "Pular por agora|Skip for now"
-    commands:
-      - tapOn: "Pular por agora|Skip for now"
-      - tapOn: "(?i)pular por agora|skip for now"
-- runFlow:
-    when:
-      visible: "Concluir|Finish"
-    commands:
-      - tapOn: "Concluir|Finish"
-- tapOn: "Baralhos|Decks"
+# A fresh install lacks notifications/overlay permission. Skip is below the recommended settings
+# on smaller phones, so scroll to it before confirming the warning.
+- scrollUntilVisible:
+    element:
+      text: "Pular por agora|Skip for now"
+    direction: DOWN
+- tapOn: "Pular por agora|Skip for now"
+- tapOn: "(?i)pular por agora|skip for now"
+- assertVisible: "Seus alarmes podem não tocar|Your alarms may not ring"
+- tapOn:
+    id: "tab-decks"
 - tapOn: "Criar baralho|Create deck"
 - tapOn: "Nome do baralho|Deck name"
 - inputText: "Maestro"
-- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Salvar|Save"
+    direction: DOWN
 - tapOn: "Salvar|Save"
 - assertVisible: "Maestro"
+# Each tab has the shared gear; Settings returns to the tab that opened it.
+- tapOn:
+    id: "open-settings"
+- assertVisible: "Conta|Account"
+- tapOn: "Tema|Theme"
+- assertVisible: "Fundo escuro|Dark background"
+- back
+- tapOn: "Confiabilidade dos alarmes|Alarm reliability"
+- assertVisible: "Notificações|Notifications"
+- back
+- back
+- assertVisible: "Maestro"
+- tapOn:
+    id: "tab-stats"
+- tapOn:
+    id: "open-settings"
+- assertVisible: "Conta|Account"
+- back
+- assertVisible: "Todos os baralhos|All decks"
+- tapOn:
+    id: "tab-index"
+- tapOn:
+    id: "open-settings"
+- tapOn: "English"
+- assertVisible: "Settings"
+- tapOn: "Português"
+- assertVisible: "Ajustes"
+- back
+- assertVisible: "Novo alarme|New alarm"
+- tapOn: "Novo alarme|New alarm"
+- back
+- assertVisible: "Novo alarme|New alarm"
+# Back unwinds a deck; an inactive deck must not keep Stats from leaving the app.
+- tapOn:
+    id: "tab-decks"
+- tapOn: "Maestro"
+- assertVisible: "Estudar|Study"
+- back
+- assertVisible: "Criar baralho|Create deck"
+- tapOn: "Maestro"
+- tapOn:
+    id: "tab-stats"
+- back
+- assertNotVisible:
+    id: "open-settings"
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "open-settings"
+    timeout: 30000

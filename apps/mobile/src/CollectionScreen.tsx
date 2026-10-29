@@ -1,3 +1,5 @@
+import { useContext } from "react";
+import { ScreenActivity } from "./screen-activity.ts";
 import {
   cardMemory,
   cardsStayInApp,
@@ -56,7 +58,7 @@ export function CollectionScreen({
   ankiDroid,
 }: {
   locale: Locale;
-  onExit: () => void;
+  onExit?: () => void;
   onTheme: () => void;
 
   ankiDroid: AnkiDroidApi;
@@ -82,7 +84,7 @@ export function CollectionScreen({
   const t = copy(locale);
   const insets = useSafeAreaInsets();
   const goBack = useCallback(() => {
-    if (studying) return false;
+    if (studying || linking) return false;
     if (locked.current) return true;
     if (form) {
       Alert.alert(t("discardTitle"), t("discardBody"), [
@@ -104,11 +106,13 @@ export function CollectionScreen({
       return true;
     }
     return false;
-  }, [form, deckId, t, studying]);
+  }, [form, deckId, t, studying, linking]);
+  const screenActive = useContext(ScreenActivity);
   useEffect(() => {
+    if (!screenActive) return undefined;
     const handler = BackHandler.addEventListener("hardwareBackPress", goBack);
     return () => handler.remove();
-  }, [goBack]);
+  }, [goBack, screenActive]);
   /** Runs one write at a time; the previous data stays on screen when it fails. */
   async function write(
     task: (data: ClientData["Service"]) => Effect.Effect<unknown, Error>,
@@ -322,7 +326,7 @@ export function CollectionScreen({
           {form || deck ? (
             <Button label={t("back")} disabled={busy} onPress={goBack} />
           ) : (
-            <Button label={t("alarms")} disabled={busy} onPress={onExit} />
+            onExit && <Button label={t("alarms")} disabled={busy} onPress={onExit} />
           )}
           {!form && !deck && <Button label={t("theme")} disabled={busy} onPress={onTheme} />}
         </View>

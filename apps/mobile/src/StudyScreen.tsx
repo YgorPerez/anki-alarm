@@ -1,3 +1,5 @@
+import { useContext } from "react";
+import { ScreenActivity } from "./screen-activity.ts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   renderCard,
@@ -220,13 +222,15 @@ function useStudySession(deckId: string, onExit: () => void) {
   const card = next?.card;
   const cardId = card?.id;
   const revealed = Boolean(cardId && revealedId === cardId);
+  const screenActive = useContext(ScreenActivity);
   useEffect(() => {
+    if (!screenActive) return undefined;
     const handler = BackHandler.addEventListener("hardwareBackPress", () => {
       if (!lock.current) onExit();
       return true;
     });
     return () => handler.remove();
-  }, [onExit]);
+  }, [onExit, screenActive]);
   async function answer(grade: Grade) {
     if (!cardId || !revealed || lock.current) return;
     lock.current = true;

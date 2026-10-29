@@ -34,6 +34,7 @@ const config: ExpoConfig = {
   experiments: { reactCompiler: true },
   plugins: [
     "expo-dev-client",
+    "expo-router",
     "expo-sqlite",
     "expo-font",
     "./plugins/with-alarm-native.js",
