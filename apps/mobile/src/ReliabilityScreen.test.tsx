@@ -55,11 +55,7 @@ async function setup(permissions: Partial<AlarmPermissions> = stock) {
     );
   }
   await render(<Harness />);
-  return {
-    phone,
-    exits,
-    refresh: () => fireEvent(screen.getByText("Prepare seus alarmes"), "layout"),
-  };
+  return { phone, exits };
 }
 
 test("finishes only once the four essentials are granted", async () => {
@@ -103,7 +99,7 @@ test("a setting the app can't read is marked done by hand, and that counts", asy
   expect(boxes).toHaveLength(2);
   await fireEvent.press(boxes[0]!);
   expect(
-    screen.getAllByRole("checkbox", { name: "Já fiz" })[0]!.props.accessibilityState,
+    (await screen.findAllByRole("checkbox", { name: "Já fiz" }))[0]!.props.accessibilityState,
   ).toMatchObject({ checked: true });
   expect(screen.getByRole("button", { name: "Concluir" }).props.accessibilityState).toMatchObject({
     disabled: false,

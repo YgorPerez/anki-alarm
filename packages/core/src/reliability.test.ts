@@ -78,3 +78,19 @@ it("takes the user's word only for settings the app can't read", () => {
     ["neverSleeping", true],
   ]);
 });
+
+it("says which settings are settled and which ones a tap can open", () => {
+  const list = reliabilityChecklist(
+    { ...stock, manufacturer: "Xiaomi" },
+    new Set(["autostart", "notifications"]),
+  );
+  const rows = [...list.essentials, ...list.recommended].map((s) => [
+    s.kind,
+    s.settled,
+    s.openable,
+  ]);
+  expect(rows).toContainEqual(["notifications", false, true]);
+  expect(rows).toContainEqual(["exactAlarm", true, false]);
+  expect(rows).toContainEqual(["autostart", true, true]);
+  expect(rows).toContainEqual(["recents", false, false]);
+});

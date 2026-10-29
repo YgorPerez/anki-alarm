@@ -36,6 +36,10 @@ export interface ReliabilityStep {
   restrictedSettings: boolean;
   /** The app can't read this setting and the user said it's done. */
   confirmed: boolean;
+  /** Granted, or confirmed by the user. */
+  settled: boolean;
+  /** A tap can take the user to it. Recents is set from the Recents screen, not a settings page. */
+  openable: boolean;
 }
 function reliabilitySteps(
   p: AlarmPermissions,
@@ -64,6 +68,7 @@ function reliabilitySteps(
       kind === "recents" || kind === "neverSleeping" || kind === "motorolaBattery"
         ? "unknown"
         : (p[kind] ?? "unknown");
+    const done = state === "unknown" && confirmed.has(kind);
     return {
       kind,
       state,
@@ -72,7 +77,9 @@ function reliabilitySteps(
         p.overlay !== "granted" &&
         p.sdk >= 35 &&
         (p.installSource === "local" || p.installSource === "downloaded"),
-      confirmed: state === "unknown" && confirmed.has(kind),
+      confirmed: done,
+      settled: state === "granted" || done,
+      openable: state !== "granted" && kind !== "recents",
     };
   });
 }
@@ -100,6 +107,6 @@ export function reliabilityChecklist(
   return {
     essentials,
     recommended: steps.filter((step) => !essential.has(step.kind)),
-    ready: essentials.every((step) => step.state === "granted" || step.confirmed),
+    ready: essentials.every((step) => step.settled),
   };
 }

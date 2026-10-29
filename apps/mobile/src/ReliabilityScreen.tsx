@@ -103,7 +103,7 @@ export function ReliabilityScreen({
       className="flex-1 bg-background"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      <ScrollView contentContainerStyle={{ padding: 24, gap: 24 }}>
+      <ScrollView contentContainerClassName="gap-6 p-6">
         <View className="gap-2">
           <View className="flex-row items-center justify-between gap-4">
             <Text
@@ -138,11 +138,7 @@ export function ReliabilityScreen({
         )}
         {onboarding ? (
           <View className="gap-3">
-            {failed === "finish" && (
-              <Text accessibilityRole="alert" style={regular} className="text-body text-attention">
-                {t("error")}
-              </Text>
-            )}
+            {failed === "finish" && <ErrorLine locale={locale} />}
             <Button primary label={t("finish")} disabled={!list.ready} onPress={finish} />
             {!list.ready && (
               <Pressable
@@ -189,9 +185,7 @@ function ChecklistRow({
   onConfirm: (kind: ReliabilityKind, done: boolean) => void;
 }) {
   const t = reliabilityCopy(locale);
-  const granted = step.state === "granted";
   const manual = step.state === "unknown";
-  const ok = granted || step.confirmed;
   const label = (
     <View className="min-h-12 flex-row items-center justify-between gap-4">
       <Text style={bold} className="shrink text-body text-foreground">
@@ -200,17 +194,17 @@ function ChecklistRow({
       <Text
         accessibilityLiveRegion="polite"
         style={regular}
-        className={ok ? "text-label text-primary-ink" : "text-label text-attention"}
+        className={step.settled ? "text-label text-primary-ink" : "text-label text-attention"}
       >
-        {ok ? `✓ ${t(granted ? "granted" : "done")}` : t(manual ? "manual" : "denied")}
+        {step.settled
+          ? `✓ ${t(step.confirmed ? "done" : "granted")}`
+          : t(manual ? "manual" : "denied")}
       </Text>
     </View>
   );
-  // Recents has no setting to open: it's done from the Recents screen.
-  const openable = !granted && step.kind !== "recents";
   return (
     <View className="gap-2 border-b border-border py-3">
-      {openable ? (
+      {step.openable ? (
         <Pressable accessibilityRole="button" onPress={() => open(step.kind)}>
           {label}
         </Pressable>
@@ -232,11 +226,11 @@ function ChecklistRow({
             <View
               className={
                 step.confirmed
-                  ? "size-6 items-center justify-center rounded-sm bg-primary"
+                  ? "size-6 items-center justify-center rounded-sm border-2 border-primary-ink bg-primary-tint"
                   : "size-6 rounded-sm border-2 border-border"
               }
             >
-              {step.confirmed && <Text className="text-label text-primary-foreground">✓</Text>}
+              {step.confirmed && <Text className="text-label text-primary-ink">✓</Text>}
             </View>
             <Text style={regular} className="text-body text-foreground">
               {t("done")}
@@ -250,18 +244,18 @@ function ChecklistRow({
             {t("restricted")}
           </Text>
           <Button label={t("appInfo")} onPress={() => open("appInfo")} />
-          {appInfoFailed && (
-            <Text accessibilityRole="alert" style={regular} className="text-body text-attention">
-              {t("error")}
-            </Text>
-          )}
+          {appInfoFailed && <ErrorLine locale={locale} />}
         </View>
       )}
-      {failed && (
-        <Text accessibilityRole="alert" style={regular} className="text-body text-attention">
-          {t("error")}
-        </Text>
-      )}
+      {failed && <ErrorLine locale={locale} />}
     </View>
+  );
+}
+
+function ErrorLine({ locale }: { locale: Locale }) {
+  return (
+    <Text accessibilityRole="alert" style={regular} className="text-body text-attention">
+      {reliabilityCopy(locale)("error")}
+    </Text>
   );
 }

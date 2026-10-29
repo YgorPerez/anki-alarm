@@ -47,18 +47,16 @@ const messages = {
       "Permita ignorar otimizações de bateria para reduzir interferências do fabricante.",
     backgroundRestrictedHint:
       "Nas informações do app, abra Bateria e selecione Sem restrições. O status indica se o Android permite atividade em segundo plano.",
-    autostartHint:
-      "Ative Início automático. No Xiaomi, sem isso o alarme não toca após reiniciar o celular.",
+    autostartHint: "Ative Início automático, ou o alarme não toca depois de reiniciar.",
     lockScreenHint: "Nas permissões do fabricante, ative Mostrar na tela de bloqueio.",
-    backgroundPopupsHint:
-      "Nas permissões do fabricante, permita abrir janelas enquanto o app está em segundo plano.",
+    backgroundPopupsHint: "Nas permissões do fabricante, permita abrir janelas em segundo plano.",
     noRestrictionsHint: "No economizador de bateria do app, escolha Sem restrições.",
     recentsHint:
       "Na lista de apps recentes, abra o menu do app e escolha o cadeado ou Manter aberto.",
     neverSleepingHint:
       "Na lista de apps que nunca entram em suspensão automática, toque em + e adicione este app.",
     motorolaBatteryHint:
-      "Abra Bateria nas informações do app e escolha Sem restrições. Se existir Melhorar bateria enquanto inativo, desative.",
+      "Em Bateria, escolha Sem restrições e desative Melhorar bateria enquanto inativo.",
   },
   en: {
     setup: "Prepare your alarms",
@@ -106,16 +104,14 @@ const messages = {
       "Allow ignoring battery optimization to reduce interference from the manufacturer.",
     backgroundRestrictedHint:
       "In App info, open Battery and choose Unrestricted. The status shows whether Android allows background activity.",
-    autostartHint:
-      "Enable Autostart. On Xiaomi, without this the alarm won't ring after the phone restarts.",
+    autostartHint: "Enable Autostart, or the alarm won't ring after a restart.",
     lockScreenHint: "In the manufacturer's permissions, enable Show on lock screen.",
-    backgroundPopupsHint:
-      "In the manufacturer's permissions, allow opening windows while running in the background.",
+    backgroundPopupsHint: "In the manufacturer's permissions, allow background windows.",
     noRestrictionsHint: "In the app's battery saver, choose No restrictions.",
     recentsHint: "In Recents, open the app's menu and choose the padlock or Keep open.",
     neverSleepingHint: "In Never auto sleeping apps, tap + and add this app.",
     motorolaBatteryHint:
-      "Open Battery in App info and choose Unrestricted. Turn off Improve battery while inactive if present.",
+      "In Battery, choose Unrestricted and turn off Improve battery while inactive.",
   },
 };
 export const reliabilityCopy = (locale: Locale) =>
