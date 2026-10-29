@@ -166,7 +166,7 @@ export function AnswerControls({
         accessibilityRole="button"
         disabled={busy}
         onPress={onReveal}
-        className="min-h-16 items-center justify-center rounded-full bg-surface"
+        className="min-h-16 items-center justify-center rounded-pill bg-surface"
       >
         <Text className="text-body text-foreground">{t("reveal")}</Text>
       </Pressable>
@@ -182,7 +182,7 @@ export function AnswerControls({
           onPress={() => {
             void onAnswer(grade);
           }}
-          className={`min-h-16 flex-1 items-center justify-center rounded-full px-1 ${gradeClasses[grade]}`}
+          className={`min-h-16 flex-1 items-center justify-center rounded-pill px-1 ${gradeClasses[grade]}`}
         >
           <Text
             className={`text-label ${gradeText[grade]}`}

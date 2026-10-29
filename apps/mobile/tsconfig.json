@@ -6,5 +6,5 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true
   },
-  "include": ["**/*.ts", "**/*.tsx", "uniwind-types.d.ts"]
+  "include": ["**/*.ts", "**/*.tsx", ".rnstorybook/**/*.tsx", "uniwind-types.d.ts"]
 }

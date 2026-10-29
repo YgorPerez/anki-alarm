@@ -143,7 +143,7 @@ function Chip({
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
-      className={`min-h-12 justify-center self-start rounded-full px-5 active:opacity-80 ${selected ? "bg-primary-tint" : "bg-surface"}`}
+      className={`min-h-12 justify-center self-start rounded-pill px-5 active:opacity-80 ${selected ? "bg-primary-tint" : "bg-surface"}`}
     >
       <Text
         style={selected ? bold : regular}

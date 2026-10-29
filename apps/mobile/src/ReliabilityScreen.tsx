@@ -226,8 +226,8 @@ function ChecklistRow({
             <View
               className={
                 step.confirmed
-                  ? "size-6 items-center justify-center rounded-sm border-2 border-primary-ink bg-primary-tint"
-                  : "size-6 rounded-sm border-2 border-border"
+                  ? "size-6 items-center justify-center rounded-pill border-2 border-primary-ink bg-primary-tint"
+                  : "size-6 rounded-pill border-2 border-border"
               }
             >
               {step.confirmed && <Text className="text-label text-primary-ink">✓</Text>}
