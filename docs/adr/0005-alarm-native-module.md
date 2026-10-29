@@ -83,6 +83,11 @@ Snooze and awake-check events carry the ring's id, the awake check's included af
 failed check starts a new ring with its own id. A gap where `elapsedRealtime` went back (a reboot)
 is timed on the wall clock.
 
+Amended in #60: the journal syncs. Each event JS drains into SQLite is queued like a review and
+travels as an append-only `alarmEvent` change (ADR 0001), so wake-up stats read the same events on
+the web. Durations still come from the ringing phone's own `elapsedRealtime`, so no device's clock
+mixes into another's ring.
+
 ### Permissions
 
 `getPermissions()` reports notifications, exact alarm, full-screen intent, display over other apps

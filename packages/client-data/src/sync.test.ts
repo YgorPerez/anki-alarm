@@ -1,6 +1,6 @@
 /* oxlint-disable eslint/no-await-in-loop -- Devices sync one after another, in order. */
 import { DatabaseSync } from "node:sqlite";
-import { newAlarm } from "@app/core";
+import { newAlarm, type AlarmEvent } from "@app/core";
 import { fakeSyncApi, memorySyncServer, type FakeSyncApi } from "@app/contracts/testing";
 import { Effect } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -81,6 +81,7 @@ test("the first sign-in on each device merges local data, and both end with ever
     phone.data.saveAlarm({ ...newAlarm("alarm-1"), label: "Trabalho", deckId, need: 5 }),
   );
   await phone.run(phone.data.setTheme({ primary: "#7fd4ff" }));
+  await phone.run(phone.data.ingestEvents([journalEvent("e1", "ringStarted")]));
   await web.run(web.data.changeCollection((c) => void c.createDeck("Inglês")));
 
   for (const side of [phone, web, phone]) {
@@ -100,9 +101,19 @@ test("the first sign-in on each device merges local data, and both end with ever
       { id: "alarm-1", label: "Trabalho", deckId, need: 5 },
     ]);
     expect((await side.run(side.data.settings)).fields.primary.value).toBe("#7fd4ff");
+    expect(await side.run(side.data.events)).toEqual([journalEvent("e1", "ringStarted")]);
     expect(await side.run(side.data.pendingChanges)).toEqual([]);
     expect(await side.run(side.data.syncAccount)).toBe("user-1");
   }
+});
+
+const journalEvent = (id: string, kind: string, wallTime = 2_000): AlarmEvent => ({
+  id,
+  kind,
+  alarmId: "alarm-1",
+  ringId: "ring-1",
+  wallTime,
+  elapsedRealtime: wallTime - 1_000,
 });
 
 /** Two devices signed in to one account, synced once with a shared deck and note. */
@@ -202,6 +213,29 @@ test("reviews from both devices append, and the outbox empties after a push", as
   await sync(phone);
   expect(api.calls.push.length).toBe(pushes);
   expect(await phone.run(phone.data.pendingChanges)).toEqual([]);
+});
+
+test("the phone's alarm journal reaches the web once, and ingesting it again queues nothing", async () => {
+  const { phone, web, sync } = await pair();
+  const journal = [journalEvent("e1", "ringStarted"), journalEvent("e2", "dismissed", 9_000)];
+  let writes = 0;
+  phone.data.subscribe(() => (writes += 1));
+  await phone.run(phone.data.ingestEvents(journal));
+  expect(writes).toBe(1);
+  expect(await phone.run(phone.data.pendingChanges)).toMatchObject([
+    { database: "anki-alarm.db", kind: "alarmEvent", recordId: "e1" },
+    { database: "anki-alarm.db", kind: "alarmEvent", recordId: "e2" },
+  ]);
+  await sync(phone, web);
+  expect(await web.run(web.data.events)).toEqual(journal);
+
+  // Native drains again after a missed ack: the copies change nothing and queue nothing.
+  await phone.run(phone.data.ingestEvents([{ ...journal[0]!, kind: "missed" }]));
+  expect(writes).toBe(1);
+  expect(await phone.run(phone.data.pendingChanges)).toEqual([]);
+  await sync(phone, web);
+  expect(await web.run(web.data.events)).toEqual(journal);
+  expect(await phone.run(phone.data.events)).toEqual(journal);
 });
 
 test("a local edit made after a pull wins over what was pulled, even with a slow clock", async () => {

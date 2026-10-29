@@ -27,6 +27,7 @@ import type { SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import { Cause, Data, Effect, Exit } from "effect";
 import { MediaStorageRefused, type MediaFiles } from "./media.ts";
 import {
+  alarmEvents,
   alarmRecords,
   alarms,
   cards,
@@ -59,6 +60,8 @@ const recordTables = { decks, presets, noteTypes, notes, cards } as const;
 type RecordTable = keyof typeof recordTables;
 const RECORD_TABLES = ["decks", "presets", "noteTypes", "notes", "cards"] as const;
 const isRecordTable = (kind: string): kind is RecordTable => kind in recordTables;
+/** Alarms and their journal live in anki-alarm.db; everything else in collection.db. */
+const inAlarmDb = (change: Change) => change.kind === "alarms" || change.kind === "alarmEvent";
 
 /** The contract checks a change's envelope; Core's types describe its records. */
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion
@@ -149,6 +152,11 @@ export function syncEngine({
       const record = await alarmRecord(row.id);
       if (record) changes.push({ kind: "alarms", record });
     }
+    for (const row of await alarmDb
+      .select()
+      .from(alarmEvents)
+      .orderBy(sql`rowid`))
+      changes.push({ kind: "alarmEvent", event: row.data });
     return changes;
   };
 
@@ -171,6 +179,7 @@ export function syncEngine({
     // oxlint-disable typescript/no-unsafe-type-assertion
     if (kind === "tombstones") return { kind: "tombstone", tombstone: body as Tombstone };
     if (kind === "reviewLog") return { kind: "reviewLog", entry: body as never };
+    if (kind === "alarmEvent") return { kind: "alarmEvent", event: body as never };
     if (kind === "settings" || kind === "media") return { kind, record: body as never };
     // oxlint-enable typescript/no-unsafe-type-assertion
     if (kind === "alarms") {
@@ -191,7 +200,7 @@ export function syncEngine({
   ) =>
     serial(async () => {
       const kept = held.flatMap((change) =>
-        change.kind === "tombstone" || change.kind === "reviewLog"
+        change.kind === "tombstone" || change.kind === "reviewLog" || change.kind === "alarmEvent"
           ? []
           : [{ kind: change.kind, recordId: change.record.id, body: change.record }],
       );
@@ -218,6 +227,12 @@ export function syncEngine({
         await collectionDb.select().from(reviewLog).where(eq(reviewLog.id, change.entry.id))
       )[0];
       return row && { kind: "reviewLog", entry: row.body };
+    }
+    if (change.kind === "alarmEvent") {
+      const row = (
+        await alarmDb.select().from(alarmEvents).where(eq(alarmEvents.id, change.event.id))
+      )[0];
+      return row && { kind: "alarmEvent", event: row.data };
     }
     if (change.kind === "settings") {
       const row = (await collectionDb.select().from(settings))[0];
@@ -247,6 +262,8 @@ export function syncEngine({
   const write = async (change: SyncChange) => {
     if (change.kind === "reviewLog") {
       await collectionDb.insert(reviewLog).values({ id: change.entry.id, body: change.entry });
+    } else if (change.kind === "alarmEvent") {
+      await alarmDb.insert(alarmEvents).values({ id: change.event.id, data: change.event });
     } else if (change.kind === "settings") {
       // One settings record per device: merge into it whatever id the account's record has.
       const local = (await collectionDb.select().from(settings))[0];
@@ -406,7 +423,10 @@ export function syncEngine({
       return { downloaded, missing: wanted.length - downloaded, storageRefused };
     });
 
-  /** Applies one pulled page and its cursor. Alarms commit first: re-applying them is harmless. */
+  /**
+   * Applies one pulled page and its cursor. Alarms and journal events commit first, in
+   * anki-alarm.db: re-applying them is harmless.
+   */
   const apply = (page: readonly Change[], cursor: number) =>
     serial(async () => {
       const changed = new Set<string>();
@@ -418,9 +438,9 @@ export function syncEngine({
           changed.add(winner.kind);
         }
       };
-      await inAlarms(() => resolveAll(page.filter((c) => c.kind === "alarms")));
+      await inAlarms(() => resolveAll(page.filter(inAlarmDb)));
       await inCollection(async () => {
-        await resolveAll(page.filter((c) => c.kind !== "alarms"));
+        await resolveAll(page.filter((c) => !inAlarmDb(c)));
         await writeMeta("syncCursor", String(cursor));
       });
       return changed;

@@ -1,10 +1,10 @@
 # Sync protocol
 
 The phone, the web and the Worker sync by push and pull against a per-user server sequence. Notes
-and settings merge field by field, last-write-wins by hybrid logical clock (HLC). Reviews are
-append-only and never conflict. We chose this over timestamps and whole-record LWW because phone
-clocks are often wrong, the phone works offline for long stretches, and two devices editing
-different fields of the same note should both keep their edit. Decided in #29.
+and settings merge field by field, last-write-wins by hybrid logical clock (HLC). Reviews and alarm
+journal events are append-only and never conflict. We chose this over timestamps and whole-record
+LWW because phone clocks are often wrong, the phone works offline for long stretches, and two
+devices editing different fields of the same note should both keep their edit. Decided in #29.
 
 ## Ids
 
@@ -35,6 +35,10 @@ depend on any clock and can't skip a write that commits late. One sync is push, 
 - Review log entries (reviews, snapshots, resets, set due dates, voids; see ADR 0003) never conflict.
   Undo appends a **void** that points at an earlier entry, and replay skips voided entries. Nothing in
   the log is ever edited or removed.
+- Alarm journal events (ADR 0005) sync the same way, so the web shows wake-up stats. Each event is
+  its own slot by its UUIDv7 id, written once by the phone that rang; a copy of an id already
+  stored changes nothing, and events are never edited or deleted. Added in #60, with
+  `SYNC_PROTOCOL` 2.
 
 ## Deletes
 
