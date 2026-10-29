@@ -58,7 +58,9 @@ appId: dev.ygorperez.ankialarm
 - back
 - assertVisible: "Novo alarme|New alarm"
 - tapOn: "Novo alarme|New alarm"
+- assertVisible: "Repetir.*|Repeat.*"
 - back
+- assertNotVisible: "Repetir.*|Repeat.*"
 - assertVisible: "Novo alarme|New alarm"
 # Back unwinds a deck; an inactive deck must not keep Stats from leaving the app.
 - tapOn:
