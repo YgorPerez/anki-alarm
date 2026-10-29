@@ -72,6 +72,9 @@ jobs:
           java-version: "17"
       - uses: android-actions/setup-android@v3
         if: steps.runtime.outputs.apk == 'true'
+        # The default list includes `tools`, which the SDK no longer ships.
+        with:
+          packages: platform-tools
       - name: Prebuild Android
         if: steps.runtime.outputs.apk == 'true'
         run: vp exec --filter @app/mobile expo prebuild --clean --platform android --no-install

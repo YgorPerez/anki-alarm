@@ -51,6 +51,9 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v3
+        # The default list includes `tools`, which the SDK no longer ships.
+        with:
+          packages: platform-tools
       - name: Build standalone test APK
         run: |
           vp exec --filter @app/mobile expo prebuild --clean --platform android --no-install
