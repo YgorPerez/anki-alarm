@@ -18,6 +18,7 @@ import {
 } from "@expo-google-fonts/atkinson-hyperlegible";
 import { CollectionScreen } from "./CollectionScreen.tsx";
 import { androidAnkiDroid } from "./ankidroid-android.ts";
+import { syncBackAfterSession } from "./ankidroid.ts";
 import { StatsScreen } from "./StatsScreen.tsx";
 import { statsCopy } from "./stats-copy.ts";
 import { Effect } from "effect";
@@ -185,7 +186,10 @@ function Home() {
       .then((next) => {
         setRing(next.ring);
         setAwakeCheck(next.awakeCheck);
+        // After each alarm session or awake check: its reviews reach the other devices, and
+        // AnkiDroid when auto sync back is on. A failed sync back retries after the next one.
         appSync?.syncNow();
+        void Effect.runPromise(syncBackAfterSession(androidAnkiDroid)).catch(() => {});
       })
       .catch(() => setError(t("alarmError")));
   };

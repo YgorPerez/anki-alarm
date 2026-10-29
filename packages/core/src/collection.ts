@@ -2,9 +2,10 @@
 import { default_w } from "ts-fsrs";
 import type { AnkiPackage } from "./apkg.ts";
 import {
-  ankiDroidSnapshot,
   linkedAnkiDroidDecks,
   presetFromOptions,
+  seenReps,
+  snapshotEntry,
   type AnkiDroidCard,
   type AnkiDroidSource,
 } from "./ankidroid.ts";
@@ -114,6 +115,18 @@ export interface CollectionEnvironment {
   deviceId: string;
   now: () => number;
   random: () => Uint8Array;
+}
+/** What linking or pulling an AnkiDroid deck changed. */
+export interface AnkiDroidLink {
+  deckId: string;
+  /** Cards AnkiDroid reviewed since this phone last saw them. */
+  snapshots: LogEntry[];
+  /** AnkiDroid's `reps` for every linked card read, to store as seen. */
+  seen: [cardId: string, reps: number][];
+  /** Decks this phone took over: their earlier reviews are not sent back from here. */
+  claimed: string[];
+  added: number;
+  edited: number;
 }
 const KINDS = ["decks", "presets", "noteTypes", "notes", "cards"] as const;
 const fits = (type: NoteType, values: readonly string[]) =>
@@ -425,10 +438,17 @@ export class Collection {
    * Imports an AnkiDroid deck with its subdecks as linked decks owned by this phone (ADR 0001).
    * Records take ids from their Anki identities, so linking again updates instead of duplicating:
    * a note field takes AnkiDroid's value when the note's mod time is newer than the field's clock.
-   * Reviewed cards come with a snapshot of AnkiDroid's state to append to the review log.
+   * Pulling is linking again: new notes and cards come in, edited fields follow that rule, and
+   * suspension follows AnkiDroid. A card AnkiDroid reviewed since this phone last saw it (`seen`,
+   * see `seenReps`) comes with a snapshot of its state to append to the review log.
    */
-  linkAnkiDroid(source: AnkiDroidSource): { deckId: string; snapshots: LogEntry[] } {
+  linkAnkiDroid(
+    source: AnkiDroidSource,
+    log: readonly LogEntry[] = [],
+    seen: ReadonlyMap<string, number> = new Map(),
+  ): AnkiDroidLink {
     const decks = linkedAnkiDroidDecks(source);
+    const claimed: string[] = [];
     const deckIds = new Map(decks.map((d) => [d.id, importId("deck", d.id, d.name)]));
     if ([...deckIds.values()].some((id) => this.deleted("decks", id)))
       throw new Error("Linked deck was deleted");
@@ -444,6 +464,7 @@ export class Collection {
           anki: { id: ankiId },
         });
       const deck = this.state.decks.find((d) => d.id === id);
+      if (deck?.fields.linkedBy?.value !== this.env.deviceId) claimed.push(id);
       if (!deck)
         this.state.decks.push({
           ...this.record(
@@ -481,37 +502,42 @@ export class Collection {
     }
     const homeDeck = (c: AnkiDroidCard) => deckIds.get(c.originalDeckId || c.deckId);
     const noteIds = new Map<number, string>();
+    let added = 0;
+    let edited = 0;
     for (const ad of source.notes) {
       const id = importId("note", ad.guid);
       const noteTypeId = typeIds.get(ad.noteTypeId);
       const hasCard = source.cards.some((c) => c.noteId === ad.id && homeDeck(c));
       if (!noteTypeId || !hasCard || this.deleted("notes", id)) continue;
       noteIds.set(ad.id, id);
-      this.mergeAnkiNote(id, ad, noteTypeId);
+      const merged = this.mergeAnkiNote(id, ad, noteTypeId);
+      if (merged === "added") added++;
+      else if (merged === "edited") edited++;
     }
     const snapshots: LogEntry[] = [];
+    const reps: [string, number][] = [];
     for (const ad of source.cards) {
       const noteId = noteIds.get(ad.noteId);
       const deckId = homeDeck(ad);
       if (!noteId || !deckId) continue;
       const id = cardId(noteId, ad.ord);
       if (this.deleted("cards", id)) continue;
-      if (!this.state.cards.some((c) => c.id === id))
+      // Queue -1 is suspended in Anki; buried cards (-2/-3) are not modelled.
+      const suspended = ad.queue === -1;
+      const card = this.state.cards.find((c) => c.id === id);
+      if (!card)
         this.state.cards.push({
-          // Queue -1 is suspended in Anki; buried cards (-2/-3) are not modelled.
-          ...this.record({ noteId, deckId, ordinal: ad.ord, suspended: ad.queue === -1 }, id),
+          ...this.record({ noteId, deckId, ordinal: ad.ord, suspended }, id),
           anki: { id: ad.id },
         });
-      const snapshot = ankiDroidSnapshot(ad, steps.get(deckId) ?? [], this.env.now());
-      if (snapshot)
-        snapshots.push({
-          kind: "snapshot",
-          id: importId("snapshot", `${ad.id}:${ad.reps}`),
-          cardId: id,
-          ...snapshot,
-        });
+      else if (card.fields.suspended.value !== suspended)
+        card.fields.suspended = { value: suspended, hlc: this.tick() };
+      reps.push([id, ad.reps]);
+      if (ad.reps <= seenReps(log, id, seen)) continue;
+      const snapshot = snapshotEntry(ad, id, steps.get(deckId) ?? [], this.env.now());
+      if (snapshot) snapshots.push(snapshot);
     }
-    return { deckId: deckIds.get(source.deckId)!, snapshots };
+    return { deckId: deckIds.get(source.deckId)!, snapshots, seen: reps, claimed, added, edited };
   }
   private mergeAnkiNote(id: string, ad: AnkiDroidSource["notes"][number], noteTypeId: string) {
     const values = ad.fields.split(SEPARATOR);
@@ -524,17 +550,23 @@ export class Collection {
         values: values.map((value) => ({ value, hlc })),
         anki: { id: ad.id, guid: ad.guid },
       });
-      return;
+      return "added";
     }
     // Per field, the newer of the local clock and AnkiDroid's mod time wins (ADR 0001).
     const mod = ad.mod * 1000;
+    let changed = false;
     values.forEach((value, i) => {
       const local = note.values[i];
-      if (local?.value !== value && (!local || mod > local.hlc.wallMs))
+      if (local?.value !== value && (!local || mod > local.hlc.wallMs)) {
         note.values[i] = { value, hlc: this.tick() };
+        changed = true;
+      }
     });
-    if (note.fields.tags.value.join(" ") !== tags.join(" ") && mod > note.fields.tags.hlc.wallMs)
+    if (note.fields.tags.value.join(" ") !== tags.join(" ") && mod > note.fields.tags.hlc.wallMs) {
       note.fields.tags = { value: tags, hlc: this.tick() };
+      changed = true;
+    }
+    return changed ? "edited" : undefined;
   }
   private remove(kind: RecordKind, id: string) {
     this.state.tombstones.push({ id, kind, sequence: 0, hlc: this.tick() });

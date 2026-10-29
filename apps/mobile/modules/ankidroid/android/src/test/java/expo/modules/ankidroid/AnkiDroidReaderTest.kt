@@ -15,6 +15,9 @@ import org.robolectric.RobolectricTestRunner
 /** A provider answering like AnkiDroid 2.24's `CardContentProvider` for one deck and a subdeck. */
 class FakeAnkiDroid : ContentProvider() {
   val searches = mutableListOf<String?>()
+  val answers = mutableListOf<Map<String, Any?>>()
+  /** Card 9001's reps: answering it raises them, as AnkiDroid's scheduler does. */
+  var reps = 0
   override fun onCreate() = true
   override fun query(uri: Uri, projection: Array<String>?, selection: String?, args: Array<String>?, sort: String?): Cursor? {
     val columns = requireNotNull(projection)
@@ -39,8 +42,9 @@ class FakeAnkiDroid : ContentProvider() {
         ) }
         when (selection) {
           // `did:` here also matches subdecks, so the reader must deduplicate.
-          "did:10" -> cursor(card(9001, 10, 0), card(9002, 11, 2))
+          "did:10" -> cursor(card(9001, 10, reps), card(9002, 11, 2))
           "did:11" -> cursor(card(9002, 11, 2))
+          "nid:501" -> cursor(card(9001, 10, reps), card(9002, 11, 2))
           else -> null
         }
       }
@@ -60,7 +64,14 @@ class FakeAnkiDroid : ContentProvider() {
   override fun getType(uri: Uri): String? = null
   override fun insert(uri: Uri, values: ContentValues?): Uri? = null
   override fun delete(uri: Uri, selection: String?, args: Array<String>?) = 0
-  override fun update(uri: Uri, values: ContentValues?, selection: String?, args: Array<String>?) = 0
+  override fun update(uri: Uri, values: ContentValues?, selection: String?, args: Array<String>?): Int {
+    require(uri.pathSegments == listOf("schedule")) { "unexpected $uri" }
+    val row = requireNotNull(values).keySet().associateWith { values.get(it) }
+    answers += row
+    if (row["note_id"] == 501L && row["ord"] == 0) reps++
+    // AnkiDroid counts the row as updated whether or not the answer worked.
+    return 1
+  }
 }
 
 @RunWith(RobolectricTestRunner::class)
@@ -100,5 +111,20 @@ class AnkiDroidReaderTest {
     val type = source.getJSONArray("noteTypes").getJSONObject(0)
     assertEquals(false, type.getBoolean("cloze"))
     assertEquals("Card 2", type.getJSONArray("templates").getJSONObject(1).getString("name"))
+  }
+
+  @Test
+  fun `answers a card by note id and ord and reads it back`() {
+    val (reader, provider) = reader()
+    val card = requireNotNull(reader.answer(501, 0, 3, 4200))
+    assertEquals(
+      listOf(mapOf<String, Any?>("note_id" to 501L, "ord" to 0, "answer_ease" to 3, "time_taken" to 4200L)),
+      provider.answers,
+    )
+    assertEquals(9001L, card.getLong("id"))
+    assertEquals(1, card.getInt("reps"))
+    assertEquals(listOf("nid:501"), provider.searches)
+    assertEquals(2, reader.cards(listOf(501, 501)).length())
+    assertEquals(null, reader.answer(501, 5, 3, 4200))
   }
 }

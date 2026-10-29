@@ -161,14 +161,26 @@ AnkiDroid decks become the app's own decks. The app schedules them with FSRS lik
   take the same import ids as `.apkg` import, so linking again updates instead of duplicating.
 - **Media** can't come through the API: the AnkiDroid screen asks for an `.apkg` export of the
   deck and stores its images and audio.
-- **Pull** (on demand, from the deck): new notes and edited fields come in. For each linked card
-  whose AnkiDroid review is newer than our last review of it, the app records an imported review
-  from AnkiDroid's state, and replay folds it in.
-- **Sync back** (on demand, plus an optional auto sync after each alarm session): each review done
-  in the app since the last sync is sent to AnkiDroid as an answer with the same grade and time
-  taken, so AnkiDroid reschedules with its own scheduler and keeps a real history. AnkiDroid's API
-  can't write due dates or memory state directly; only answers, bury, suspend and moving decks. The
-  two schedules can drift a little when the FSRS parameters differ; that's accepted.
+- **Pull** (on demand, from the deck) always runs a sync back first. Then new notes and cards and
+  edited fields come in (a field takes AnkiDroid's value when its mod time is newer than our
+  edit), and suspension follows AnkiDroid. For each linked card AnkiDroid reviewed since the phone
+  last saw it (its `reps` went up), the app appends a snapshot timed at that review, and replay
+  adopts it.
+- **Sync back** (on demand from the deck, plus an auto sync after each alarm session, on by default
+  and turned off per phone): every review of a linked card not sent yet, from any origin, goes to
+  AnkiDroid in answer-time order as an answer with the same grade and time taken, so AnkiDroid
+  reschedules with its own scheduler and keeps a real history. AnkiDroid stamps each answer with
+  the time of the sync and caps the time taken at its deck's limit. Each answer is checked by
+  reading the card back, since the API reports success either way. Answers for cards suspended or
+  buried in AnkiDroid wait (answering would unsuspend them); answers for cards AnkiDroid deleted are
+  dropped. A card AnkiDroid reviewed since we last saw it gets its snapshot before our answers go.
+  The phone keeps what it sent and the `reps` it last saw locally; a phone that takes over a linked
+  deck doesn't resend the reviews from before.
+- AnkiDroid's API can't write due dates or memory state; only answers, bury, suspend and moving
+  decks. A reset or set due date on a linked card stays in the app, the card screen says so, and
+  AnkiDroid's next review of the card snapshots over it. The two schedules can drift a little when
+  the FSRS parameters differ; that's accepted. Notes added in the app to a linked deck stay in the
+  app.
 - Needs AnkiDroid 2.24 or newer installed and its API permission granted. Without them, the
   AnkiDroid screens say so and the rest of the app works.
 

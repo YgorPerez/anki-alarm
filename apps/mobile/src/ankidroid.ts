@@ -1,5 +1,8 @@
-import type { AnkiDroidDeck, AnkiDroidSource } from "@app/core";
+import type { AnkiDroidProvider } from "@app/client-data";
+import type { AnkiDroidCard, AnkiDroidDeck, AnkiDroidSource, SyncBackAnswer } from "@app/core";
+import { ankiDroidAccess } from "@app/core";
 import { Effect } from "effect";
+import { localData } from "./database.ts";
 
 /** Why a provider call failed, as the AnkiDroid screens explain it. */
 export class AnkiDroidError extends Error {
@@ -20,9 +23,32 @@ export interface AnkiDroidApi {
   requestPermission: Effect.Effect<"granted" | "prompted" | "settings", Error>;
   decks: Effect.Effect<AnkiDroidDeck[], AnkiDroidError>;
   readDeck: (deckId: number) => Effect.Effect<AnkiDroidSource, AnkiDroidError>;
+  /** Every card of these AnkiDroid notes, with scheduling. */
+  cards: (noteIds: readonly number[]) => Effect.Effect<AnkiDroidCard[], AnkiDroidError>;
+  /** Answers a card in AnkiDroid and reads it back; `null` when AnkiDroid has no such card. */
+  answer: (answer: SyncBackAnswer) => Effect.Effect<AnkiDroidCard | null, AnkiDroidError>;
   /** Lets the user pick an `.apkg` and stores its media. `null` when the picker is cancelled. */
   importMedia: Effect.Effect<number | null, Error>;
 }
+
+/** The provider client-data's sync back and pull call. */
+export const ankiDroidProvider = (api: AnkiDroidApi): AnkiDroidProvider => ({
+  readDeck: (deckId) => Effect.runPromise(api.readDeck(deckId)),
+  cards: (noteIds) => Effect.runPromise(api.cards(noteIds)),
+  answer: (answer) => Effect.runPromise(api.answer(answer)),
+});
+
+/**
+ * After an alarm session: sync back, when it's on and AnkiDroid can take answers. Resolves with
+ * the number of answers sent; failures wait for the next run.
+ */
+export const syncBackAfterSession = (api: AnkiDroidApi) =>
+  Effect.gen(function* () {
+    const on = yield* localData((data) => data.autoSyncBack);
+    if (!on || ankiDroidAccess(yield* api.status) !== "ready") return 0;
+    const summary = yield* localData((data) => data.syncBackAnkiDroid(ankiDroidProvider(api)));
+    return summary.sent;
+  });
 
 export function memoryAnkiDroid(options: {
   installed: { versionCode: number; permission: "granted" | "denied" } | null;
@@ -32,12 +58,14 @@ export function memoryAnkiDroid(options: {
   media?: number | null;
   /** What the provider throws, e.g. after the permission is revoked. */
   failure?: AnkiDroidError["reason"];
-}): AnkiDroidApi & { requests: number } {
-  const state = { ...options };
+}): AnkiDroidApi & { requests: number; answers: SyncBackAnswer[] } {
+  const state = { ...options, sources: structuredClone(options.sources ?? []) };
   const fail = (): Effect.Effect<void, AnkiDroidError> =>
     state.failure ? Effect.fail(new AnkiDroidError(state.failure)) : Effect.void;
+  const allCards = () => state.sources.flatMap((s) => s.cards);
   const api = {
     requests: 0,
+    answers: [] as SyncBackAnswer[],
     status: Effect.sync(() => state.installed),
     requestPermission: Effect.sync(() => {
       api.requests++;
@@ -48,8 +76,31 @@ export function memoryAnkiDroid(options: {
     readDeck: (deckId: number) =>
       fail().pipe(
         Effect.flatMap(() => {
-          const source = state.sources?.find((s) => s.deckId === deckId);
-          return source ? Effect.succeed(source) : Effect.fail(new AnkiDroidError("failed"));
+          const source = state.sources.find((s) => s.deckId === deckId);
+          return source
+            ? Effect.succeed(structuredClone(source))
+            : Effect.fail(new AnkiDroidError("failed"));
+        }),
+      ),
+    cards: (noteIds: readonly number[]) =>
+      fail().pipe(
+        Effect.map(() => {
+          const notes = new Set(noteIds);
+          return structuredClone(allCards().filter((c) => notes.has(c.noteId)));
+        }),
+      ),
+    // AnkiDroid's scheduler: each answer is one more review, at the time of the sync.
+    answer: (answer: SyncBackAnswer) =>
+      fail().pipe(
+        Effect.map(() => {
+          api.answers.push(answer);
+          const card = allCards().find((c) => c.noteId === answer.noteId && c.ord === answer.ord);
+          if (!card) return null;
+          Object.assign(card, {
+            reps: card.reps + 1,
+            lastReviewSecs: Math.floor(Date.now() / 1000),
+          });
+          return { ...card };
         }),
       ),
     importMedia: Effect.sync(() => state.media ?? null),

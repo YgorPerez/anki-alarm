@@ -76,6 +76,15 @@ export const mediaLocal = sqliteTable("media_local", {
   name: text().primaryKey(),
   sha256: text().notNull(),
 });
+/** This phone's view of AnkiDroid (#57), never synced: each linked card's reps as last seen. */
+export const ankiDroidCards = sqliteTable("ankidroid_cards", {
+  id: text().primaryKey(),
+  reps: integer().notNull(),
+});
+/** Review log entries already sent back to AnkiDroid. */
+export const ankiDroidSent = sqliteTable("ankidroid_sent", {
+  id: text().primaryKey(),
+});
 
 export const alarmRecords = sqliteTable("alarm_records", {
   id: text().primaryKey(),
