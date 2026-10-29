@@ -46,7 +46,7 @@ appId: dev.ygorperez.ankialarm
     id: "open-settings"
 - assertVisible: "Conta|Account"
 - back
-- assertVisible: "Retenção real|True retention"
+- assertVisible: "Todos os baralhos|All decks"
 - tapOn:
     id: "tab-index"
 - tapOn:
