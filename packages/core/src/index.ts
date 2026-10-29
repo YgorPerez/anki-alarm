@@ -59,6 +59,7 @@ export type {
 
 export {
   nextRing,
+  nextAlarmRing,
   newAlarm,
   RING_POLICY,
   RAMP_CHOICES,
@@ -184,3 +185,5 @@ export {
   stampMedia,
 } from "./media.ts";
 export type { MediaFile, MediaRecord } from "./media.ts";
+
+export type { NextAlarmRing } from "./alarm.ts";
