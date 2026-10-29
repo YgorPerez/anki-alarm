@@ -18,9 +18,17 @@ export interface BrowseRow {
   suspended: boolean;
 }
 
-/** Lower case, no accents, single spaces: what search compares. */
+/**
+ * Lower case, no accents, single spaces: what search compares. Accents are the combining marks
+ * NFD splits off, as a plain range: Hermes parses Core on the phone too.
+ */
 const fold = (text: string) =>
-  text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
+  text
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 const text = (html: string) => unescapeHtml(html).replace(/\s+/g, " ").trim();
 
 /** Words, `"quoted phrases"`, each optionally negated with `-`. */
