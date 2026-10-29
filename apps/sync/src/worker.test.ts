@@ -209,6 +209,34 @@ test("deletes beat later edits and reviews only append", async () => {
   ]);
 });
 
+test("alarm journal events only append, and reach the account's other devices", async () => {
+  const phone = await client(await signIn("elis"));
+  const event = {
+    id: "e1",
+    kind: "ringStarted",
+    alarmId: "a1",
+    ringId: "ring-1",
+    wallTime: 1000,
+    elapsedRealtime: 40,
+  };
+  expect(
+    await run(phone.changes.push({ payload: { changes: [{ kind: "alarmEvent", event }] } })),
+  ).toEqual({ accepted: 1 });
+  expect(
+    await run(
+      phone.changes.push({
+        payload: { changes: [{ kind: "alarmEvent", event: { ...event, kind: "dismissed" } }] },
+      }),
+    ),
+  ).toEqual({ accepted: 0 });
+
+  const web = await client(await signIn("elis"));
+  const { changes } = await run(web.changes.pull({ payload: { cursor: 0 } }));
+  expect(changes).toEqual([{ kind: "alarmEvent", event }]);
+  const other = await client(await signIn("enzo"));
+  expect((await run(other.changes.pull({ payload: { cursor: 0 } }))).changes).toEqual([]);
+});
+
 test("concurrent pushes for one account both keep their field", async () => {
   const api = await client(await signIn("eva"));
   await run(api.changes.push({ payload: { changes: [note("n1", ["a", 1], ["b", 1])] } }));

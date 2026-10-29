@@ -102,6 +102,30 @@ describe("memorySyncServer", () => {
     });
   });
 
+  test("carries alarm journal events, which only append and never conflict", async () => {
+    api = await fakeSyncApi(memorySyncServer());
+    const event = {
+      id: "event",
+      kind: "dismissed",
+      alarmId: "alarm",
+      ringId: "ring",
+      wallTime: 1000,
+      elapsedRealtime: 50,
+    };
+    const push = (changes: Change[]) =>
+      api!.run(api!.client.changes.push({ payload: { changes } }));
+
+    expect(await push([{ kind: "alarmEvent", event }])).toEqual({ accepted: 1 });
+    expect(
+      await push([{ kind: "alarmEvent", event: { ...event, wallTime: 2000, ringId: null } }]),
+    ).toEqual({ accepted: 0 });
+    expect(await api.run(api.client.changes.pull({ payload: { cursor: 0 } }))).toEqual({
+      changes: [{ kind: "alarmEvent", event }],
+      cursor: 1,
+      more: false,
+    });
+  });
+
   test("stores media once, and serves a file only to an account with a note that uses it", async () => {
     const server = memorySyncServer();
     const ana = await fakeSyncApi({ ...server, user: "ana" });

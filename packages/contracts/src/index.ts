@@ -49,10 +49,23 @@ export const LogEntry = Schema.StructWithRest(
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 );
+/**
+ * One alarm journal event from a phone (ADR 0005). Like a review it only appends: its id is its
+ * slot and the first copy stays. Kinds stay open, as clients ignore the ones they don't know.
+ */
+export const AlarmEvent = Schema.Struct({
+  id: Schema.String,
+  kind: Schema.String,
+  alarmId: Schema.String,
+  ringId: Schema.NullOr(Schema.String),
+  wallTime: Schema.Finite,
+  elapsedRealtime: Schema.Finite,
+});
 export const Change = Schema.Union([
   Schema.Struct({ kind: Schema.Literals(SYNC_KINDS), record: FieldRecord }),
   Schema.Struct({ kind: Schema.Literal("tombstone"), tombstone: Tombstone }),
   Schema.Struct({ kind: Schema.Literal("reviewLog"), entry: LogEntry }),
+  Schema.Struct({ kind: Schema.Literal("alarmEvent"), event: AlarmEvent }),
 ]);
 export type Change = typeof Change.Type;
 

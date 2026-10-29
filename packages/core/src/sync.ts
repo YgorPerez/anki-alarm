@@ -2,6 +2,7 @@
 // apply every pull with them, so both sides agree on the winner.
 import type { Field, Hlc, RecordKind, Tombstone } from "./collection.ts";
 import type { LogEntry } from "./study.ts";
+import type { AlarmEvent } from "./wakeup.ts";
 
 /** The record kinds that merge field by field. */
 export type SyncKind = RecordKind | "settings" | "alarms" | "media";
@@ -13,11 +14,12 @@ export interface FieldRecord {
   /** Anki's own ids (ADR 0001); they never change once a record has them. */
   anki?: { [key: string]: unknown };
 }
-/** One record, delete or review log entry, as it travels in a push or a pull. */
+/** One record, delete, review log entry or alarm journal event, as it travels in a push or a pull. */
 export type SyncChange =
   | { kind: SyncKind; record: FieldRecord }
   | { kind: "tombstone"; tombstone: Tombstone }
-  | { kind: "reviewLog"; entry: LogEntry };
+  | { kind: "reviewLog"; entry: LogEntry }
+  | { kind: "alarmEvent"; event: AlarmEvent };
 
 export const SYNC_KINDS: readonly SyncKind[] = [
   "decks",
@@ -79,24 +81,29 @@ export function mergeRecord<R extends FieldRecord>(current: R | undefined, incom
 export function syncSlot(change: SyncChange): { kind: string; id: string } {
   if (change.kind === "tombstone") return { kind: change.tombstone.kind, id: change.tombstone.id };
   if (change.kind === "reviewLog") return { kind: "reviewLog", id: change.entry.id };
+  if (change.kind === "alarmEvent") return { kind: "alarmEvent", id: change.event.id };
   if (change.kind === "settings") return { kind: "settings", id: "settings" };
   return { kind: change.kind, id: change.record.id };
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
+const appendOnly = (
+  change: SyncChange,
+): change is Extract<SyncChange, { kind: "reviewLog" | "alarmEvent" }> =>
+  change.kind === "reviewLog" || change.kind === "alarmEvent";
 /**
  * What a slot holds after `incoming` arrives, or undefined when it keeps `stored`. Deletes beat
- * every edit and are final; review log entries only append.
+ * every edit and are final; review log entries and alarm journal events only append.
  */
 export function resolveChange(
   stored: SyncChange | undefined,
   incoming: SyncChange,
 ): SyncChange | undefined {
   if (!stored) return incoming;
-  if (stored.kind === "tombstone" || stored.kind === "reviewLog") return undefined;
+  if (stored.kind === "tombstone" || appendOnly(stored)) return undefined;
   if (incoming.kind === "tombstone") return incoming;
-  if (incoming.kind === "reviewLog") return undefined;
+  if (appendOnly(incoming)) return undefined;
   const record = mergeRecord(stored.record, incoming.record);
   return same(record, stored.record) ? undefined : { kind: stored.kind, record };
 }
