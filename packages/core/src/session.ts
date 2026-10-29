@@ -3,7 +3,7 @@ import { Rating, State, type Grade } from "ts-fsrs";
 import type { Alarm } from "./alarm.ts";
 import type { Card, CollectionState } from "./collection.ts";
 import { deckLanguage } from "./read-aloud.ts";
-import { deckPreset, newPosition, replayCard, type LogEntry } from "./study.ts";
+import { deckFamily, deckPreset, newPosition, replayCard, type LogEntry } from "./study.ts";
 
 /**
  * Fixed session timings and rules. `gradeDelaySeconds` keeps the grades hidden for a moment after
@@ -55,18 +55,6 @@ export function snoozeOffer(alarm: Alarm, snoozes: number) {
   return { minutes: alarm.snoozeMinutes, cost: SNOOZE_COST, left };
 }
 
-/** The deck and its subdecks, which Anki names `Parent::Child`. */
-function deckIds(collection: CollectionState, deckId: string) {
-  const deck = collection.decks.find((d) => d.id === deckId);
-  if (!deck) return new Set<string>();
-  const prefix = `${deck.fields.name.value}::`;
-  return new Set(
-    collection.decks
-      .filter((d) => d.id === deckId || d.fields.name.value.startsWith(prefix))
-      .map((d) => d.id),
-  );
-}
-
 const voidedIds = (log: readonly LogEntry[]) =>
   new Set(log.filter((e) => e.kind === "void").map((e) => e.targetId));
 
@@ -97,7 +85,7 @@ export function alarmSession({ collection, log, deckId, need, ringId, now }: Ala
   const answers = answersFor(log, ringId, voided);
   const right = answers.filter((a) => isRight(a.grade)).length;
   const done = right >= need;
-  const decks = deckId ? deckIds(collection, deckId) : new Set<string>();
+  const decks = deckId ? deckFamily(collection, deckId) : new Set<string>();
   // Suspended cards stay out of alarm sessions, as out of normal study.
   const cards = collection.cards.filter(
     (c) => decks.has(c.fields.deckId.value) && !c.fields.suspended.value,

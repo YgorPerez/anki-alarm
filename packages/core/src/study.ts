@@ -164,6 +164,21 @@ export function deckPreset(collection: CollectionState, deck: Deck): Preset | un
     },
   };
 }
+/** The deck and its subdecks, which Anki names `Parent::Child`. */
+export function deckFamily(collection: CollectionState, deckId: string) {
+  const deck = collection.decks.find((d) => d.id === deckId);
+  if (!deck) return new Set<string>();
+  const prefix = `${deck.fields.name.value}::`;
+  return new Set(
+    collection.decks
+      .filter((d) => d.id === deckId || d.fields.name.value.startsWith(prefix))
+      .map((d) => d.id),
+  );
+}
+/**
+ * The cards to study now in a deck and its subdecks, as Anki studies them. Each card schedules
+ * with its own deck's preset; the daily limits are the studied deck's.
+ */
 export function studyQueue(
   collection: CollectionState,
   log: readonly LogEntry[],
@@ -174,8 +189,17 @@ export function studyQueue(
   const deck = collection.decks.find((d) => d.id === deckId);
   const preset = deck && deckPreset(collection, deck);
   if (!deck || !preset) throw new Error("Deck preset missing");
+  const family = deckFamily(collection, deckId);
+  const presets = new Map<string, Preset>();
+  for (const d of collection.decks) {
+    if (!family.has(d.id)) continue;
+    const own = deckPreset(collection, d);
+    if (!own) throw new Error("Deck preset missing");
+    presets.set(d.id, own);
+  }
+  const presetOf = (card: Card) => presets.get(card.fields.deckId.value)!;
   const cards = collection.cards.filter(
-    (c) => c.fields.deckId.value === deckId && !c.fields.suspended?.value,
+    (c) => family.has(c.fields.deckId.value) && !c.fields.suspended?.value,
   );
   const voided = new Set(log.filter((e) => e.kind === "void").map((e) => e.targetId));
   // Each card replays only its own entries.
@@ -206,7 +230,7 @@ export function studyQueue(
         own.filter(
           (e) => e.at < first.at || (e.at === first.at && e.id < first.id) || e.kind === "void",
         ),
-        preset,
+        presetOf(card),
         now,
       );
       if (before.state === State.New) newCount++;
@@ -216,7 +240,7 @@ export function studyQueue(
   return cards
     .map((card) => ({
       card,
-      memory: replayCard(card.id, entries.get(card.id) ?? [], preset, now),
+      memory: replayCard(card.id, entries.get(card.id) ?? [], presetOf(card), now),
       newPosition: newPosition(card, entries.get(card.id) ?? [], voided),
     }))
     .filter(({ memory }) =>
