@@ -1,3 +1,4 @@
+import { navigationRenderer } from "../../navigation-renderer.tsx";
 import { Stack, useRouter } from "expo-router";
 import { Pressable, Text } from "react-native";
 import { useUI } from "../../ui.ts";
@@ -18,13 +19,15 @@ function BackButton() {
     </Pressable>
   );
 }
+const renderBackButton = navigationRenderer(BackButton);
+
 export default function SettingsLayout() {
   const theme = useNavigationTheme();
   return (
     <Stack
       screenOptions={{
         title: "",
-        headerLeft: BackButton,
+        headerLeft: renderBackButton,
         headerTintColor: theme.foreground,
         headerStyle: { backgroundColor: theme.background },
         contentStyle: { backgroundColor: theme.background },

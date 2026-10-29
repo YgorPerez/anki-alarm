@@ -3,22 +3,19 @@ appId: dev.ygorperez.ankialarm
 # The default locale is pt-BR; both languages are checked below.
 - launchApp:
     clearState: true
+    permissions:
+      all: deny
 - extendedWaitUntil:
     visible: "Prepare seus alarmes|Prepare your alarms"
     timeout: 30000
-# A fresh emulator lacks the essentials, so Finish stays locked: skip, then confirm in the dialog
-# (case-insensitive, as Android may draw dialog buttons in capitals).
-- runFlow:
-    when:
-      visible: "Pular por agora|Skip for now"
-    commands:
-      - tapOn: "Pular por agora|Skip for now"
-      - tapOn: "(?i)pular por agora|skip for now"
-- runFlow:
-    when:
-      visible: "Concluir|Finish"
-    commands:
-      - tapOn: "Concluir|Finish"
+# A fresh install lacks notifications/overlay permission. Skip is below the recommended settings
+# on smaller phones, so scroll to it before confirming the warning.
+- scrollUntilVisible:
+    element:
+      text: "Pular por agora|Skip for now"
+    direction: DOWN
+- tapOn: "Pular por agora|Skip for now"
+- tapOn: "(?i)pular por agora|skip for now"
 - assertVisible: "Seus alarmes podem não tocar|Your alarms may not ring"
 - tapOn:
     id: "tab-decks"

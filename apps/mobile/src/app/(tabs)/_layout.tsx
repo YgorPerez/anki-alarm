@@ -1,3 +1,4 @@
+import { navigationRenderer } from "../../navigation-renderer.tsx";
 import { Tabs, useRouter } from "expo-router";
 import type { BottomTabBarProps } from "expo-router/tabs";
 import { useUI } from "../../ui.ts";
@@ -36,6 +37,9 @@ function AppTabBar({ state, emitter, navigateToTab, insets }: BottomTabBarProps)
     />
   );
 }
+const renderSettingsGear = navigationRenderer(SettingsGear);
+const renderTabBar = navigationRenderer(AppTabBar);
+
 export default function TabLayout() {
   const theme = useNavigationTheme();
   return (
@@ -45,9 +49,9 @@ export default function TabLayout() {
         title: "",
         headerShadowVisible: false,
         headerStyle: { backgroundColor: theme.background },
-        headerRight: SettingsGear,
+        headerRight: renderSettingsGear,
       }}
-      tabBar={AppTabBar}
+      tabBar={renderTabBar}
     >
       <Tabs.Screen name="index" />
       <Tabs.Screen name="decks" />
