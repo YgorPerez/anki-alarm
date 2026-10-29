@@ -5,7 +5,17 @@ import { Pressable, Text, View } from "react-native";
 import { copy } from "./copy.ts";
 import { findApk, installApk } from "./updates.ts";
 
-export function UpdateOffer({ locale }: { locale: Locale }) {
+/**
+ * A newer APK, offered as ADR 0002 says: a dismissible banner on Home, and a line in Settings that
+ * stays until the update is installed.
+ */
+export function UpdateOffer({
+  locale,
+  dismissible = true,
+}: {
+  locale: Locale;
+  dismissible?: boolean;
+}) {
   const [apk, setApk] = useState<Awaited<ReturnType<typeof findApk>>>();
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -46,9 +56,11 @@ export function UpdateOffer({ locale }: { locale: Locale }) {
         </Text>
       </Pressable>
       {failed && <Text className="text-body text-foreground">{t("updateFailed")}</Text>}
-      <Pressable accessibilityRole="button" disabled={busy} onPress={() => setApk(undefined)}>
-        <Text className="text-body text-muted-foreground">{t("dismissUpdate")}</Text>
-      </Pressable>
+      {dismissible && (
+        <Pressable accessibilityRole="button" disabled={busy} onPress={() => setApk(undefined)}>
+          <Text className="text-body text-muted-foreground">{t("dismissUpdate")}</Text>
+        </Pressable>
+      )}
     </View>
   );
 }

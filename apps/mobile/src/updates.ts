@@ -4,7 +4,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { startActivityAsync } from "expo-intent-launcher";
 import * as Updates from "expo-updates";
 
-/** Called from Home only. Never mount update prompts in alarm or study screens. */
+/** Called from Home and Settings only. Never mount update prompts in alarm or study screens. */
 export async function findApk() {
   const installed = Number(nativeBuildVersion);
   if (!Number.isSafeInteger(installed) || installed < 1) return undefined;
