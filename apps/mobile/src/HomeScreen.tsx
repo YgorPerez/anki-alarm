@@ -1,5 +1,5 @@
 import { nextAlarmRing, timeLeft, type Alarm, type Locale } from "@app/core";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AppState,
   FlatList,
@@ -12,6 +12,7 @@ import {
 import { clockText, durationText, repeatSummary } from "./alarm-text.ts";
 import { bold, regular } from "./fonts.ts";
 import { copy } from "./copy.ts";
+import { HomeEmptyState, type DeckSetup } from "./HomeEmptyState.tsx";
 
 type Deck = { id: string; name: string };
 
@@ -161,6 +162,7 @@ export function HomeScreen({
   error,
   refreshing,
   onRefresh,
+  setup,
 }: {
   alarms: readonly Alarm[];
   decks: readonly Deck[];
@@ -174,13 +176,18 @@ export function HomeScreen({
   error?: string;
   refreshing?: boolean;
   onRefresh?: () => void;
+  /** Given once decks and alarms have loaded; without it Home shows no empty state. */
+  setup?: DeckSetup;
 }) {
   const now = useClock();
+  const list = useRef<FlatList<Alarm>>(null);
+  const needsDeck = setup !== undefined && decks.length === 0;
   const t = copy(locale);
   const next = nextAlarmRing(alarms, now, zone);
   return (
     <View className="flex-1 bg-background">
       <FlatList
+        ref={list}
         data={alarms}
         keyExtractor={(alarm) => alarm.id}
         contentContainerStyle={{ padding: 24, gap: 16, paddingBottom: 112 }}
@@ -203,6 +210,14 @@ export function HomeScreen({
                 {error}
               </Text>
             ) : null}
+            {setup && !alarms.length ? (
+              <HomeEmptyState
+                locale={locale}
+                hasDecks={decks.length > 0}
+                setup={setup}
+                onAdd={onAdd}
+              />
+            ) : null}
           </View>
         }
         renderItem={({ item }) => (
@@ -221,7 +236,8 @@ export function HomeScreen({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t("add")}
-        onPress={onAdd}
+        // Without a deck, + leads to the empty state at the top instead of the editor.
+        onPress={needsDeck ? () => list.current?.scrollToOffset({ offset: 0 }) : onAdd}
         className="absolute bottom-4 right-6 min-h-16 min-w-20 items-center justify-center rounded-pill bg-primary px-6 py-4"
       >
         <Text style={bold} className="text-question text-primary-foreground">
