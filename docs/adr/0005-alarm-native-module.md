@@ -96,6 +96,12 @@ page; JS re-checks on resume. Onboarding asks for notifications and display over
 only way to take over an unlocked phone in use on Android 17); Settings shows the rest and warns
 that force-stop drops alarms.
 
+Amended in #68: onboarding is one checklist that Settings reuses. Four essentials come first
+(notifications, display over other apps, full-screen intent, exact alarm) and gate Finish, with a
+confirmed "Skip for now"; battery and the brand's settings follow without gating. Core's
+`reliabilityChecklist` groups them; settings the app can't read are confirmed by hand and the
+confirmation is kept on the device. Home warns while an essential is missing.
+
 Amended in #35: Start silences the ring and stops the vibration instead of dropping to a low level.
 Decided after the first real-phone round. Leaving the screen or going idle brings both back at
 full.

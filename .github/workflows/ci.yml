@@ -73,10 +73,11 @@ jobs:
           profile: pixel_6
           script: |
             adb install apps/mobile/android/app/build/outputs/apk/release/app-release.apk
-            $HOME/.maestro/bin/maestro test apps/mobile/.maestro --debug-output "$RUNNER_TEMP/maestro"
-      # Screenshots and the view hierarchy of a failed flow.
+            # The runner runs each line on its own, so the logcat dump on failure shares the line.
+            mkdir -p maestro-debug && $HOME/.maestro/bin/maestro test apps/mobile/.maestro --debug-output maestro-debug --flatten-debug-output || { adb logcat -d > maestro-debug/logcat.txt; exit 1; }
+      # Screenshots, the view hierarchy and logcat of a failed flow.
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: maestro
-          path: ${{ runner.temp }}/maestro
+          path: maestro-debug

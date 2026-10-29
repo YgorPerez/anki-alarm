@@ -91,10 +91,11 @@ export { releaseArtifact } from "./release.ts";
 export { themeChoiceOf, updateThemeSettings } from "./settings.ts";
 export type { Settings } from "./settings.ts";
 
-export { reliabilitySteps } from "./reliability.ts";
+export { reliabilityChecklist } from "./reliability.ts";
 export type {
   AlarmPermissions,
   PermissionState,
+  ReliabilityChecklist,
   ReliabilityKind,
   ReliabilityStep,
 } from "./reliability.ts";

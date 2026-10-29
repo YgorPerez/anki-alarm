@@ -222,8 +222,24 @@ session** is a special mode of it on the phone.
 - An alarm missed while the phone was off rings at boot if it's 30 minutes late or less.
 - An alarm that comes due during a ring is folded into it: the session keeps its deck and needs the
   larger N.
-- Onboarding asks for notifications and "Display over other apps" (needed to take over an unlocked
-  phone). Settings warns that force-stopping the app drops its alarms.
+- Onboarding is one checklist screen: a title, a one-line intro and a small language toggle. Four
+  **essential** settings come first: notifications, "Display over other apps" (needed to take over
+  an unlocked phone), full-screen notifications and exact alarms. Below them, a visible but
+  secondary "Recommended for your phone" section lists battery, background activity and the
+  manufacturer's settings; it never gates anything.
+  - Each row shows the setting's name and status, and tapping it opens the Android setting. Granted
+    rows show a check and no text or button; tapping them does nothing. Status re-checks when the
+    app returns to the foreground.
+  - Settings the app can't read (Recents, Samsung, Motorola, some OEM switches) carry a one-line
+    instruction and a "Done" checkbox, saved on the device.
+  - The restricted-settings help (Android 15, sideloaded APK) appears under the overlay row only
+    after the user comes back from the overlay setting without granting it.
+  - Finish unlocks once the four essentials are granted. A small "Skip for now" link below it asks
+    for confirmation ("Your alarms may not ring").
+  - While an essential is missing after onboarding (skipped or revoked), Home shows a "Your alarms
+    may not ring — Fix" banner that opens the checklist.
+- Settings › Alarm reliability uses the same checklist, without Finish, plus the warning that
+  force-stopping the app drops its alarms and the update offer.
 - The module's API and who owns what: `docs/adr/0005-alarm-native-module.md`.
 
 ### The alarm session
