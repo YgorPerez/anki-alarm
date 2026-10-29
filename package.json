@@ -10,11 +10,13 @@
     "fmt": "vp fmt",
     "test": "vp test run",
     "fallow": "fallow dead-code && fallow dupes",
-    "react-doctor": "react-doctor --yes --no-score --no-supply-chain --blocking warning"
+    "react-doctor": "react-doctor --yes --no-score --no-supply-chain --blocking warning",
+    "quality": "node scripts/tooling/quality.ts"
   },
   "devDependencies": {
     "@shadcn/lint": "^0.2.3",
     "@types/node": "catalog:",
+    "eas-cli": "26.0.0",
     "fallow": "^3.36.0",
     "react-doctor": "0.9.18",
     "typescript": "catalog:",

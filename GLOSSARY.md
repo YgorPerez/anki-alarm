@@ -24,6 +24,9 @@ Decks nest.
 **Linked deck.** A deck imported from AnkiDroid that keeps AnkiDroid's note and card ids, so it can
 be pulled and synced back.
 
+**Media record.** The synced pairing of a media file name, as fields reference it, with the SHA-256
+of its bytes. The file itself is stored once, under that hash.
+
 **Memory state.** A card's FSRS stability, difficulty, due date and learning step. Derived by
 replaying its review log entries, never stored as the truth.
 
@@ -47,7 +50,7 @@ runs a sync back first.
 
 **Ring.** One firing of an alarm, from its first sound to dismissal. It lasts through snoozes, and
 an alarm that comes due during it is folded into it. A failed awake check starts a new ring.
-_Avoid_: wake-up
+_Avoid_: wake-up (on its own, for the event)
 
 **Reset.** A log entry that returns a card to new, at the end of the new queue, with its review
 and lapse counts starting over. Its earlier reviews stay in the log.
@@ -76,6 +79,10 @@ review. Replay adopts it. It has no grade.
 Good, progress), a secondary (warning: cards left, snooze) and one color per grade. It syncs, and
 the alarm screen, the splash and the app icon follow it.
 _Avoid_: skin, palette (that's the set of swatches to pick from)
+
+**Wake-up stats.** The stats set from the alarm journal: per alarm and overall, time from ring to
+dismissal, snoozes, cards needed, and awake check passes and failures. A deleted alarm's rings stay
+in them, labelled as deleted. "Wake-up" names this set only; one firing is a ring.
 
 **Void.** A log entry that cancels one earlier entry (a review, reset or set due date), written by
 Undo. Replay skips voided entries.

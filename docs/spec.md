@@ -22,25 +22,58 @@ Words in **bold** on first use are defined in `GLOSSARY.md`.
   service interface, so iOS is a new implementation and nothing above it changes. On iOS, AlarmKit
   rings over the lock screen but can't hold dismissal until the cards are done; there the alarm
   rings, opens the session, and the **awake check** catches anyone who goes back to sleep.
-- **Web**: the full study client and editor. It never rings alarms.
+- **Web**: the full study client and editor. It works offline like the phone and never rings
+  alarms.
 
 ## Repository and stack
 
 A pnpm monorepo on GitHub under `YgorPerez`, driven by Vite+ (`vp check`, `vp lint`, `vp fmt`,
 `vp test`), as in pesquisa-relacionamentos.
 
-| Path            | What                                                                                                                                                                                                                       |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/mobile`   | Expo + React Native, react-native-reusables on uniwind (Tailwind 4), expo-sqlite + drizzle, Effect for services. Local Kotlin Expo modules: `modules/alarm-native` (alarms, audio, TTS) and `modules/ankidroid`.           |
-| `apps/web`      | TanStack Start/Router/Query, shadcn on Base UI (`@base-ui/react`), Tailwind 4, `@shadcn/lint`, Storybook, Vitest, Playwright. Deployed to Cloudflare Workers.                                                              |
-| `apps/sync`     | Cloudflare Worker with D1 (data) and R2 (media), as in wave's `apps/sync`.                                                                                                                                                 |
-| `packages/core` | Every decision-heavy rule, with **zero runtime dependencies** except `ts-fsrs`: log replay, session and dismiss rules, snooze cost, card picking, daily limits, `.apkg` model, template rendering, stats, alarm time math. |
+| Path                     | What                                                                                                                                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/mobile`            | Expo + React Native, react-native-reusables on uniwind (Tailwind 4), expo-sqlite through `packages/client-data`, Effect for services. Local Kotlin Expo modules: `modules/alarm-native` (alarms, audio, TTS) and `modules/ankidroid`. |
+| `apps/web`               | TanStack Start/Router/Query, shadcn on Base UI (`@base-ui/react`), Tailwind 4, `@shadcn/lint`. sqlite-wasm in OPFS through `packages/client-data`, Serwist for the app shell. Deployed to Cloudflare Workers.                         |
+| `apps/sync`              | Cloudflare Worker with D1 (data, through drizzle) and R2 (media). Implements `packages/contracts` with Effect's `HttpApiBuilder` and mounts better-auth.                                                                              |
+| `packages/core`          | Every decision-heavy rule, with **zero runtime dependencies** except `ts-fsrs`: log replay, session and dismiss rules, snooze cost, card picking, daily limits, `.apkg` model, template rendering, stats, alarm time math.            |
+| `packages/contracts`     | The sync API as an Effect HttpApi with Effect Schema: push, pull, media, metadata. The Worker implements it; both clients use the derived client. As in t3code's `packages/contracts`.                                                |
+| `packages/client-data`   | What the phone and the web share below the screen: the drizzle schema and migrations, the outbox, and the push/pull engine, in Effect. The SQLite driver is injected. See `docs/adr/0006-shared-client-data.md`.                      |
+| `packages/design-tokens` | CSS tokens for both apps.                                                                                                                                                                                                             |
+| `packages/editing-ui`    | The copy both editors share (deck options, notes, card actions), with Core's limits in it.                                                                                                                                            |
+| `packages/stats-ui`      | What both stats screens share: the copy, the sections in order, the retention table and wake-up tallies as text, and the host-free TanStack Charts definitions each app draws with its own host (React Native or DOM).                |
 
 `packages/core` uses erasable TypeScript only and is tested through its public API. The apps stay
-thin: they wire Core to storage, native modules and the screen.
+thin: they wire Core to storage, native modules and the screen. Effect is used everywhere outside
+Core.
 
-Shared checks across the repo: oxlint (through `vp lint`), fallow, react-doctor. The web adds
-`@shadcn/lint` and story tests.
+### Libraries
+
+- TypeScript, Vite+, React Compiler on in both apps.
+- Both apps: TanStack Query (reading local SQLite), Form, Virtual (long lists), Pacer (debounced
+  search, autosave and sync) and Charts (stats; the React Native adapter is experimental, so only
+  the drawing changes if it fails on the phone). zustand holds local UI state only, persisted (MMKV
+  on the phone); data and synced settings live in SQLite.
+- The web adds TanStack Devtools in development.
+- Sign-in: better-auth. See `docs/adr/0007-better-auth.md`.
+
+### Tests and checks
+
+- Vitest everywhere. Test behaviour, not implementation. A test waits for the condition it checks
+  and never sleeps.
+- Each screen is tested with Testing Library (jsdom on the web, React Native Testing Library on the
+  phone) against a fake sync API built from `packages/contracts` with `HttpApiBuilder`, as t3code's
+  `apps/web/test`, so its responses follow the contract.
+- Storybook on the web (with story tests) and on the phone.
+- Playwright only for journeys that need the real system: session, several accounts, offline,
+  layout. Maestro on an Android emulator for the alarm.
+- Checks: oxlint (through `vp lint`), fallow, React Doctor, and `@shadcn/lint` on the web.
+  Impeccable for visual polish.
+- Violation ceiling: a new rule lands with zero violations, or with a per-file limit in a
+  committed baseline that can only go down. CI fails when a file goes over its limit. This covers
+  oxlint, fallow and React Doctor.
+- CI on a pull request runs only the packages the diff affects and their dependents
+  (`...[origin/main]`); main and tags run everything. Maestro runs on main and tags, and on a pull
+  request only when it touches `apps/mobile` or `modules/`.
 
 ### Release
 
@@ -92,16 +125,17 @@ options. Caches of the result are fine; the log is what syncs.
 ## Sync
 
 - The phone works fully offline with no account. Signing in with Google turns sync on. The web
-  needs sign-in.
-- Sign-in follows wave: Android's Google account picker on the phone, Google sign-in on the web; the
-  Worker checks the ID token and issues its own session token.
+  needs sign-in once, then works offline like the phone: its data is a local SQLite database and it
+  queues changes in the same outbox.
+- Sign-in is better-auth on the Worker: Android's Google account picker sends its ID token on the
+  phone, Google sign-in on the web. See `docs/adr/0007-better-auth.md`.
 - Sync is push and pull of changes since a cursor: notes, note types, decks, deck options, alarms
   and reviews, against a per-user server sequence. Notes and settings merge field by field,
   last-write-wins by hybrid logical clock; the Worker resolves on push. Reviews never conflict: both
   sides append, and replay settles the card. Deletes are tombstones and beat edits.
 - Media goes to R2, keyed by content hash, so the same file is stored once. Clients upload a file
-  before the records that reference it. The phone keeps a local copy of every file its decks use,
-  so an alarm never waits on the network.
+  before the records that reference it. The phone and the web keep a local copy of every file
+  their decks use (the web in OPFS), so an alarm or an offline session never waits on the network.
 - Ids, imports, linked decks, sign-in and sign-out, and when sync runs: see
   `docs/adr/0001-sync-protocol.md`.
 
@@ -110,7 +144,13 @@ options. Caches of the result are fine; the log is what syncs.
 - `.apkg` import on the phone and on the web, through one parser in Core. It reads the legacy
   format and the current one (`anki21b`, zstd-compressed). It brings note types, notes, decks, deck
   options, media and the review history (`revlog`), which becomes imported reviews.
-- `.apkg` export of any deck, with its scheduling, so nothing is locked in.
+- `.apkg` export of any deck, with its scheduling, so nothing is locked in. It writes the legacy
+  format (`collection.anki21`) with the deck's subdecks, media, review history and each card's FSRS
+  memory state; forgets and set due dates become Anki's manual revlog entries. Anki keeps the
+  schedule only when "Import any learning progress" and "Import deck presets" are ticked, and a
+  profile that already has the notes doesn't update their schedule; the deck screen says so. The
+  app's own records carry their ids (note guid, a JSON key on note types, decks and presets), so
+  importing the file back, here or after a trip through Anki, finds the same records and reviews.
 
 ## AnkiDroid
 
@@ -118,17 +158,33 @@ AnkiDroid decks become the app's own decks. The app schedules them with FSRS lik
 
 - **Import** reads note types, notes, cards and decks through AnkiDroid's ContentProvider API
   (`FlashCardsContract`) and keeps AnkiDroid's note and card ids on each one. That makes it a
-  **linked deck**.
-- **Pull** (on demand, from the deck): new notes and edited fields come in. For each linked card
-  whose AnkiDroid review is newer than our last review of it, the app records an imported review
-  from AnkiDroid's state, and replay folds it in.
-- **Sync back** (on demand, plus an optional auto sync after each alarm session): each review done
-  in the app since the last sync is sent to AnkiDroid as an answer with the same grade and time
-  taken, so AnkiDroid reschedules with its own scheduler and keeps a real history. AnkiDroid's API
-  can't write due dates or memory state directly; only answers, bury, suspend and moving decks. The
-  two schedules can drift a little when the FSRS parameters differ; that's accepted.
-- Needs AnkiDroid installed and its API permission granted. Without it, the AnkiDroid screens say so
-  and the rest of the app works.
+  **linked deck**, owned by the phone that linked it. Subdecks come along. Each reviewed card
+  starts from a **snapshot** of AnkiDroid's state, since the API has no review history. Records
+  take the same import ids as `.apkg` import, so linking again updates instead of duplicating.
+- **Media** can't come through the API: the AnkiDroid screen asks for an `.apkg` export of the
+  deck and stores its images and audio.
+- **Pull** (on demand, from the deck) always runs a sync back first. Then new notes and cards and
+  edited fields come in (a field takes AnkiDroid's value when its mod time is newer than our
+  edit), and suspension follows AnkiDroid. For each linked card AnkiDroid reviewed since the phone
+  last saw it (its `reps` went up), the app appends a snapshot timed at that review, and replay
+  adopts it.
+- **Sync back** (on demand from the deck, plus an auto sync after each alarm session, on by default
+  and turned off per phone): every review of a linked card not sent yet, from any origin, goes to
+  AnkiDroid in answer-time order as an answer with the same grade and time taken, so AnkiDroid
+  reschedules with its own scheduler and keeps a real history. AnkiDroid stamps each answer with
+  the time of the sync and caps the time taken at its deck's limit. Each answer is checked by
+  reading the card back, since the API reports success either way. Answers for cards suspended or
+  buried in AnkiDroid wait (answering would unsuspend them); answers for cards AnkiDroid deleted are
+  dropped. A card AnkiDroid reviewed since we last saw it gets its snapshot before our answers go.
+  The phone keeps what it sent and the `reps` it last saw locally; a phone that takes over a linked
+  deck doesn't resend the reviews from before.
+- AnkiDroid's API can't write due dates or memory state; only answers, bury, suspend and moving
+  decks. A reset or set due date on a linked card stays in the app, the card screen says so, and
+  AnkiDroid's next review of the card snapshots over it. The two schedules can drift a little when
+  the FSRS parameters differ; that's accepted. Notes added in the app to a linked deck stay in the
+  app.
+- Needs AnkiDroid 2.24 or newer installed and its API permission granted. Without them, the
+  AnkiDroid screens say so and the rest of the app works.
 
 ## Study
 
@@ -187,12 +243,19 @@ session** is a special mode of it on the phone.
 
 When on, each card's front is read after it appears: the card's own audio if it has some, the
 device's TTS otherwise, in the language of the deck (pt-BR by default). The alarm sound stays off
-while it reads.
+while it reads. The language is a deck property, set from the alarm editor; a subdeck without one
+reads in its parent's.
 
 ### Snooze
 
 When allowed, snooze silences the alarm for its snooze length. Each snooze adds a fixed number of
 cards (2 by default) to that alarm's next ring, and snoozes stop being offered at the cap.
+
+A new alarm allows snooze, 9 minutes long, twice per ring. Snooze is offered before Start and
+during the session; the ring keeps its id and its progress, and rings again with N plus the cost
+of every snooze so far. The snoozed screen shows when it rings again, with how many cards, and how
+many snoozes are left, with Answer now to start the session early. An alarm that comes due while
+snoozed is folded into the ring. Decided in #46.
 
 ### Awake check
 
@@ -207,7 +270,8 @@ day, the future due forecast, retention (true retention table), intervals, card 
 hourly breakdown, FSRS stability, difficulty and retrievability distributions.
 
 Plus wake-up stats: per alarm and overall, time from ring to dismissal, snoozes, cards needed, and
-awake check passes and failures.
+awake check passes and failures. They come from the alarm journal, which syncs append-only like
+reviews (ADR 0001), so the web shows them too.
 
 ## Design
 
@@ -237,3 +301,4 @@ awake check passes and failures.
 - Editing note types on the phone.
 - AnkiWeb sync.
 - Play Store release.
+- Dynamic link-preview images (satori): there is no public page to preview.

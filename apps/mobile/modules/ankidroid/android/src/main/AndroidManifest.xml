@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- AnkiDroid's ContentProvider permission. "dangerous": requested at runtime. -->
+  <uses-permission android:name="com.ichi2.anki.permission.READ_WRITE_DATABASE" />
+  <!-- Android 11+ package visibility: without it the provider can't be found. -->
+  <queries>
+    <package android:name="com.ichi2.anki" />
+  </queries>
+</manifest>

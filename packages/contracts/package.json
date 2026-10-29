@@ -1,0 +1,22 @@
+{
+  "name": "@app/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The sync API as an Effect HttpApi: what the Worker implements and both clients call.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "test": "vp test run"
+  },
+  "dependencies": {
+    "@app/core": "workspace:*",
+    "effect": "^4.0.6"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

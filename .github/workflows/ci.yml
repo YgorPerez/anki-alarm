@@ -1,64 +1,82 @@
-# The checks and tests, on every push. Releases ship from tags in their own workflow
-# (docs/adr/0002-release-policy.md).
 name: CI
-
 on:
+  pull_request:
   push:
-
+    branches: [main]
+    tags: ["v*"]
 permissions:
   contents: read
-
-# A newer push to the same branch replaces a run still going.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
-
 jobs:
-  # Format, lint (oxlint, @shadcn/lint on the web) and types, the tests, fallow and React Doctor.
   check:
-    name: Check and test
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
+    outputs:
+      mobile: ${{ steps.plan.outputs.mobile }}
+    env:
+      CI_BASE: ${{ github.event_name == 'pull_request' && 'origin/main' || '' }}
+      QUALITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v5
-
-      # Vite+, the Node.js in package.json's `engines` and the pnpm in `packageManager`, then
-      # `vp install` from the lockfile.
+        with:
+          fetch-depth: 0
       - uses: voidzero-dev/setup-vp@v1
         with:
           node-version-file: package.json
           cache: true
-
-      - name: vp check
-        run: vp check
-
-      - name: vp lint
-        run: vp lint
-
-      - name: vp test
-        run: vp test run
-
-      - name: Fallow
-        run: vp run fallow
-
-      - name: React Doctor
-        run: vp run react-doctor
-
-  # The apps build: the web for Workers, and the phone's JS bundle through Metro and uniwind.
-  build:
-    name: Build
+      - name: Generate phone story imports
+        run: vp exec --filter @app/mobile sb-rn-get-stories
+      - name: Select affected packages and Maestro gate
+        id: plan
+        run: node scripts/tooling/ci.ts --plan
+      - name: Check, test (including stories), and build affected packages
+        run: node scripts/tooling/ci.ts
+      - name: Per-file violation ceilings
+        run: vp run quality
+  maestro:
+    needs: check
+    if: needs.check.outputs.mobile == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
-
       - uses: voidzero-dev/setup-vp@v1
         with:
           node-version-file: package.json
           cache: true
-
-      - name: Web
-        run: vp run --filter @app/web build
-
-      - name: Phone bundle
-        run: vp exec --filter @app/mobile expo export --platform android --output-dir "$RUNNER_TEMP/mobile"
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        # The default list includes `tools`, which the SDK no longer ships.
+        with:
+          packages: platform-tools
+      - name: Build standalone test APK
+        run: |
+          vp exec --filter @app/mobile expo prebuild --clean --platform android --no-install
+          cd apps/mobile/android
+          ./gradlew :app:assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon
+      - name: Install Maestro
+        run: curl -Ls https://get.maestro.mobile.dev | bash
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          script: |
+            adb install apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+            $HOME/.maestro/bin/maestro test apps/mobile/.maestro --debug-output "$RUNNER_TEMP/maestro"
+      # Screenshots and the view hierarchy of a failed flow.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: maestro
+          path: ${{ runner.temp }}/maestro

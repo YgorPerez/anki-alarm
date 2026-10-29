@@ -1,0 +1,9 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": [
+      "expo.modules.alarmnative.AlarmNativeModule",
+      "expo.modules.alarmnative.ThemeAppearanceModule"
+    ]
+  }
+}

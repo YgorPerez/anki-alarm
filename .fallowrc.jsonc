@@ -1,19 +1,45 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/v3.36.0/schema.json",
+  "entry": [
+    "apps/web/src/sw.ts",
+    "apps/mobile/.rnstorybook/*.{ts,tsx}",
+    "apps/mobile/test/native/*.ts",
+    "scripts/tooling/*.ts",
+    // Fixture generator, run by hand (see the file).
+    "packages/core/fixtures/apkg/*.mts",
+  ],
+
   "ignorePatterns": [
     "**/.expo/**",
     "**/.wrangler/**",
     "**/.impeccable/**",
     "prototypes/**",
     "apps/mobile/uniwind-types.d.ts",
+    "apps/mobile/.rnstorybook/storybook.requires.ts",
+    "apps/web/storybook-static/**",
     "apps/web/src/routeTree.gen.ts",
   ],
   "ignoreDependencies": [
     // Core's scheduling (log replay through FSRS) is its next rule; the spec fixes the dependency.
     "ts-fsrs",
+    // Auto-linked native update loader; configuration is in app.config.ts.
+    "expo-updates",
+    // babel-preset-expo loads it when app.config.ts turns `experiments.reactCompiler` on.
+    "babel-plugin-react-compiler",
+    // Peer dependencies loaded by the on-device Storybook UI.
+    "@react-native-async-storage/async-storage",
+    "react-native-reanimated",
+    "react-native-worklets",
+    "react-native-gesture-handler",
+    "@gorhom/bottom-sheet",
+    "react-native-svg",
+    // Auto-linked Android appearance support for userInterfaceStyle in app.config.ts.
+    "expo-system-ui",
   ],
   "ignoreExports": [
     // shadcn's generated components export their variants for whoever composes them.
     { "file": "apps/web/src/ui/shadcn/**", "exports": ["*"] },
+    // Required exports in the native module stand-ins, resolved through Vitest aliases.
+    { "file": "apps/mobile/test/native/*.ts", "exports": ["*"] },
   ],
 }

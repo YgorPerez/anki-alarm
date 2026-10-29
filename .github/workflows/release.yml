@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+# Serialize releases: a newer tag must compare against a completed APK release.
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_PUBLIC_EAS_PROJECT_ID: ${{ vars.EXPO_PUBLIC_EAS_PROJECT_ID }}
+      # Inlined into the phone's bundle: the sync Worker and the Google web OAuth client.
+      EXPO_PUBLIC_SYNC_URL: ${{ vars.EXPO_PUBLIC_SYNC_URL }}
+      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+      # Inlined into the web's bundle: the same sync Worker.
+      VITE_SYNC_URL: ${{ vars.EXPO_PUBLIC_SYNC_URL }}
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+      - name: Validate tag and configuration
+        id: version
+        run: |
+          node scripts/release/prepare.ts
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$EXPO_TOKEN"
+          test -n "$EXPO_PUBLIC_EAS_PROJECT_ID"
+          test -n "$EXPO_PUBLIC_SYNC_URL"
+          test -n "$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release already exists; do not publish the same tag twice" >&2
+            exit 1
+          fi
+      - run: vp check
+      - run: vp test run
+      - name: Migrate the sync database
+        run: vp exec --filter @app/sync wrangler d1 migrations apply app-sync --remote
+      - name: Deploy sync Worker
+        run: vp run --filter @app/sync deploy
+      - name: Deploy web
+        run: vp run --filter @app/web deploy
+      - name: Android fingerprint
+        run: vp run --filter @app/mobile fingerprint
+      - name: Compare with latest APK
+        id: runtime
+        run: node scripts/release/compare.ts
+      - name: Publish OTA to production
+        if: steps.runtime.outputs.apk == 'false'
+        run: vp exec --filter @app/mobile eas update --channel production --platform android --environment production --message "$RELEASE_TAG" --non-interactive
+      - uses: actions/setup-java@v5
+        if: steps.runtime.outputs.apk == 'true'
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        if: steps.runtime.outputs.apk == 'true'
+        # The default list includes `tools`, which the SDK no longer ships.
+        with:
+          packages: platform-tools
+      - name: Prebuild Android
+        if: steps.runtime.outputs.apk == 'true'
+        run: vp exec --filter @app/mobile expo prebuild --clean --platform android --no-install
+      - name: Build signed APK
+        if: steps.runtime.outputs.apk == 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/release.keystore"
+          trap 'rm -f "$ANDROID_KEYSTORE_PATH"' EXIT
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+          printf '\napply from: "../../../../scripts/release/sign.gradle"\n' >> apps/mobile/android/app/build.gradle
+          cd apps/mobile/android
+          ./gradlew :app:assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/anki-alarm.apk"
+      - name: Publish release
+        env:
+          BUILD_APK: ${{ steps.runtime.outputs.apk }}
+        run: |
+          if [ "$BUILD_APK" = true ]; then
+            gh release create "$RELEASE_TAG" --verify-tag --generate-notes anki-alarm.apk release-metadata.json
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --generate-notes
+          fi

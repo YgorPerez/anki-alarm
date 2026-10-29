@@ -2,5 +2,5 @@
   // The root Vite+ config. The apps and packages each keep their own tsconfig.
   "extends": "./tsconfig.base.json",
   "compilerOptions": { "types": ["node"] },
-  "include": ["*.ts"]
+  "include": ["*.ts", "scripts/**/*.ts"]
 }

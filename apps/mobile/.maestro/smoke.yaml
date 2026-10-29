@@ -1,0 +1,22 @@
+appId: dev.ygorperez.ankialarm
+---
+# Labels match pt-BR or English: the app follows the device's language, and the CI emulator's is
+# English.
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Prepare seus alarmes|Prepare your alarms"
+    timeout: 30000
+- repeat:
+    while:
+      visible: "Continuar|Continue"
+    commands:
+      - tapOn: "Continuar|Continue"
+- tapOn: "Concluir|Finish"
+- tapOn: "Baralhos|Decks"
+- tapOn: "Criar baralho|Create deck"
+- tapOn: "Nome do baralho|Deck name"
+- inputText: "Maestro"
+- hideKeyboard
+- tapOn: "Salvar|Save"
+- assertVisible: "Maestro"

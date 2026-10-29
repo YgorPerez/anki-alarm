@@ -1,0 +1,64 @@
+import { memoryMediaFiles } from "@app/client-data";
+import type { SyncClient } from "@app/contracts";
+import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
+
+import { wasmApkgSqlite } from "../src/data/apkg.ts";
+import { operations } from "../src/data/operations.ts";
+import {
+  LeaderFailed,
+  toFailure,
+  WRITES,
+  type Args,
+  type Kind,
+  type Operation,
+  type Output,
+} from "../src/data/protocol.ts";
+import { Effect } from "effect";
+import { openDevice } from "./device.ts";
+
+// Replace only the browser transport/OPFS boundary. Reads and writes still use the real data
+// service, migrations, Core rules and the leader's operations, against a fresh SQLite database for
+// each test file.
+/** The browser's OPFS media, in memory: what import stores and export reads. */
+export const webMedia = memoryMediaFiles();
+const service = openDevice("web", webMedia);
+
+let syncClient: () => Promise<SyncClient> = () =>
+  Promise.reject(new Error("This test has no sync server"));
+/** The sync API the leader talks to: a fake one from `@app/contracts/testing`. */
+export const setSyncClient = (client: () => Promise<SyncClient>) => {
+  syncClient = client;
+};
+const execute = Promise.all([service, sqlite3InitModule()]).then(([data, sqlite]) =>
+  operations(data, () => syncClient(), { sqlite: wasmApkgSqlite(sqlite), media: webMedia }),
+);
+const listeners = new Set<() => void>();
+const writeListeners = new Set<() => void>();
+const subscription = (set: Set<() => void>) => (listener: () => void) => {
+  set.add(listener);
+  return () => {
+    set.delete(listener);
+  };
+};
+
+export const testWebData = {
+  request: <K extends Kind>(kind: K, ...args: Args<K>) =>
+    Effect.tryPromise({
+      try: async () => {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+        const { result, changed } = await (await execute)({ kind, args } as Operation);
+        if (changed) for (const listener of listeners) listener();
+        if (WRITES.has(kind)) for (const listener of writeListeners) listener();
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+        return result as Output<K>;
+      },
+      // What crosses from the leader: the failure's message and tag.
+      catch: (error) => new LeaderFailed(toFailure(error)),
+    }),
+  subscribe: subscription(listeners),
+  onLocalWrite: subscription(writeListeners),
+  close: () => {},
+};
+/** `webRequest` over the test's data: what screens and tests arrange state with. */
+export const testWebRequest = <K extends Kind>(kind: K, ...args: Args<K>) =>
+  Effect.runPromise(testWebData.request(kind, ...args));

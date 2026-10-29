@@ -10,33 +10,115 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BrowseRouteImport } from './routes/browse'
+import { Route as DeckRouteImport } from './routes/deck'
+import { Route as NoteTypesRouteImport } from './routes/note-types'
+import { Route as StatsRouteImport } from './routes/stats'
+import { Route as StudyRouteImport } from './routes/study'
+import { Route as SettingsThemeRouteImport } from './routes/settings/theme'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BrowseRoute = BrowseRouteImport.update({
+  id: '/browse',
+  path: '/browse',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeckRoute = DeckRouteImport.update({
+  id: '/deck',
+  path: '/deck',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NoteTypesRoute = NoteTypesRouteImport.update({
+  id: '/note-types',
+  path: '/note-types',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StatsRoute = StatsRouteImport.update({
+  id: '/stats',
+  path: '/stats',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudyRoute = StudyRouteImport.update({
+  id: '/study',
+  path: '/study',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsThemeRoute = SettingsThemeRouteImport.update({
+  id: '/settings/theme',
+  path: '/settings/theme',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/browse': typeof BrowseRoute
+  '/deck': typeof DeckRoute
+  '/note-types': typeof NoteTypesRoute
+  '/stats': typeof StatsRoute
+  '/study': typeof StudyRoute
+  '/settings/theme': typeof SettingsThemeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/browse': typeof BrowseRoute
+  '/deck': typeof DeckRoute
+  '/note-types': typeof NoteTypesRoute
+  '/stats': typeof StatsRoute
+  '/study': typeof StudyRoute
+  '/settings/theme': typeof SettingsThemeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/browse': typeof BrowseRoute
+  '/deck': typeof DeckRoute
+  '/note-types': typeof NoteTypesRoute
+  '/stats': typeof StatsRoute
+  '/study': typeof StudyRoute
+  '/settings/theme': typeof SettingsThemeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/browse'
+    | '/deck'
+    | '/note-types'
+    | '/stats'
+    | '/study'
+    | '/settings/theme'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/browse'
+    | '/deck'
+    | '/note-types'
+    | '/stats'
+    | '/study'
+    | '/settings/theme'
+  id:
+    | '__root__'
+    | '/'
+    | '/browse'
+    | '/deck'
+    | '/note-types'
+    | '/stats'
+    | '/study'
+    | '/settings/theme'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BrowseRoute: typeof BrowseRoute
+  DeckRoute: typeof DeckRoute
+  NoteTypesRoute: typeof NoteTypesRoute
+  StatsRoute: typeof StatsRoute
+  StudyRoute: typeof StudyRoute
+  SettingsThemeRoute: typeof SettingsThemeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +130,59 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/browse': {
+      id: '/browse'
+      path: '/browse'
+      fullPath: '/browse'
+      preLoaderRoute: typeof BrowseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/deck': {
+      id: '/deck'
+      path: '/deck'
+      fullPath: '/deck'
+      preLoaderRoute: typeof DeckRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/note-types': {
+      id: '/note-types'
+      path: '/note-types'
+      fullPath: '/note-types'
+      preLoaderRoute: typeof NoteTypesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/stats': {
+      id: '/stats'
+      path: '/stats'
+      fullPath: '/stats'
+      preLoaderRoute: typeof StatsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/study': {
+      id: '/study'
+      path: '/study'
+      fullPath: '/study'
+      preLoaderRoute: typeof StudyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/theme': {
+      id: '/settings/theme'
+      path: '/settings/theme'
+      fullPath: '/settings/theme'
+      preLoaderRoute: typeof SettingsThemeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BrowseRoute: BrowseRoute,
+  DeckRoute: DeckRoute,
+  NoteTypesRoute: NoteTypesRoute,
+  StatsRoute: StatsRoute,
+  StudyRoute: StudyRoute,
+  SettingsThemeRoute: SettingsThemeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

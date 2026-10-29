@@ -18,3 +18,17 @@ apps/web/.nitro/
 # Worker
 apps/*/.wrangler/
 apps/*/.dev.vars
+
+# Local release dry runs
+/fingerprint.json
+/release-version.json
+/release-metadata.json
+/anki-alarm.apk
+
+apps/mobile/.rnstorybook/storybook.requires.ts
+apps/web/storybook-static/
+# Playwright
+apps/web/test-results/
+apps/web/playwright-report/
+# Gradle output of the local Expo modules.
+apps/mobile/modules/*/android/build/

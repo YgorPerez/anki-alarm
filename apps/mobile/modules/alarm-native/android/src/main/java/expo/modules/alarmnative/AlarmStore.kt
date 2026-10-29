@@ -1,0 +1,111 @@
+package expo.modules.alarmnative
+
+import android.content.Context
+import android.net.Uri
+import android.os.SystemClock
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.UUID
+
+object AlarmStore {
+  fun prefs(ctx: Context) = ctx.createDeviceProtectedStorageContext().getSharedPreferences("alarms", Context.MODE_PRIVATE)
+  fun setAppearance(ctx: Context, colors: JSONObject, locale: String) {
+    val safe = JSONObject()
+    for (key in listOf("background", "foreground", "primary")) {
+      val color = colors.getString(key)
+      require(Regex("#[0-9a-fA-F]{6}").matches(color)) { "Invalid $key color" }
+      safe.put(key, color)
+    }
+    check(prefs(ctx).edit().putString("colors", safe.toString())
+      .putString("locale", if (locale == "en") "en" else "pt-BR").commit())
+  }
+  fun alarms(ctx: Context): JSONArray = JSONArray(prefs(ctx).getString("alarms", "[]"))
+  fun ring(ctx: Context): JSONObject? = prefs(ctx).getString("ring", null)?.let { JSONObject(it) }
+  /** A ring is active and not snoozed: the service should be sounding it or running its session. */
+  fun isRinging(ctx: Context) = ring(ctx)?.let { it.optString("phase") != "snoozed" } ?: false
+  fun log(ctx: Context, message: String) { android.util.Log.i("AlarmNative", message) }
+  fun setting(ctx: Context, key: String): Int = when(key) {
+    "rampSeconds" -> ring(ctx)?.getJSONObject("alarm")?.optInt(key, 30) ?: 30
+    "vibrate" -> if (ring(ctx)?.getJSONObject("alarm")?.optBoolean("vibrate", true) != false) 1 else 0
+    "leaveSeconds", "idleSeconds", "awakeCheckSeconds" -> JSONObject(prefs(ctx).getString("policy", "{}"))
+      .optInt(key, when (key) { "leaveSeconds" -> 10; "idleSeconds" -> 20; else -> 60 })
+    "forceMaxVolume", "directLaunch" -> 1
+    else -> 0
+  }
+  fun sound(ctx: Context): Uri? = ring(ctx)?.getJSONObject("alarm")?.optString("soundFile")?.takeIf { it.isNotEmpty() }?.let { Uri.parse(it) }
+  fun uuid7(): String {
+    val random = UUID.randomUUID()
+    return UUID((System.currentTimeMillis() shl 16) or 0x7000L or (random.mostSignificantBits and 0xfffL), random.leastSignificantBits).toString()
+  }
+  /**
+   * Appends a journal event, committing `also` in the same write. `ringId` names a ring that is no
+   * longer active (the awake check's).
+   */
+  @Synchronized fun event(ctx: Context, kind: String, alarmId: String? = null, newRing: JSONObject? = null, clearRing: Boolean = false,
+                          ringId: String? = null, also: (android.content.SharedPreferences.Editor) -> Unit = {}) {
+    val active = newRing ?: ring(ctx)
+    if (active == null && alarmId == null) return
+    val events = JSONArray(prefs(ctx).getString("journal", "[]"))
+    events.put(JSONObject().put("id", uuid7()).put("kind", kind).put("alarmId", alarmId ?: active?.getJSONObject("alarm")?.getString("id") ?: JSONObject.NULL)
+      .put("ringId", ringId ?: active?.getString("id") ?: JSONObject.NULL).put("wallTime", System.currentTimeMillis()).put("elapsedRealtime", SystemClock.elapsedRealtime()))
+    val edit = prefs(ctx).edit().putString("journal", events.toString())
+    if (newRing != null) edit.putString("ring", newRing.toString())
+    if (clearRing) edit.remove("ring")
+    also(edit)
+    check(edit.commit())
+    AlarmNativeModule.emit()
+  }
+  @Synchronized fun fire(ctx: Context, alarm: JSONObject) {
+    // A ring lasts through its snoozes, so an alarm due while snoozed is folded in too.
+    if (ring(ctx) != null) { event(ctx, "absorbed", alarm.getString("id")); return }
+    val ring = JSONObject().put("id", uuid7()).put("alarm", alarm).put("startedAt", System.currentTimeMillis()).put("phase", "ringing")
+    event(ctx, "ringStarted", newRing = ring)
+    AlarmService.start(ctx, AlarmService.REASON_SCHEDULED)
+  }
+  /** Sets the active ring's phase; a stale ring id changes nothing. Returns whether it matched. */
+  @Synchronized fun setPhase(ctx: Context, ringId: String?, phase: String): Boolean {
+    val active = ring(ctx) ?: return false
+    if (ringId != null && active.getString("id") != ringId) return false
+    if (active.optString("phase") != phase)
+      check(prefs(ctx).edit().putString("ring", active.put("phase", phase).toString()).commit())
+    return true
+  }
+  /**
+   * Snoozes the active ring until `until` and counts the snooze. A stale ring id or a ring already
+   * snoozed changes nothing. Returns whether it snoozed.
+   */
+  @Synchronized fun snooze(ctx: Context, ringId: String, until: Long): Boolean {
+    val active = ring(ctx) ?: return false
+    if (active.getString("id") != ringId || active.optString("phase") == "snoozed") return false
+    active.put("phase", "snoozed").put("snoozes", active.optInt("snoozes", 0) + 1).put("snoozedUntil", until)
+    event(ctx, "snoozed", newRing = active)
+    return true
+  }
+  /** Ends the snooze into `phase`: `ringing` when its time comes, `session` for Answer now. */
+  @Synchronized fun endSnooze(ctx: Context, phase: String, ringId: String? = null): Boolean {
+    val active = ring(ctx) ?: return false
+    if (active.optString("phase") != "snoozed" || (ringId != null && active.getString("id") != ringId)) return false
+    active.put("phase", phase).remove("snoozedUntil")
+    event(ctx, "snoozeEnded", newRing = active)
+    return true
+  }
+  /** Answer now on a snoozed ring: its session starts silent, before the snooze ends. */
+  fun answerNow(ctx: Context, ringId: String) = endSnooze(ctx, "session", ringId)
+  /**
+   * Dismisses the active ring. With `awakeCheckAfter` seconds it also stores the ring's awake check,
+   * in the same write; `AwakeCheck.advance` arms it.
+   */
+  @Synchronized fun finish(ctx: Context, awakeCheckAfter: Int? = null, now: Long = System.currentTimeMillis()) {
+    val active = ring(ctx) ?: return
+    event(ctx, "dismissed", clearRing = true) { edit ->
+      if (awakeCheckAfter != null && awakeCheckAfter > 0)
+        edit.putString(AwakeCheck.KEY, JSONObject().put("id", uuid7()).put("ringId", active.getString("id"))
+          .put("alarm", active.getJSONObject("alarm")).put("dueAt", now + awakeCheckAfter * 1000L).toString())
+    }
+  }
+  @Synchronized fun ack(ctx: Context, ids: List<String>) {
+    val old = JSONArray(prefs(ctx).getString("journal", "[]")); val kept = JSONArray()
+    for (i in 0 until old.length()) if (old.getJSONObject(i).getString("id") !in ids) kept.put(old.getJSONObject(i))
+    check(prefs(ctx).edit().putString("journal", kept.toString()).commit())
+  }
+}

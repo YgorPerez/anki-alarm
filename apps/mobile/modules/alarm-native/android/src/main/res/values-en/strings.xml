@@ -1,0 +1,7 @@
+<resources>
+  <string name="alarm_title">Alarm clock</string>
+  <string name="alarm_return">Tap to return to the alarm</string>
+  <string name="alarm_unlock">Unlock to start</string>
+  <string name="awake_check_title">Still awake?</string>
+  <string name="awake_check_text">Answer one card or the alarm rings again</string>
+</resources>

@@ -14,6 +14,8 @@
     "ts-fsrs": "5.4.2"
   },
   "devDependencies": {
+    "fflate": "0.8.3",
+    "fzstd": "0.1.1",
     "typescript": "catalog:",
     "vite-plus": "catalog:"
   }

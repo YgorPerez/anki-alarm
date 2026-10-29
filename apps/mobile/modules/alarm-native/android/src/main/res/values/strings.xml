@@ -1,0 +1,7 @@
+<resources>
+  <string name="alarm_title">Despertador</string>
+  <string name="alarm_return">Toque para voltar ao alarme</string>
+  <string name="alarm_unlock">Desbloqueie para começar</string>
+  <string name="awake_check_title">Ainda acordado?</string>
+  <string name="awake_check_text">Responda um cartão para o alarme não tocar de novo</string>
+</resources>

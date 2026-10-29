@@ -1,0 +1,7 @@
+{
+  // Pure package, no build, like Core. Host-free: each app draws these definitions with its own
+  // TanStack Charts host (react-native on the phone, react on the web).
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "types": [], "lib": ["ES2022", "DOM"] },
+  "include": ["src/**/*.ts"]
+}
