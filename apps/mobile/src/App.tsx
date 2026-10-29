@@ -25,6 +25,8 @@ import {
   useFonts,
 } from "@expo-google-fonts/atkinson-hyperlegible";
 import { CollectionScreen } from "./CollectionScreen.tsx";
+import { AnkiDroidScreen } from "./AnkiDroidScreen.tsx";
+import { pickAndImportApkg } from "./apkg.ts";
 import { androidAnkiDroid } from "./ankidroid-android.ts";
 import { syncBackAfterSession } from "./ankidroid.ts";
 import { StatsScreen } from "./StatsScreen.tsx";
@@ -138,6 +140,18 @@ export function DecksRoute() {
         onTheme={() => router.push("/settings/theme")}
       />
     </ScreenActivity>
+  );
+}
+/** Links an AnkiDroid deck from Home's empty state; the new deck then shows on Home. */
+export function AnkiDroidRoute() {
+  const router = useRouter();
+  return (
+    <AnkiDroidScreen
+      ankiDroid={androidAnkiDroid}
+      locale={useUI().locale}
+      onExit={() => router.back()}
+      onOpen={() => router.back()}
+    />
   );
 }
 export function StatsRoute() {
@@ -347,6 +361,18 @@ function Home({ children }: { children: ReactNode }) {
       onToggle={save}
       refreshing={refreshing}
       onRefresh={pullToRefresh}
+      setup={
+        alarmsQuery.data && collectionQuery.data
+          ? {
+              onImport: async () => {
+                const summary = await pickAndImportApkg();
+                await client.invalidateQueries({ queryKey: ["collection"] });
+                return summary;
+              },
+              onLink: () => router.push("/ankidroid"),
+            }
+          : undefined
+      }
       error={
         error ||
         (alarmsQuery.isError ? t("alarmError") : collectionQuery.isError ? t("loadError") : "")
