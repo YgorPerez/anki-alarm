@@ -4,9 +4,12 @@ import {
   cardId,
   parseCollection,
   parseRecord,
+  presetTexts,
+  readPresetTexts,
   renderCard,
   replayCard,
   validOption,
+  validPresetText,
   type CollectionState,
   type Grade,
   type LogEntry,
@@ -208,4 +211,34 @@ test("a note must match its note type's fields and have a first field", () => {
   expect(() => collection.editNote(note.id, ["", "みず", "water"])).toThrow("Invalid note");
   expect(() => collection.editNote(note.id, ["水"])).toThrow("Invalid note");
   expect(collection.snapshot().notes).toHaveLength(before.notes.length + 1);
+});
+
+test("deck options forms read what the user types with Core's rules", () => {
+  const { collection } = withVocabularyType();
+  const preset = collection.snapshot().presets[0]!;
+  const texts = presetTexts(preset, "pt-BR");
+  expect(texts).toMatchObject({ newPerDay: "20", desiredRetention: "0,9", learningSteps: "1 10" });
+  expect(readPresetTexts(texts)).toEqual({
+    name: "Default",
+    newPerDay: 20,
+    reviewsPerDay: 200,
+    desiredRetention: 0.9,
+    learningSteps: [1, 10],
+    fsrsParameters: preset.fields.fsrsParameters.value,
+  });
+  expect(presetTexts(preset, "en").desiredRetention).toBe("0.9");
+  expect(readPresetTexts({ ...texts, learningSteps: "", name: " Mine " })).toMatchObject({
+    name: "Mine",
+    learningSteps: [],
+  });
+  for (const [key, text] of [
+    ["newPerDay", "1.5"],
+    ["desiredRetention", "0,5"],
+    ["learningSteps", "1 x"],
+    ["fsrsParameters", "1, 2"],
+    ["name", " "],
+  ] as const) {
+    expect(validPresetText[key](text)).toBe(false);
+    expect(readPresetTexts({ ...texts, [key]: text })).toBeUndefined();
+  }
 });

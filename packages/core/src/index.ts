@@ -105,6 +105,14 @@ export {
   dueInDays,
 } from "./study.ts";
 export { renderCard } from "./template.ts";
+export { noteTypeEditOf, noteTypeImpact, noteTypeProblems } from "./note-types.ts";
+export { browseCards } from "./browse.ts";
+export type { BrowseRow } from "./browse.ts";
+export { runCommand } from "./commands.ts";
+export { presetTexts, readPresetTexts, validPresetText } from "./preset-text.ts";
+export type { PresetTexts } from "./preset-text.ts";
+export type { CollectionCommand } from "./commands.ts";
+export type { NoteTypeEdit, NoteTypeImpact, NoteTypeProblem } from "./note-types.ts";
 export {
   DEFAULT_READ_ALOUD_LANGUAGE,
   READ_ALOUD_LANGUAGES,

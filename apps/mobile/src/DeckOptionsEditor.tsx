@@ -1,6 +1,8 @@
 import {
   DEFAULT_FSRS_PARAMETERS,
-  validOption,
+  presetTexts,
+  readPresetTexts,
+  validPresetText,
   type Locale,
   type Preset,
   type PresetOptions,
@@ -10,38 +12,6 @@ import { Text, View } from "react-native";
 import { Button, SaveButtons, TextField } from "./controls.tsx";
 import { editingCopy } from "./editing-copy.ts";
 import { regular } from "./fonts.ts";
-
-// The text the user types, and what each option reads from it. undefined: not a valid value.
-const integer = (text: string) => (/^\d+$/.test(text.trim()) ? Number(text.trim()) : undefined);
-const decimal = (text: string) => {
-  const value = Number(text.trim().replace(",", "."));
-  return text.trim() && Number.isFinite(value) ? value : undefined;
-};
-const list = (text: string, separator: RegExp) => {
-  const parts = text.trim() ? text.trim().split(separator) : [];
-  const values = parts.map(Number);
-  return parts.every((p) => p !== "") && values.every(Number.isFinite) ? values : undefined;
-};
-const read = {
-  name: (text: string) => text,
-  newPerDay: integer,
-  reviewsPerDay: integer,
-  desiredRetention: decimal,
-  learningSteps: (text: string) => list(text, /\s+/),
-  fsrsParameters: (text: string) => list(text, /[\s,;]+/),
-} satisfies { [K in keyof PresetOptions]: (text: string) => PresetOptions[K] | undefined };
-type Texts = Record<keyof PresetOptions, string>;
-const ok = <T,>(value: T | undefined, rule: (value: T) => boolean) =>
-  value !== undefined && rule(value);
-/** Core's rule for each option, applied to what the user typed. */
-const valid: Record<keyof PresetOptions, (text: string) => boolean> = {
-  name: (text) => validOption.name(text),
-  newPerDay: (text) => ok(read.newPerDay(text), validOption.newPerDay),
-  reviewsPerDay: (text) => ok(read.reviewsPerDay(text), validOption.reviewsPerDay),
-  desiredRetention: (text) => ok(read.desiredRetention(text), validOption.desiredRetention),
-  learningSteps: (text) => ok(read.learningSteps(text), validOption.learningSteps),
-  fsrsParameters: (text) => ok(read.fsrsParameters(text), validOption.fsrsParameters),
-};
 
 /** Edits a preset: the daily limits and FSRS options its decks share. */
 export function DeckOptionsEditor({
@@ -60,27 +30,13 @@ export function DeckOptionsEditor({
   onCancel: () => void;
 }) {
   const t = editingCopy(locale);
-  const f = preset.fields;
-  const decimalText = (n: number) => (locale === "pt-BR" ? String(n).replace(".", ",") : String(n));
-  const defaultValues: Texts = {
-    name: f.name.value,
-    newPerDay: String(f.newPerDay.value),
-    reviewsPerDay: String(f.reviewsPerDay.value),
-    desiredRetention: decimalText(f.desiredRetention.value),
-    learningSteps: f.learningSteps.value.join(" "),
-    fsrsParameters: f.fsrsParameters.value.join(", "),
-  };
+  const defaultValues = presetTexts(preset, locale);
   const form = useForm({
     defaultValues,
-    onSubmit: ({ value }) =>
-      onSave({
-        name: value.name.trim(),
-        newPerDay: read.newPerDay(value.newPerDay)!,
-        reviewsPerDay: read.reviewsPerDay(value.reviewsPerDay)!,
-        desiredRetention: read.desiredRetention(value.desiredRetention)!,
-        learningSteps: read.learningSteps(value.learningSteps)!,
-        fsrsParameters: read.fsrsParameters(value.fsrsParameters)!,
-      }),
+    onSubmit: ({ value }) => {
+      const options = readPresetTexts(value);
+      if (options) onSave(options);
+    },
   });
   const fields = [
     { key: "name", label: t("presetName"), error: t("invalidName") },
@@ -120,7 +76,7 @@ export function DeckOptionsEditor({
           key={spec.key}
           name={spec.key}
           validators={{
-            onChange: ({ value }) => (valid[spec.key](value) ? undefined : spec.error),
+            onChange: ({ value }) => (validPresetText[spec.key](value) ? undefined : spec.error),
           }}
         >
           {(field) => (
