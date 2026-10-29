@@ -1,6 +1,7 @@
 import {
   browseCards,
   cardMemory,
+  cardsStayInApp,
   type CollectionState,
   type LogEntry,
   type Locale,
@@ -180,6 +181,7 @@ function NotePanel({
         }))}
         locale={lang}
         busy={busy}
+        linked={cardsStayInApp(collection, cards)}
         onForget={(cardId) => void act(() => write("forgetCard", cardId))}
         onSetDueDate={(cardId, days) => void act(() => write("setDueDate", cardId, days))}
       />

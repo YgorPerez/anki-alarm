@@ -1,5 +1,5 @@
 import { State } from "ts-fsrs";
-import type { CollectionState } from "./collection.ts";
+import type { Card, CollectionState } from "./collection.ts";
 import { importId } from "./ids.ts";
 import type { LogEntry } from "./study.ts";
 
@@ -66,6 +66,15 @@ export interface AnkiDroidSource {
 
 /** AnkiDroid 2.24.0 added card ids and scheduling columns to the API. */
 const MINIMUM_VERSION_CODE = 22400300;
+/**
+ * Whether any of these cards came from AnkiDroid and sits in a linked deck. AnkiDroid's API can't
+ * write Forget or Set due date, so on such a card they stay in the app (ADR 0003).
+ */
+export function cardsStayInApp(collection: CollectionState, cards: readonly Card[]) {
+  const linked = new Set(collection.decks.filter((d) => d.fields.linkedBy).map((d) => d.id));
+  return cards.some((c) => c.anki && linked.has(c.fields.deckId.value));
+}
+
 export type AnkiDroidAccess = "missing" | "outdated" | "permission" | "ready";
 /** Why the AnkiDroid screens can or can't link. `null` means AnkiDroid isn't installed. */
 export function ankiDroidAccess(

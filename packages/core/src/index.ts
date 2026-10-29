@@ -23,6 +23,7 @@ export {
 } from "./collection.ts";
 export {
   ankiDroidAccess,
+  cardsStayInApp,
   linkableAnkiDroidDecks,
   syncBackPlan,
   syncBackQueue,

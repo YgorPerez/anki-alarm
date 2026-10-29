@@ -1,6 +1,6 @@
 import {
   cardMemory,
-  type Card,
+  cardsStayInApp,
   type Collection,
   type CollectionState,
   type Deck,
@@ -254,7 +254,7 @@ export function CollectionScreen({
               memory={(cardId) => cardMemory(state, log.data ?? [], cardId, Date.now())}
               locale={locale}
               busy={busy || !log.data}
-              linked={linkedCards(state, cards)}
+              linked={cardsStayInApp(state, cards)}
               onForget={(cardId) => void write((data) => data.forgetCard(cardId))}
               onSetDueDate={(cardId, days) => void write((data) => data.setDueDate(cardId, days))}
             />
@@ -369,11 +369,6 @@ function AnkiDroidEntry({
   if (!deck.fields.linkedBy) return null;
   return <LinkedDeckPanel ankiDroid={ankiDroid} deck={deck} locale={locale} disabled={busy} />;
 }
-/** Whether any of these cards came from AnkiDroid and sits in a linked deck. */
-const linkedCards = (state: CollectionState, cards: readonly Card[]) => {
-  const linked = new Set(state.decks.filter((d) => d.fields.linkedBy).map((d) => d.id));
-  return cards.some((c) => c.anki && linked.has(c.fields.deckId.value));
-};
 const cardsOf = (state: CollectionState | undefined, noteId: string) =>
   state?.cards.filter((c) => c.fields.noteId.value === noteId).map((c) => c.id) ?? [];
 /** Notes with a card in the deck. Cards, not notes, belong to decks. */
