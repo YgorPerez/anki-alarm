@@ -8,6 +8,7 @@ import {
   MediaRejected,
   Session,
   SyncApi,
+  SyncUnavailable,
   Unauthorized,
 } from "@app/contracts";
 import { Context, DateTime, Effect, Layer } from "effect";
@@ -17,6 +18,16 @@ import { HttpApiBuilder } from "effect/http-api";
 import type { Auth } from "./auth.ts";
 import type { MediaStore } from "./media.ts";
 import type { SyncStore } from "./store.ts";
+
+/** A D1, R2 or better-auth call: its failure is `SyncUnavailable`, not a defect. */
+const stored = <A>(what: string, run: () => Promise<A>) =>
+  Effect.tryPromise({
+    try: run,
+    catch: (cause) =>
+      new SyncUnavailable({
+        message: `${what} failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+      }),
+  });
 
 class Backend extends Context.Service<
   Backend,
@@ -30,7 +41,7 @@ const SessionLive = Layer.effect(
     return Session.of((httpEffect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        const session = yield* Effect.promise(() =>
+        const session = yield* stored("Session lookup", () =>
           auth.api.getSession({ headers: new Headers(request.headers) }),
         );
         if (!session) return yield* new Unauthorized();
@@ -60,13 +71,13 @@ const ChangesLive = HttpApiBuilder.group(SyncApi, "changes", (handlers) =>
       .handle("push", ({ payload }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
-          const accepted = yield* Effect.promise(() => store.push(user.id, payload.changes));
+          const accepted = yield* stored("Push", () => store.push(user.id, payload.changes));
           return { accepted };
         }),
       )
       .handle("pull", ({ payload }) =>
         Effect.flatMap(CurrentUser, (user) =>
-          Effect.promise(() => store.pull(user.id, payload.cursor, MAX_CHANGES)),
+          stored("Pull", () => store.pull(user.id, payload.cursor, MAX_CHANGES)),
         ),
       );
   }),
@@ -78,13 +89,13 @@ const MediaLive = HttpApiBuilder.group(SyncApi, "media", (handlers) =>
     return handlers
       .handle("missing", ({ payload }) =>
         Effect.map(
-          Effect.promise(() => media.missing(payload.hashes)),
+          stored("Missing media", () => media.missing(payload.hashes)),
           (missing) => ({ missing }),
         ),
       )
       .handle("upload", ({ params, payload }) =>
         Effect.flatMap(
-          Effect.promise(() => media.upload(params.sha256, payload)),
+          stored("Media upload", () => media.upload(params.sha256, payload)),
           (result) =>
             result === "stored" ? Effect.void : Effect.fail(new MediaRejected({ reason: result })),
         ),
@@ -92,7 +103,7 @@ const MediaLive = HttpApiBuilder.group(SyncApi, "media", (handlers) =>
       .handle("download", ({ params }) =>
         Effect.flatMap(CurrentUser, (user) =>
           Effect.flatMap(
-            Effect.promise(() => media.download(user.id, params.sha256)),
+            stored("Media download", () => media.download(user.id, params.sha256)),
             (bytes) => (bytes ? Effect.succeed(bytes) : Effect.fail(new MediaNotFound())),
           ),
         ),
