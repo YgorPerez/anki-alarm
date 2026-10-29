@@ -1,12 +1,14 @@
 import { Context, Effect, Layer } from "effect";
 import { RING_POLICY, type Alarm, type AlarmPermissions, type ReliabilityKind } from "@app/core";
 
+/** Where native's active ring is: sounding, in its session, or silenced by a snooze. */
+export const RING_PHASES = ["ringing", "session", "snoozed"] as const;
+export type RingPhase = (typeof RING_PHASES)[number];
 export interface Ring {
   id: string;
   alarm: Alarm;
   startedAt: number;
-  /** `ringing`, `session` or `snoozed`. */
-  phase: string;
+  phase: RingPhase;
   /** Snoozes so far in this ring: each adds its cost to N. */
   snoozes: number;
   /** When a snoozed ring rings again (epoch ms); null when not snoozed. */
@@ -78,27 +80,27 @@ export class AlarmService extends Context.Service<AlarmService, AlarmPort>()("Al
 export interface AlarmRepository {
   list: Effect.Effect<Alarm[], Error>;
   save: (alarm: Alarm) => Effect.Effect<void, Error>;
+  /** Deletes the alarm; the delete syncs. */
+  remove: (alarmId: string) => Effect.Effect<void, Error>;
   ingest: (events: readonly AlarmEvent[]) => Effect.Effect<void, Error>;
   events: Effect.Effect<AlarmEvent[], Error>;
 }
 export function alarmController(repository: AlarmRepository) {
+  /** Native schedules exactly the enabled alarms it's given, and unschedules the rest. */
+  const rearm = Effect.gen(function* () {
+    const service = yield* AlarmService;
+    yield* service.setAlarms(
+      (yield* repository.list).filter((item) => item.enabled),
+      RING_POLICY,
+    );
+  });
   return {
     list: repository.list,
-    save: (alarm: Alarm) =>
-      Effect.gen(function* () {
-        yield* repository.save(alarm);
-        const service = yield* AlarmService;
-        yield* service.setAlarms(
-          (yield* repository.list).filter((item) => item.enabled),
-          RING_POLICY,
-        );
-      }),
+    save: (alarm: Alarm) => Effect.andThen(repository.save(alarm), rearm),
+    remove: (alarmId: string) => Effect.andThen(repository.remove(alarmId), rearm),
     resume: Effect.gen(function* () {
       const service = yield* AlarmService;
-      yield* service.setAlarms(
-        (yield* repository.list).filter((item) => item.enabled),
-        RING_POLICY,
-      );
+      yield* rearm;
       const events = yield* service.drainJournal;
       yield* repository.ingest(events);
       yield* service.ack(events.map((event) => event.id));
@@ -114,6 +116,10 @@ export function memoryAlarmRepository(): AlarmRepository {
     save: (alarm) =>
       Effect.sync(() => {
         alarms.set(alarm.id, alarm);
+      }),
+    remove: (alarmId) =>
+      Effect.sync(() => {
+        alarms.delete(alarmId);
       }),
     ingest: (events) =>
       Effect.sync(() => {

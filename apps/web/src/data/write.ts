@@ -2,12 +2,12 @@ import type { CollectionCommand } from "@app/core";
 
 import { queryClient } from "#/query.ts";
 
-import { webData } from "./client.ts";
+import { webRequest } from "./client.ts";
 import type { Args, Kind, Output } from "./protocol.ts";
 
 /** A write, then every query read again, so the screen shows what committed. */
 export async function write<K extends Kind>(kind: K, ...args: Args<K>): Promise<Output<K>> {
-  const result = await webData().request(kind, ...args);
+  const result = await webRequest(kind, ...args);
   await queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] !== "storage-error" });
   return result;
 }

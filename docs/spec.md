@@ -39,6 +39,7 @@ A pnpm monorepo on GitHub under `YgorPerez`, driven by Vite+ (`vp check`, `vp li
 | `packages/contracts`     | The sync API as an Effect HttpApi with Effect Schema: push, pull, media, metadata. The Worker implements it; both clients use the derived client. As in t3code's `packages/contracts`.                                                |
 | `packages/client-data`   | What the phone and the web share below the screen: the drizzle schema and migrations, the outbox, and the push/pull engine, in Effect. The SQLite driver is injected. See `docs/adr/0006-shared-client-data.md`.                      |
 | `packages/design-tokens` | CSS tokens for both apps.                                                                                                                                                                                                             |
+| `packages/editing-ui`    | The copy both editors share (deck options, notes, card actions), with Core's limits in it.                                                                                                                                            |
 | `packages/stats-ui`      | What both stats screens share: the copy, the sections in order, the retention table and wake-up tallies as text, and the host-free TanStack Charts definitions each app draws with its own host (React Native or DOM).                |
 
 `packages/core` uses erasable TypeScript only and is tested through its public API. The apps stay

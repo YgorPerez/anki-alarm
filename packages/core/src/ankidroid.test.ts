@@ -3,6 +3,7 @@ import {
   Collection,
   ankiDroidAccess,
   cardId,
+  cardsStayInApp,
   importId,
   linkableAnkiDroidDecks,
   replayCard,
@@ -111,6 +112,19 @@ test("filtered decks are not offered for linking, and the list is sorted by name
     "Japanese",
     "Japanese::Kanji",
   ]);
+});
+
+test("a linked deck's AnkiDroid cards keep Forget and Set due date in the app; its own cards don't", () => {
+  const c = new Collection(environment());
+  c.linkAnkiDroid(source());
+  const own = c.createDeck("Own");
+  c.addBasicNote(own.id, "casa", "house");
+  const state = c.snapshot();
+  const fromAnkiDroid = state.cards.filter((item) => item.anki);
+  const added = state.cards.filter((item) => !item.anki);
+  expect(fromAnkiDroid.length).toBeGreaterThan(0);
+  expect(cardsStayInApp(state, fromAnkiDroid)).toBe(true);
+  expect(cardsStayInApp(state, added)).toBe(false);
 });
 
 test("linking keeps AnkiDroid's ids, records the phone, and imports subdecks, notes and cards", () => {

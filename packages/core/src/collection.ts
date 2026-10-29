@@ -62,15 +62,29 @@ const presetKeys = [
   "learningSteps",
   "fsrsParameters",
 ] as const satisfies readonly (keyof PresetOptions)[];
+/** The bounds of a preset's options, for the rules below and the copy that states them. */
+export const PRESET_LIMITS = {
+  /** New cards and reviews per day: a whole number from 0 to this. */
+  maxPerDay: 9999,
+  minRetention: 0.7,
+  maxRetention: 0.99,
+  maxLearningSteps: 20,
+  /** FSRS-6's parameter count. */
+  fsrsParameters: 21,
+} as const;
 /** The rule `updatePreset` applies to each option, for forms to check as the user types. */
 export const validOption: { [K in keyof PresetOptions]: (value: PresetOptions[K]) => boolean } = {
   name: (v) => typeof v === "string" && Boolean(v.trim()),
-  newPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= 9999,
-  reviewsPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= 9999,
-  desiredRetention: (v) => Number.isFinite(v) && v >= 0.7 && v <= 0.99,
+  newPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
+  reviewsPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
+  desiredRetention: (v) =>
+    Number.isFinite(v) && v >= PRESET_LIMITS.minRetention && v <= PRESET_LIMITS.maxRetention,
   learningSteps: (v) =>
-    Array.isArray(v) && v.length <= 20 && v.every((n) => Number.isFinite(n) && n > 0),
-  fsrsParameters: (v) => Array.isArray(v) && v.length === 21 && v.every(Number.isFinite),
+    Array.isArray(v) &&
+    v.length <= PRESET_LIMITS.maxLearningSteps &&
+    v.every((n) => Number.isFinite(n) && n > 0),
+  fsrsParameters: (v) =>
+    Array.isArray(v) && v.length === PRESET_LIMITS.fsrsParameters && v.every(Number.isFinite),
 };
 export interface Template {
   name: string;
@@ -98,9 +112,11 @@ export type Card = RecordFields<{
 }> &
   AnkiIdentity;
 export type RecordKind = "decks" | "presets" | "noteTypes" | "notes" | "cards";
+/** The kinds a delete syncs for: the collection's records, and alarms. */
+export type TombstoneKind = RecordKind | "alarms";
 export interface Tombstone {
   id: string;
-  kind: RecordKind;
+  kind: TombstoneKind;
   sequence: number;
   hlc: Hlc;
 }

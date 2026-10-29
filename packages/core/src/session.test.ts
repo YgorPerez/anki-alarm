@@ -170,6 +170,28 @@ describe("alarm session", () => {
     expect(alarmSession({ ...input, deckId: child.id }).next?.note.values[0]?.value).toBe("child");
   });
 
+  test("schedules with the deck's desired retention, not only its preset's", () => {
+    const c = collection();
+    const deck = c.createDeck("Words");
+    c.addBasicNote(deck.id, "studied", "x");
+    c.addBasicNote(deck.id, "new", "x");
+    const state = c.snapshot();
+    const studied = state.cards.find(
+      (card) =>
+        state.notes.find((n) => n.id === card.fields.noteId.value)?.values[0]?.value === "studied",
+    )!.id;
+    // Easy three days ago: not due yet at 90% retention, due at 99%.
+    const log = [review(studied, 4, now - 3 * day)];
+    const input = { collection: state, log, deckId: deck.id, need: 1, ringId: "ring", now };
+    expect(alarmSession(input).next?.card.id).not.toBe(studied);
+    state.decks[0]!.fields.desiredRetention.value = 0.99;
+    expect(alarmSession(input).next?.card.id).toBe(studied);
+    expect(
+      awakeCheckSession({ collection: state, log, deckId: deck.id, checkId: "check", now }).next
+        ?.card.id,
+    ).toBe(studied);
+  });
+
   test("suspended cards stay out of the session", () => {
     const setup = deckWithEveryKind();
     const state = structuredClone(setup.state);

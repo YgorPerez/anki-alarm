@@ -1,39 +1,6 @@
 import { drizzle } from "drizzle-orm/sqlite-proxy";
-import { sql } from "drizzle-orm";
-import {
-  settings as settingsTable,
-  alarms,
-  alarmEvents,
-  alarmRecords,
-  outbox,
-  reviewLog,
-} from "./schema.ts";
-import { syncEngine } from "./sync.ts";
-export { AccountMismatch, type MediaSyncResult, type SyncResult } from "./sync.ts";
-export { MediaStorageRefused, memoryMediaFiles, type MediaFiles } from "./media.ts";
-import { memoryMediaFiles, type MediaFiles } from "./media.ts";
-import {
-  ankiDroidEngine,
-  type AnkiDroidProvider,
-  type PullSummary,
-  type SyncBackSummary,
-} from "./ankidroid.ts";
-export type { AnkiDroidProvider, PullSummary, SyncBackSummary } from "./ankidroid.ts";
-export { syncScheduler, type SyncScheduler, type SyncStatus } from "./scheduler.ts";
-export {
-  accountSync,
-  mediaNotice,
-  type Account,
-  type AccountData,
-  type AccountState,
-  type AccountSync,
-  type AccountUser,
-} from "./account.ts";
-export { type ExecuteSql } from "./collection.ts";
-import { openCollectionStore, type ExecuteSql } from "./collection.ts";
-import { migrationStatements } from "./migrations.ts";
-import { Context, Effect, Layer } from "effect";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { Context, Effect, Layer, Semaphore } from "effect";
 import {
   uuid7,
   studyQueue,
@@ -52,7 +19,61 @@ import {
   type AnkiDroidSource,
   type AlarmEvent,
   stampAlarm,
+  alarmTombstone,
 } from "@app/core";
+import {
+  settings as settingsTable,
+  alarms,
+  alarmEvents,
+  alarmRecords,
+  outbox,
+  reviewLog,
+  tombstones,
+} from "./schema.ts";
+import { syncEngine, type UnsafeMediaName } from "./sync.ts";
+import { memoryMediaFiles, type MediaFiles, type MediaStorageRefused } from "./media.ts";
+import {
+  ankiDroidEngine,
+  type AnkiDroidProvider,
+  type AnswerNotRecorded,
+  type DeckNotLinked,
+  type PullSummary,
+  type SyncBackSummary,
+} from "./ankidroid.ts";
+import { openCollectionStore } from "./collection.ts";
+import {
+  core,
+  inBatches,
+  migrate,
+  query,
+  StorageFailed,
+  transaction,
+  type CommandRejected,
+  type ExecuteSql,
+} from "./sql.ts";
+
+export { AccountMismatch, UnsafeMediaName, type MediaSyncResult, type SyncResult } from "./sync.ts";
+export { MediaStorageRefused, memoryMediaFiles, type MediaFiles } from "./media.ts";
+export {
+  AnswerNotRecorded,
+  DeckNotLinked,
+  type AnkiDroidProvider,
+  type PullSummary,
+  type SyncBackSummary,
+} from "./ankidroid.ts";
+export { syncScheduler, type SyncScheduler, type SyncStatus } from "./scheduler.ts";
+export {
+  accountSync,
+  AccountFailed,
+  mediaNotice,
+  type Account,
+  type AccountData,
+  type AccountState,
+  type AccountSync,
+  type AccountUser,
+} from "./account.ts";
+export { CommandRejected, StorageFailed, type ExecuteSql } from "./sql.ts";
+export { ApkgUnreadable, ApkgWriteFailed, DeckMissing, exportApkg, importApkg } from "./apkg.ts";
 
 export type { AlarmEvent } from "@app/core";
 export interface PendingChange {
@@ -68,28 +89,28 @@ export interface ImportSummary {
   /** Review log entries this import added. */
   entries: number;
 }
+/** A write Core checks: the database can fail, and Core can refuse it. */
+type Rejectable = StorageFailed | CommandRejected;
 type Engine = Omit<ReturnType<typeof syncEngine>, "writeMediaFiles" | "recordMedia">;
 interface Data extends Engine {
   /**
    * Stores media files under their names, before the records that use them, and records each one's
    * SHA-256 so sync uploads it. The same bytes again queue nothing. Fails with
-   * `MediaStorageRefused` when the device won't store, and on an unsafe name.
+   * `MediaStorageRefused` when the device won't store, and `UnsafeMediaName` on an unsafe name.
    */
   storeMedia: (
     files: readonly { name: string; bytes: () => Promise<Uint8Array> }[],
-  ) => Effect.Effect<number, Error>;
-  /** The names of the files the notes use that this device lacks, sorted. Sync downloads them. */
-  missingMedia: Effect.Effect<string[], Error>;
+  ) => Effect.Effect<number, MediaStorageRefused | UnsafeMediaName | StorageFailed>;
   /** Calls `listener` after each local write commits, to schedule a sync. Returns unsubscribe. */
   subscribe: (listener: () => void) => () => void;
-  collection: Effect.Effect<CollectionState, Error>;
+  collection: Effect.Effect<CollectionState, StorageFailed>;
   /**
    * Merges an Anki package into the collection and appends its review log in one transaction.
    * Store the package's media files first. Importing the same package again adds no entries, and
    * neither does importing an export of the app's own reviews.
    */
-  importAnki: (source: AnkiPackage) => Effect.Effect<ImportSummary, Error>;
-  reviewLog: Effect.Effect<LogEntry[], Error>;
+  importAnki: (source: AnkiPackage) => Effect.Effect<ImportSummary, Rejectable>;
+  reviewLog: Effect.Effect<LogEntry[], StorageFailed>;
   /**
    * Appends a review and its outbox record. With a ring id the answer belongs to that ring's alarm
    * session: daily limits and due dates don't hold it back.
@@ -99,44 +120,51 @@ interface Data extends Engine {
     grade: Grade,
     durationMs: number,
     ringId?: string,
-  ) => Effect.Effect<LogEntry, Error>;
+  ) => Effect.Effect<LogEntry, Rejectable>;
   /** Forget: appends a reset. */
-  forgetCard: (cardId: string) => Effect.Effect<LogEntry, Error>;
+  forgetCard: (cardId: string) => Effect.Effect<LogEntry, Rejectable>;
   /** Appends a set due date at the start of the study day `days` from today. */
-  setDueDate: (cardId: string, days: number) => Effect.Effect<LogEntry, Error>;
+  setDueDate: (cardId: string, days: number) => Effect.Effect<LogEntry, Rejectable>;
   /** Appends a void for one earlier review, reset or set due date. */
-  undo: (entryId: string) => Effect.Effect<LogEntry, Error>;
+  undo: (entryId: string) => Effect.Effect<LogEntry, Rejectable>;
   changeCollection: (
     command: (collection: Collection) => void,
-  ) => Effect.Effect<CollectionState, Error>;
+  ) => Effect.Effect<CollectionState, Rejectable>;
   /**
    * Imports an AnkiDroid deck as a linked deck owned by this phone, with a snapshot for each
    * reviewed card, in one transaction. Linking again updates it. Resolves with the deck's id.
    */
-  linkAnkiDroidDeck: (source: AnkiDroidSource) => Effect.Effect<string, Error>;
+  linkAnkiDroidDeck: (source: AnkiDroidSource) => Effect.Effect<string, Rejectable>;
   /** This phone's id: the `linkedBy` of the decks it linked. */
   deviceId: string;
   /**
    * Sends every review of this phone's linked cards not sent yet, from any origin, to AnkiDroid as
    * answers, in answer-time order. Each answer is checked and recorded before the next goes.
    */
-  syncBackAnkiDroid: (provider: AnkiDroidProvider) => Effect.Effect<SyncBackSummary, Error>;
+  syncBackAnkiDroid: (
+    provider: AnkiDroidProvider,
+  ) => Effect.Effect<SyncBackSummary, StorageFailed | AnswerNotRecorded | Error>;
   /** Syncs back, then brings in the linked deck's new notes, edited fields and newer states. */
-  pullAnkiDroid: (provider: AnkiDroidProvider, deckId: string) => Effect.Effect<PullSummary, Error>;
+  pullAnkiDroid: (
+    provider: AnkiDroidProvider,
+    deckId: string,
+  ) => Effect.Effect<PullSummary, Rejectable | AnswerNotRecorded | DeckNotLinked | Error>;
   /** Whether sync back runs after each alarm session; on unless turned off. This phone only. */
-  autoSyncBack: Effect.Effect<boolean, Error>;
-  setAutoSyncBack: (on: boolean) => Effect.Effect<void, Error>;
-  alarms: Effect.Effect<Alarm[], Error>;
-  saveAlarm: (alarm: Alarm) => Effect.Effect<void, Error>;
+  autoSyncBack: Effect.Effect<boolean, StorageFailed>;
+  setAutoSyncBack: (on: boolean) => Effect.Effect<void, StorageFailed>;
+  alarms: Effect.Effect<Alarm[], StorageFailed>;
+  saveAlarm: (alarm: Alarm) => Effect.Effect<void, StorageFailed>;
+  /** Deletes an alarm with a tombstone that syncs: no edit from another device brings it back. */
+  deleteAlarm: (alarmId: string) => Effect.Effect<void, StorageFailed>;
   /**
    * Stores native's journal events not stored yet, each queued to sync (append-only, like
    * reviews). Draining the same events again changes nothing.
    */
-  ingestEvents: (events: readonly AlarmEvent[]) => Effect.Effect<void, Error>;
-  events: Effect.Effect<AlarmEvent[], Error>;
-  settings: Effect.Effect<Settings, Error>;
-  setTheme: (patch: Partial<ThemeChoice>) => Effect.Effect<Settings, Error>;
-  pendingChanges: Effect.Effect<PendingChange[], Error>;
+  ingestEvents: (events: readonly AlarmEvent[]) => Effect.Effect<void, StorageFailed>;
+  events: Effect.Effect<AlarmEvent[], StorageFailed>;
+  settings: Effect.Effect<Settings, StorageFailed>;
+  setTheme: (patch: Partial<ThemeChoice>) => Effect.Effect<Settings, StorageFailed>;
+  pendingChanges: Effect.Effect<PendingChange[], StorageFailed>;
 }
 export class ClientData extends Context.Service<ClientData, Data>()("ClientData") {}
 export interface SQLiteConnection {
@@ -152,15 +180,12 @@ export class SQLiteDriver extends Context.Service<SQLiteDriver, SQLiteConnection
 /** Where the app keeps media files. */
 export class MediaDriver extends Context.Service<MediaDriver, MediaFiles>()("MediaDriver") {}
 
-const failure = (error: unknown) => (error instanceof Error ? error : new Error(String(error)));
-const promised = <A>(operation: () => Promise<A>) =>
-  Effect.tryPromise({ try: operation, catch: failure });
 export const ClientDataLive = Layer.effect(
   ClientData,
   Effect.gen(function* () {
     const driver = yield* SQLiteDriver;
     const media = yield* MediaDriver;
-    return yield* Effect.tryPromise({ try: () => open(driver, media), catch: failure });
+    return yield* open(driver, media);
   }),
 );
 /** The service over the app's SQLite and media files. Tests may leave media in memory. */
@@ -169,268 +194,348 @@ export const clientDataLayer = (driver: SQLiteConnection, media: MediaFiles = me
     Layer.provide([Layer.succeed(SQLiteDriver, driver), Layer.succeed(MediaDriver, media)]),
   );
 
-/* oxlint-disable eslint/no-await-in-loop -- SQLite transactions execute statements in order. */
-async function open(driver: SQLiteConnection, media: MediaFiles): Promise<Data> {
-  const collectionSql = driver.connect("collection.db");
-  const alarmSql = driver.connect("anki-alarm.db");
-  const store = await openCollectionStore(collectionSql, driver);
-  try {
-    for (const statement of migrationStatements("anki-alarm.db"))
-      await alarmSql(statement, [], "run");
-  } catch (error) {
-    await alarmSql("ROLLBACK", [], "run");
-    throw error;
-  }
-  let queue: Promise<unknown> = Promise.resolve();
-  const listeners = new Set<() => void>();
-  const notify = () => {
-    for (const listener of listeners) listener();
-  };
-  /** Runs `operation` after every earlier one. */
-  const enqueue = <A>(operation: () => Promise<A>) => {
-    const result = queue.then(operation);
-    queue = result.catch(() => {});
-    return result;
-  };
-  /** Runs a local write in the queue and tells subscribers once it committed. */
-  const local = <A>(operation: () => Promise<A>) =>
-    serial(operation).pipe(Effect.tap(() => Effect.sync(notify)));
-  const serial = <A>(operation: () => Promise<A>) =>
-    Effect.tryPromise({ try: () => enqueue(operation), catch: failure });
-  const collectionDb = drizzle(collectionSql);
-  const alarmDb = drizzle(alarmSql);
-  const readSettings = async () => (await collectionDb.select().from(settingsTable))[0]?.body;
-  if (!(await readSettings())) {
-    const initial = updateThemeSettings(undefined, {}, { ...driver, deviceId: store.deviceId });
-    await transaction(collectionSql, async () => {
-      await collectionDb.insert(settingsTable).values({ id: initial.id, body: initial });
-      await collectionDb
-        .insert(outbox)
-        .values({ kind: "settings", recordId: initial.id, body: initial });
-    });
-  }
-  const readLog = async () => (await collectionDb.select().from(reviewLog)).map((r) => r.body);
-  /** Appends one entry Core accepts, with its outbox record, in one transaction. */
-  const append = (
-    build: (state: CollectionState, log: LogEntry[], entry: { id: string; at: number }) => LogEntry,
-  ) =>
-    local(() =>
-      transaction(collectionSql, async () => {
-        const state = await store.read();
-        const log = await readLog();
-        const at = driver.now();
-        const entry = build(state, log, { id: uuid7(at, driver.random()), at });
-        checkLogEntry(state, log, entry);
-        await collectionDb.insert(reviewLog).values({ id: entry.id, body: entry });
-        await collectionDb
-          .insert(outbox)
-          .values({ kind: "reviewLog", recordId: entry.id, body: entry });
-        return entry;
-      }),
+const open = (driver: SQLiteConnection, media: MediaFiles) =>
+  Effect.gen(function* () {
+    const collectionSql = driver.connect("collection.db");
+    const alarmSql = driver.connect("anki-alarm.db");
+    const store = yield* openCollectionStore(collectionSql, driver);
+    yield* migrate(alarmSql, "anki-alarm.db");
+    const listeners = new Set<() => void>();
+    const notify = () => {
+      for (const listener of listeners) listener();
+    };
+    // Local operations run one at a time, in the order they were asked for.
+    const lock = Semaphore.makeUnsafe(1);
+    const serial = <A, E>(operation: Effect.Effect<A, E>) => lock.withPermit(operation);
+    /** Runs a local write in the queue and tells subscribers once it committed. */
+    const local = <A, E>(operation: Effect.Effect<A, E>) =>
+      serial(operation).pipe(Effect.tap(() => Effect.sync(notify)));
+    const inCollection = <A, E>(operation: Effect.Effect<A, E>) =>
+      transaction(collectionSql, operation);
+    const inAlarms = <A, E>(operation: Effect.Effect<A, E>) => transaction(alarmSql, operation);
+    const collectionDb = drizzle(collectionSql);
+    const alarmDb = drizzle(alarmSql);
+    const env = { ...driver, deviceId: store.deviceId };
+    const readSettings = Effect.map(
+      query(() => collectionDb.select().from(settingsTable)),
+      (rows) => rows[0]?.body,
     );
-  /** Appends the entries not yet in the log, with their outbox records; inside a transaction. */
-  const appendNew = async (log: readonly LogEntry[]) => {
-    const known = new Set(
-      (await collectionDb.select({ id: reviewLog.id }).from(reviewLog)).map((r) => r.id),
-    );
-    const added = log.filter((entry) => !known.has(entry.id));
-    for (let i = 0; i < added.length; i += 200) {
-      const batch = added.slice(i, i + 200);
-      await collectionDb.insert(reviewLog).values(batch.map((e) => ({ id: e.id, body: e })));
-      await collectionDb
-        .insert(outbox)
-        .values(batch.map((e) => ({ kind: "reviewLog", recordId: e.id, body: e })));
-    }
-    return added.length;
-  };
-  const env = { ...driver, deviceId: store.deviceId };
-  const ankiDroid = ankiDroidEngine({
-    db: collectionDb,
-    deviceId: store.deviceId,
-    now: driver.now,
-    read: enqueue,
-    write: (operation) => enqueue(() => transaction(collectionSql, operation)),
-    readCollection: store.read,
-    readLog,
-    runCollection: store.run,
-    appendNew,
-    notify,
-  });
-  const { writeMediaFiles, recordMedia, ...engine } = syncEngine({
-    collectionDb,
-    alarmDb,
-    serial,
-    inCollection: (operation) => transaction(collectionSql, operation),
-    inAlarms: (operation) => transaction(alarmSql, operation),
-    env,
-    media,
-  });
-  return {
-    ...engine,
-    storeMedia: (files) =>
-      writeMediaFiles(files).pipe(Effect.flatMap((stored) => local(() => recordMedia(stored)))),
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    reviewLog: serial(readLog),
-    answerCard: (cardId, grade, durationMs, ringId) =>
-      append((state, log, base) => {
-        if (![1, 2, 3, 4].includes(grade) || !Number.isFinite(durationMs) || durationMs < 0)
-          throw new Error("Invalid answer");
-        const card = state.cards.find((c) => c.id === cardId);
-        if (
-          !card ||
-          (ringId === undefined &&
-            !studyQueue(state, log, card.fields.deckId.value, base.at).some(
-              (c) => c.card.id === cardId,
-            ))
-        )
-          throw new Error("Card is not available for study");
-        return {
-          ...base,
-          kind: "review",
-          cardId,
-          grade,
-          durationMs,
-          ...(ringId === undefined
-            ? { origin: driver.origin ?? "phone" }
-            : { origin: "alarm" as const, ringId }),
-        };
-      }),
-    forgetCard: (cardId) => append((_, __, base) => ({ ...base, kind: "reset", cardId })),
-    setDueDate: (cardId, days) =>
-      append((_, __, base) => ({
-        ...base,
-        kind: "setDueDate",
-        cardId,
-        due: dueInDays(days, base.at),
-      })),
-    undo: (targetId) =>
-      append((_, log, base) => {
-        const target = log.find((e) => e.id === targetId);
-        if (!target) throw new Error("Nothing to undo");
-        return { ...base, kind: "void", cardId: target.cardId, targetId };
-      }),
-    collection: serial(store.read),
-    importAnki: (source) =>
-      local(async () => {
-        let entries = 0;
-        // Local writes run one at a time: the log can't change before the import commits.
-        const known = await readLog();
-        const { result } = await store.run(
-          (collection) => collection.importAnki(source, known),
-          async ({ log }) => {
-            entries = await appendNew(log);
-          },
-        );
-        return { notes: result.notes, cards: result.cards, entries };
-      }),
-    deviceId: store.deviceId,
-    linkAnkiDroidDeck: (source) => promised(async () => (await ankiDroid.link(source)).deckId),
-    syncBackAnkiDroid: (provider) => promised(() => ankiDroid.syncBack(provider)),
-    pullAnkiDroid: (provider, deckId) => promised(() => ankiDroid.pull(provider, deckId)),
-    autoSyncBack: promised(ankiDroid.autoSyncBack),
-    setAutoSyncBack: (on) => promised(() => ankiDroid.setAutoSyncBack(on)),
-    changeCollection: (command) => local(() => store.change(command)),
-    alarms: serial(async () =>
-      (
-        await alarmDb
-          .select()
-          .from(alarms)
-          .orderBy(sql`rowid`)
-      ).map((row) => readAlarm(row.data)),
-    ),
-    saveAlarm: (alarm) =>
-      local(() =>
-        transaction(alarmSql, async () => {
-          const [previous] = await alarmDb
-            .select()
-            .from(alarmRecords)
-            .where(eq(alarmRecords.id, alarm.id));
-          const record = stampAlarm(previous?.body, alarm, env);
-          await alarmDb
-            .insert(alarms)
-            .values({ id: alarm.id, data: alarm })
-            .onConflictDoUpdate({ target: alarms.id, set: { data: alarm } });
-          await alarmDb
-            .insert(alarmRecords)
-            .values({ id: alarm.id, body: record })
-            .onConflictDoUpdate({ target: alarmRecords.id, set: { body: record } });
-          await alarmDb.insert(outbox).values({ kind: "alarms", recordId: alarm.id, body: record });
-        }),
-      ),
-    ingestEvents: (events) =>
-      serial(() =>
-        transaction(alarmSql, async () => {
-          const known = new Set(
-            (await alarmDb.select({ id: alarmEvents.id }).from(alarmEvents)).map((r) => r.id),
+    if (!(yield* readSettings)) {
+      const initial = updateThemeSettings(undefined, {}, env);
+      yield* inCollection(
+        Effect.gen(function* () {
+          yield* query(() =>
+            collectionDb.insert(settingsTable).values({ id: initial.id, body: initial }),
           );
-          let added = 0;
-          for (const event of events) {
-            if (known.has(event.id)) continue;
-            known.add(event.id);
-            added += 1;
-            await alarmDb.insert(alarmEvents).values({ id: event.id, data: event });
-            await alarmDb
+          yield* query(() =>
+            collectionDb
               .insert(outbox)
-              .values({ kind: "alarmEvent", recordId: event.id, body: event });
-          }
-          return added;
+              .values({ kind: "settings", recordId: initial.id, body: initial }),
+          );
         }),
-      ).pipe(
-        // New events are a local write: the sync scheduler hears them.
-        Effect.flatMap((added) => Effect.sync(() => (added > 0 ? notify() : undefined))),
-      ),
-    events: serial(async () =>
-      (
-        await alarmDb
-          .select()
-          .from(alarmEvents)
-          .orderBy(sql`rowid`)
-      ).map((row) => row.data),
-    ),
-    settings: serial(async () => {
-      const settings = await readSettings();
-      if (!settings) throw new Error("Settings missing");
-      return settings;
-    }),
-    setTheme: (patch) =>
-      local(() =>
-        transaction(collectionSql, async () => {
-          const settings = updateThemeSettings(await readSettings(), patch, env);
-          await collectionDb
-            .insert(settingsTable)
-            .values({ id: settings.id, body: settings })
-            .onConflictDoUpdate({ target: settingsTable.id, set: { body: settings } });
+      );
+    }
+    const readLog = Effect.map(
+      query(() => collectionDb.select().from(reviewLog)),
+      (rows) => rows.map((r) => r.body),
+    );
+    /** Appends one entry Core accepts, with its outbox record, in one transaction. */
+    const append = (
+      build: (
+        state: CollectionState,
+        log: LogEntry[],
+        entry: { id: string; at: number },
+      ) => LogEntry,
+    ) =>
+      local(
+        inCollection(
+          Effect.gen(function* () {
+            const state = yield* store.read;
+            const log = yield* readLog;
+            const at = driver.now();
+            const entry = yield* core(() => {
+              const built = build(state, log, { id: uuid7(at, driver.random()), at });
+              checkLogEntry(state, log, built);
+              return built;
+            });
+            yield* query(() =>
+              collectionDb.insert(reviewLog).values({ id: entry.id, body: entry }),
+            );
+            yield* query(() =>
+              collectionDb
+                .insert(outbox)
+                .values({ kind: "reviewLog", recordId: entry.id, body: entry }),
+            );
+            return entry;
+          }),
+        ),
+      );
+    /** Appends the entries not yet in the log, with their outbox records; inside a transaction. */
+    const appendNew = (log: readonly LogEntry[]) =>
+      Effect.gen(function* () {
+        const known = new Set(
+          (yield* query(() => collectionDb.select({ id: reviewLog.id }).from(reviewLog))).map(
+            (r) => r.id,
+          ),
+        );
+        const added = log.filter((entry) => !known.has(entry.id));
+        yield* inBatches(added, async (batch) => {
+          await collectionDb.insert(reviewLog).values(batch.map((e) => ({ id: e.id, body: e })));
           await collectionDb
             .insert(outbox)
-            .values({ kind: "settings", recordId: settings.id, body: settings });
-          return settings;
+            .values(batch.map((e) => ({ kind: "reviewLog", recordId: e.id, body: e })));
+        });
+        return added.length;
+      });
+    const ankiDroid = ankiDroidEngine({
+      db: collectionDb,
+      deviceId: store.deviceId,
+      now: driver.now,
+      read: serial,
+      write: (operation) => serial(inCollection(operation)),
+      readCollection: store.read,
+      readLog,
+      runCollection: store.run,
+      appendNew,
+      notify,
+    });
+    const { writeMediaFiles, recordMedia, ...engine } = syncEngine({
+      collectionDb,
+      alarmDb,
+      serial,
+      inCollection,
+      inAlarms,
+      env,
+      media,
+    });
+    /** The alarm's synced record; an alarm from before sync has none yet and is stamped now. */
+    const alarmRecordOf = (alarmId: string) =>
+      Effect.gen(function* () {
+        const [record] = yield* query(() =>
+          alarmDb.select().from(alarmRecords).where(eq(alarmRecords.id, alarmId)),
+        );
+        if (record) return record.body;
+        const [row] = yield* query(() =>
+          alarmDb.select().from(alarms).where(eq(alarms.id, alarmId)),
+        );
+        return row && stampAlarm(undefined, readAlarm(row.data), env);
+      });
+    const isDeleted = (alarmId: string) =>
+      Effect.map(
+        query(() => alarmDb.select().from(tombstones).where(eq(tombstones.id, alarmId))),
+        (rows) => rows.length > 0,
+      );
+    const data: Data = {
+      ...engine,
+      storeMedia: (files) =>
+        writeMediaFiles(files).pipe(Effect.flatMap((stored) => local(recordMedia(stored)))),
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      reviewLog: serial(readLog),
+      answerCard: (cardId, grade, durationMs, ringId) =>
+        append((state, log, base) => {
+          if (![1, 2, 3, 4].includes(grade) || !Number.isFinite(durationMs) || durationMs < 0)
+            throw new Error("Invalid answer");
+          const card = state.cards.find((c) => c.id === cardId);
+          if (
+            !card ||
+            (ringId === undefined &&
+              !studyQueue(state, log, card.fields.deckId.value, base.at).some(
+                (c) => c.card.id === cardId,
+              ))
+          )
+            throw new Error("Card is not available for study");
+          return {
+            ...base,
+            kind: "review",
+            cardId,
+            grade,
+            durationMs,
+            ...(ringId === undefined
+              ? { origin: driver.origin ?? "phone" }
+              : { origin: "alarm" as const, ringId }),
+          };
+        }),
+      forgetCard: (cardId) => append((_, __, base) => ({ ...base, kind: "reset", cardId })),
+      setDueDate: (cardId, days) =>
+        append((_, __, base) => ({
+          ...base,
+          kind: "setDueDate",
+          cardId,
+          due: dueInDays(days, base.at),
+        })),
+      undo: (targetId) =>
+        append((_, log, base) => {
+          const target = log.find((e) => e.id === targetId);
+          if (!target) throw new Error("Nothing to undo");
+          return { ...base, kind: "void", cardId: target.cardId, targetId };
+        }),
+      collection: serial(store.read),
+      importAnki: (source) =>
+        local(
+          Effect.gen(function* () {
+            let entries = 0;
+            // Local writes run one at a time: the log can't change before the import commits.
+            const known = yield* readLog;
+            const { result } = yield* store.run(
+              (collection) => collection.importAnki(source, known),
+              ({ log }) =>
+                Effect.map(appendNew(log), (added) => {
+                  entries = added;
+                }),
+            );
+            const summary: ImportSummary = { notes: result.notes, cards: result.cards, entries };
+            return summary;
+          }),
+        ),
+      deviceId: store.deviceId,
+      linkAnkiDroidDeck: (source) => Effect.map(ankiDroid.link(source), (link) => link.deckId),
+      syncBackAnkiDroid: ankiDroid.syncBack,
+      pullAnkiDroid: ankiDroid.pull,
+      autoSyncBack: ankiDroid.autoSyncBack,
+      setAutoSyncBack: ankiDroid.setAutoSyncBack,
+      changeCollection: (command) => local(store.change(command)),
+      alarms: serial(
+        Effect.map(
+          query(() =>
+            alarmDb
+              .select()
+              .from(alarms)
+              .orderBy(sql`rowid`),
+          ),
+          (rows) => rows.map((row) => readAlarm(row.data)),
+        ),
+      ),
+      saveAlarm: (alarm) =>
+        local(
+          inAlarms(
+            Effect.gen(function* () {
+              // A deleted alarm stays deleted: an editor still open on it saves nothing.
+              if (yield* isDeleted(alarm.id)) return;
+              const [previous] = yield* query(() =>
+                alarmDb.select().from(alarmRecords).where(eq(alarmRecords.id, alarm.id)),
+              );
+              const record = stampAlarm(previous?.body, alarm, env);
+              yield* query(() =>
+                alarmDb
+                  .insert(alarms)
+                  .values({ id: alarm.id, data: alarm })
+                  .onConflictDoUpdate({ target: alarms.id, set: { data: alarm } }),
+              );
+              yield* query(() =>
+                alarmDb
+                  .insert(alarmRecords)
+                  .values({ id: alarm.id, body: record })
+                  .onConflictDoUpdate({ target: alarmRecords.id, set: { body: record } }),
+              );
+              yield* query(() =>
+                alarmDb.insert(outbox).values({ kind: "alarms", recordId: alarm.id, body: record }),
+              );
+            }),
+          ),
+        ),
+      deleteAlarm: (alarmId) =>
+        local(
+          inAlarms(
+            Effect.gen(function* () {
+              if (yield* isDeleted(alarmId)) return;
+              const previous = yield* alarmRecordOf(alarmId);
+              if (!previous) return;
+              const tombstone = alarmTombstone(previous, env);
+              yield* query(() =>
+                alarmDb.insert(tombstones).values({ id: alarmId, body: tombstone }),
+              );
+              yield* query(() => alarmDb.delete(alarms).where(eq(alarms.id, alarmId)));
+              yield* query(() => alarmDb.delete(alarmRecords).where(eq(alarmRecords.id, alarmId)));
+              yield* query(() =>
+                alarmDb
+                  .insert(outbox)
+                  .values({ kind: "tombstones", recordId: alarmId, body: tombstone }),
+              );
+            }),
+          ),
+        ),
+      ingestEvents: (events) =>
+        serial(
+          inAlarms(
+            Effect.gen(function* () {
+              const known = new Set(
+                (yield* query(() => alarmDb.select({ id: alarmEvents.id }).from(alarmEvents))).map(
+                  (r) => r.id,
+                ),
+              );
+              let added = 0;
+              for (const event of events) {
+                if (known.has(event.id)) continue;
+                known.add(event.id);
+                added += 1;
+                yield* query(() =>
+                  alarmDb.insert(alarmEvents).values({ id: event.id, data: event }),
+                );
+                yield* query(() =>
+                  alarmDb
+                    .insert(outbox)
+                    .values({ kind: "alarmEvent", recordId: event.id, body: event }),
+                );
+              }
+              return added;
+            }),
+          ),
+        ).pipe(
+          // New events are a local write: the sync scheduler hears them.
+          Effect.flatMap((added) => Effect.sync(() => (added > 0 ? notify() : undefined))),
+        ),
+      events: serial(
+        Effect.map(
+          query(() =>
+            alarmDb
+              .select()
+              .from(alarmEvents)
+              .orderBy(sql`rowid`),
+          ),
+          (rows) => rows.map((row) => row.data),
+        ),
+      ),
+      settings: serial(
+        Effect.flatMap(readSettings, (settings) =>
+          settings ? Effect.succeed(settings) : new StorageFailed({ message: "Settings missing" }),
+        ),
+      ),
+      setTheme: (patch) =>
+        local(
+          inCollection(
+            Effect.gen(function* () {
+              const settings = updateThemeSettings(yield* readSettings, patch, env);
+              yield* query(() =>
+                collectionDb
+                  .insert(settingsTable)
+                  .values({ id: settings.id, body: settings })
+                  .onConflictDoUpdate({ target: settingsTable.id, set: { body: settings } }),
+              );
+              yield* query(() =>
+                collectionDb
+                  .insert(outbox)
+                  .values({ kind: "settings", recordId: settings.id, body: settings }),
+              );
+              return settings;
+            }),
+          ),
+        ),
+      pendingChanges: serial(
+        Effect.gen(function* () {
+          const changes: PendingChange[] = [];
+          for (const database of ["collection.db", "anki-alarm.db"] as const) {
+            const db = database === "collection.db" ? collectionDb : alarmDb;
+            for (const row of yield* query(() => db.select().from(outbox).orderBy(outbox.sequence)))
+              changes.push({ database, ...row });
+          }
+          return changes;
         }),
       ),
-    pendingChanges: serial(async () => {
-      const changes: PendingChange[] = [];
-      for (const database of ["collection.db", "anki-alarm.db"] as const) {
-        const db = database === "collection.db" ? collectionDb : alarmDb;
-        for (const row of await db.select().from(outbox).orderBy(outbox.sequence))
-          changes.push({ database, ...row });
-      }
-      return changes;
-    }),
-  };
-}
-
-const transaction = async <A>(execute: ExecuteSql, operation: () => Promise<A>) => {
-  await execute("BEGIN IMMEDIATE", [], "run");
-  try {
-    const result = await operation();
-    await execute("COMMIT", [], "run");
-    return result;
-  } catch (error) {
-    await execute("ROLLBACK", [], "run");
-    throw error;
-  }
-};
+    };
+    return data;
+  });

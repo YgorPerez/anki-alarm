@@ -91,3 +91,14 @@ export const CardActionsForAReviewedCard: StoryObj<typeof CardActions> = {
     await expect(args.onSetDueDate).toHaveBeenCalledWith("b", 7);
   },
 };
+
+/** A linked deck's card: the editor says Forget and Set due date stay in the app (ADR 0003). */
+export const CardActionsOnALinkedDeck: StoryObj<typeof CardActions> = {
+  render: (args) => <CardActions {...args} />,
+  args: { ...CardActionsForAReviewedCard.args, linked: true },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByText(/Esquecer e Definir vencimento ficam só no app/),
+    ).toBeVisible();
+  },
+};

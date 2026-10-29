@@ -16,8 +16,8 @@ if (NodeArrayBuffer !== ArrayBuffer) {
 afterEach(cleanup);
 
 vi.mock("../src/data/client.ts", async () => {
-  const { testWebData } = await import("./local-data.ts");
-  return { webData: () => testWebData };
+  const { testWebData, testWebRequest } = await import("./local-data.ts");
+  return { webData: () => testWebData, webRequest: testWebRequest };
 });
 vi.mock("../src/auth.ts", async () => {
   const { fakeAccount } = await import("./account.ts");

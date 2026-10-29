@@ -1,10 +1,11 @@
-import type { ImportSummary } from "@app/client-data";
 import {
-  apkgFileName,
+  exportApkg as exportPackage,
+  importApkg as importPackage,
+  type ImportSummary,
+} from "@app/client-data";
+import {
   packageEntries,
-  readApkg,
   readApkgMedia,
-  writeApkg,
   type ApkgHost,
   type ApkgMedia,
   type ApkgWriteHost,
@@ -48,23 +49,24 @@ export function unzipped(bytes: Uint8Array): Omit<ApkgHost, "openSqlite"> {
   };
 }
 
-/**
- * Unzips the package, lets Core read it, stores its media files and then merges its records.
- * Media go first, so no imported card points at a missing file.
- */
-async function importApkg(bytes: Uint8Array): Promise<ImportSummary> {
-  const { package: source, media } = await readApkg({
-    ...unzipped(bytes),
-    openSqlite: async (database) => {
-      const db = await deserializeDatabaseAsync(database);
-      return {
-        all: (query) => db.getAllAsync<Record<string, unknown>>(query),
-        close: () => db.closeAsync(),
-      };
-    },
-  });
-  await storeMedia(media);
-  return Effect.runPromise(localData((data) => data.importAnki(source)));
+/** Unzips the package and opens its collection with expo-sqlite for the shared import. */
+function importApkg(bytes: Uint8Array): Promise<ImportSummary> {
+  return Effect.runPromise(
+    localData((data) =>
+      Effect.suspend(() =>
+        importPackage(data, {
+          ...unzipped(bytes),
+          openSqlite: async (database) => {
+            const db = await deserializeDatabaseAsync(database);
+            return {
+              all: (query) => db.getAllAsync<Record<string, unknown>>(query),
+              close: () => db.closeAsync(),
+            };
+          },
+        }),
+      ),
+    ),
+  );
 }
 
 /**
@@ -72,12 +74,9 @@ async function importApkg(bytes: Uint8Array): Promise<ImportSummary> {
  * file name, or undefined when the user leaves the folder picker.
  */
 export async function exportApkg(deckId: string): Promise<string | undefined> {
-  const [collection, log] = await Effect.runPromise(
-    localData((data) => Effect.all([data.collection, data.reviewLog])),
+  const { name, entries } = await Effect.runPromise(
+    localData((data) => exportPackage(data, deckId, writeHost(), Date.now())),
   );
-  const deck = collection.decks.find((d) => d.id === deckId);
-  if (!deck) throw new Error("Deck missing");
-  const entries = await writeApkg(writeHost(), { collection, log, deckId, now: Date.now() });
   const bytes = zipSync(entries);
   let folder: Directory;
   try {
@@ -85,7 +84,6 @@ export async function exportApkg(deckId: string): Promise<string | undefined> {
   } catch {
     return undefined;
   }
-  const name = apkgFileName(deck.fields.name.value);
   await folder.createFile(name, "application/octet-stream").write(bytes);
   return name;
 }

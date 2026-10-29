@@ -21,6 +21,7 @@
     "@app/contracts": "workspace:*",
     "@app/core": "workspace:*",
     "@app/design-tokens": "workspace:*",
+    "@app/editing-ui": "workspace:*",
     "@app/stats-ui": "workspace:*",
     "@base-ui/react": "^1.9.0",
     "@sqlite.org/sqlite-wasm": "3.54.1-build1",

@@ -3,6 +3,7 @@
 // keeps local data. While signed in, sync runs when the app says (open, resume, focus, after an
 // alarm session, refresh) and a few seconds after local writes.
 import { signInPlan } from "@app/core";
+import { Data, Effect } from "effect";
 
 import { syncScheduler, type SyncStatus } from "./scheduler.ts";
 import type { MediaSyncResult, SyncResult } from "./sync.ts";
@@ -11,19 +12,27 @@ export interface AccountUser {
   id: string;
   email: string;
 }
+/** Google or the session server failed: the session check, the sign-in or the sign-out. */
+export class AccountFailed extends Data.TaggedError("AccountFailed")<{
+  message: string;
+  cause?: unknown;
+}> {}
 /** The signed-in Google account: the phone's account picker, or the web's redirect. */
 export interface Account {
-  current: () => Promise<AccountUser | null>;
+  current: Effect.Effect<AccountUser | null, AccountFailed>;
   /** Null when the user closes the account picker. The web's redirect leaves the page instead. */
-  signIn: () => Promise<AccountUser | null>;
-  signOut: () => Promise<void>;
+  signIn: Effect.Effect<AccountUser | null, AccountFailed>;
+  signOut: Effect.Effect<void, AccountFailed>;
 }
 /** What the controller needs from the local database, wherever it runs. */
 export interface AccountData {
-  syncAccount: () => Promise<string | null>;
-  adoptAccount: (userId: string) => Promise<void>;
-  /** One sync of the device's data, with the signed-in session. */
-  sync: () => Promise<SyncResult>;
+  syncAccount: Effect.Effect<string | null, Error>;
+  adoptAccount: (userId: string) => Effect.Effect<void, Error>;
+  /**
+   * One sync of the device's data, with the signed-in session. Its failure's tag tells the
+   * scheduler what to do (`UpdateRequired`, `Unauthorized`, `AccountMismatch`).
+   */
+  sync: Effect.Effect<SyncResult, Error>;
   /** Calls `listener` after each local write commits. Returns unsubscribe. */
   subscribe: (listener: () => void) => () => void;
 }
@@ -62,12 +71,13 @@ export function accountSync({
     state = next;
     for (const listener of listeners) listener();
   };
+  const syncOnce = Effect.map(data.sync, (result) => {
+    if (state.kind === "signedIn") set({ ...state, media: result.media });
+    for (const listener of synced) listener(result);
+  });
   const scheduler = syncScheduler({
-    run: async () => {
-      const result = await data.sync();
-      if (state.kind === "signedIn") set({ ...state, media: result.media });
-      for (const listener of synced) listener(result);
-    },
+    // Pacer's debouncer calls back with a promise.
+    run: () => Effect.runPromise(syncOnce),
     ...(debounceMs === undefined ? {} : { debounceMs }),
     onStatus: (sync) => {
       if (state.kind === "signedIn") set({ ...state, sync });
@@ -82,13 +92,48 @@ export function accountSync({
     scheduler.now();
   };
   /** Continues, merges or asks, as Core's `signInPlan` says. */
-  const arrive = async (user: AccountUser) => {
-    const plan = signInPlan(await data.syncAccount(), user.id);
-    if (plan === "ask") return set({ kind: "confirm", user });
-    if (plan === "merge") await data.adoptAccount(user.id);
-    enter(user);
-  };
+  const arrive = (user: AccountUser) =>
+    Effect.gen(function* () {
+      const plan = signInPlan(yield* data.syncAccount, user.id);
+      if (plan === "ask") set({ kind: "confirm", user });
+      else {
+        if (plan === "merge") yield* data.adoptAccount(user.id);
+        enter(user);
+      }
+    });
   const signedOut = (failed = false) => set({ kind: "signedOut", busy: false, failed });
+  /** Arrives with the user the account gave, or signs out; any failure is `fallback`. */
+  const through = (
+    user: Effect.Effect<AccountUser | null, AccountFailed>,
+    fallback: Effect.Effect<void>,
+  ) =>
+    user.pipe(
+      Effect.flatMap((found) => (found ? arrive(found) : Effect.sync(() => signedOut()))),
+      Effect.catchCause(() => fallback),
+    );
+  /** On open: picks up the stored session, if any. */
+  const start = through(
+    account.current,
+    Effect.sync(() => signedOut()),
+  );
+  const signIn = Effect.suspend(() => {
+    set({ kind: "signedOut", busy: true, failed: false });
+    return through(
+      account.signIn,
+      Effect.sync(() => signedOut(true)),
+    );
+  });
+  /** Merge this device's data into the account it just signed in to. */
+  const confirm = Effect.suspend(() => {
+    if (state.kind !== "confirm") return Effect.void;
+    const { user } = state;
+    return Effect.map(data.adoptAccount(user.id), () => enter(user));
+  });
+  /** Signing out keeps every local deck, review and alarm. */
+  const signOut = account.signOut.pipe(
+    Effect.catchCause(() => Effect.void),
+    Effect.andThen(Effect.sync(() => signedOut())),
+  );
 
   return {
     state: () => state,
@@ -105,38 +150,11 @@ export function accountSync({
         synced.delete(listener);
       };
     },
-    /** On open: picks up the stored session, if any. */
-    start: async () => {
-      try {
-        const user = await account.current();
-        if (user) await arrive(user);
-        else signedOut();
-      } catch {
-        signedOut();
-      }
-    },
-    signIn: async () => {
-      set({ kind: "signedOut", busy: true, failed: false });
-      try {
-        const user = await account.signIn();
-        if (user) await arrive(user);
-        else signedOut();
-      } catch {
-        signedOut(true);
-      }
-    },
-    /** Merge this device's data into the account it just signed in to. */
-    confirm: async () => {
-      if (state.kind !== "confirm") return;
-      const { user } = state;
-      await data.adoptAccount(user.id);
-      enter(user);
-    },
-    /** Signing out keeps every local deck, review and alarm. */
-    signOut: async () => {
-      await account.signOut().catch(() => {});
-      signedOut();
-    },
+    // What the screens call: promises over the programs above.
+    start: () => Effect.runPromise(start),
+    signIn: () => Effect.runPromise(signIn),
+    confirm: () => Effect.runPromise(confirm),
+    signOut: () => Effect.runPromise(signOut),
     /** Open, resume, focus, after an alarm session, refresh. */
     syncNow: () => {
       if (state.kind === "signedIn") scheduler.now();

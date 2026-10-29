@@ -1,3 +1,4 @@
+import { UpdateOffer } from "./UpdateOffer.tsx";
 import {
   reliabilitySteps,
   type AlarmPermissions,
@@ -187,7 +188,10 @@ export function ReliabilityScreen({
                 {index > 0 && <Button label={t("close")} onPress={back} />}
               </>
             ) : (
-              <Button label={t("close")} onPress={onExit} />
+              <>
+                <UpdateOffer locale={locale} dismissible={false} />
+                <Button label={t("close")} onPress={onExit} />
+              </>
             )}
           </View>
         }

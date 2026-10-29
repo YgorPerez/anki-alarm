@@ -293,6 +293,30 @@ test("media is stored once in R2 by SHA-256, and checked against its address", a
   expect(listed.objects.map((o) => o.key)).toEqual([PICTURE_SHA]);
 });
 
+test("storage that fails answers 503, decoded as SyncUnavailable", async () => {
+  const cookie = await signIn("hana");
+  const broken = {
+    ...env,
+    MEDIA: {
+      ...env.MEDIA,
+      put: () => Promise.reject(new Error("R2 down")),
+    },
+  } satisfies Env;
+  const hana = await Effect.runPromise(
+    makeSyncClient({
+      baseUrl: "http://localhost:8787",
+      headers: () => ({ cookie }),
+      fetch: (input, init) =>
+        worker.fetch(new Request(input instanceof URL ? input.href : input, init), broken),
+    }),
+  );
+  const bytes = new TextEncoder().encode("never stored");
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  await expect(
+    run(hana.media.upload({ params: { sha256 }, payload: bytes })),
+  ).rejects.toMatchObject({ _tag: "SyncUnavailable", message: "Media upload failed: R2 down" });
+});
+
 test("a media record whose file never arrived isn't stored", async () => {
   const api = await client(await signIn("hugo"));
   expect(

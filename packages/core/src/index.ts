@@ -19,9 +19,11 @@ export {
   parseCollection,
   parseRecord,
   validOption,
+  PRESET_LIMITS,
 } from "./collection.ts";
 export {
   ankiDroidAccess,
+  cardsStayInApp,
   linkableAnkiDroidDecks,
   syncBackPlan,
   syncBackQueue,
@@ -50,6 +52,7 @@ export type {
   Template,
   RecordKind,
   Tombstone,
+  TombstoneKind,
   CollectionState,
   CollectionEnvironment,
 } from "./collection.ts";
@@ -66,6 +69,7 @@ export {
   MAX_SNOOZE_CAP,
   SNOOZE_CHOICES,
   stampAlarm,
+  alarmTombstone,
   alarmFromRecord,
   awakeCheckAfter,
   AWAKE_CHECK_DELAYS,
@@ -84,7 +88,7 @@ export type { Alarm, AlarmRecord, AlarmRule, AlarmSound, BundledSound } from "./
 export { releaseVersion } from "./release.ts";
 export { newerApk, SYNC_PROTOCOL } from "./release.ts";
 export { releaseArtifact } from "./release.ts";
-export { updateThemeSettings } from "./settings.ts";
+export { themeChoiceOf, updateThemeSettings } from "./settings.ts";
 export type { Settings } from "./settings.ts";
 
 export { reliabilitySteps } from "./reliability.ts";
@@ -104,6 +108,7 @@ export {
   CardState,
   dueInDays,
   readDueDays,
+  MAX_DUE_DAYS,
 } from "./study.ts";
 export { renderCard } from "./template.ts";
 export {

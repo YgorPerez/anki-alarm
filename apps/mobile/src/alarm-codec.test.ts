@@ -36,6 +36,10 @@ it("reads the ring's snoozes and snooze settings through native, with defaults f
   expect(snoozed.alarm).toMatchObject({ snooze: false, snoozeMinutes: 5, snoozeCap: 3 });
   const older = `{"id":"r","alarm":${stored(null)},"startedAt":1,"phase":"ringing"}`;
   expect(decodeRing(older)).toMatchObject({ snoozes: 0, snoozedUntil: null });
+  // Native only writes ringing, session and snoozed.
+  expect(() => decodeRing(`{"id":"r","alarm":${alarm},"startedAt":1,"phase":"paused"}`)).toThrow(
+    /phase/,
+  );
 });
 
 it("reads native's awake check, before and after its prompt shows", () => {

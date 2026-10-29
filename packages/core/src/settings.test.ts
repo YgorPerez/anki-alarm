@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { updateThemeSettings } from "./index.ts";
+import { FACTORY_THEME, themeChoiceOf, updateThemeSettings } from "./index.ts";
 
 test("changing a color retains other clocks and advances after a backwards clock and restart", () => {
   const env = { deviceId: "phone", now: () => 1000, random: () => new Uint8Array(16) };
@@ -12,4 +12,13 @@ test("changing a color retains other clocks and advances after a backwards clock
     hlc: { wallMs: 1000, counter: 1, deviceId: "phone" },
   });
   expect(updateThemeSettings(next, { primary: "#7fd4ff" }, env)).toEqual(next);
+});
+
+test("the theme choice a settings record holds, read as Core reads any choice", () => {
+  const env = { deviceId: "phone", now: () => 1000, random: () => new Uint8Array(16) };
+  const settings = updateThemeSettings(undefined, { primary: "#7fd4ff" }, env);
+  expect(themeChoiceOf(settings)).toEqual({ ...FACTORY_THEME, primary: "#7fd4ff" });
+  // A synced field this version can't read falls back to the factory theme's.
+  Object.assign(settings.fields.primary, { value: "blue" });
+  expect(themeChoiceOf(settings).primary).toBe(FACTORY_THEME.primary);
 });

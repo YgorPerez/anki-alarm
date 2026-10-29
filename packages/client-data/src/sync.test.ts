@@ -193,6 +193,33 @@ test("a delete beats a later rename on the other device, and the deck stays dele
   }
 });
 
+test("a deleted alarm stays deleted on every device, even against a later edit", async () => {
+  const { phone, web, sync, api } = await pair();
+  await phone.run(phone.data.saveAlarm({ ...newAlarm("alarm-1"), label: "Trabalho" }));
+  await sync(phone, web);
+  phone.clock.now = 2_000;
+  web.clock.now = 9_000;
+  await phone.run(phone.data.deleteAlarm("alarm-1"));
+  expect(await phone.run(phone.data.alarms)).toEqual([]);
+  await web.run(web.data.saveAlarm({ ...newAlarm("alarm-1"), label: "Academia" }));
+
+  await sync(web, phone);
+  const pulled = await web.run(web.data.sync(api.client));
+  // A pulled delete re-arms the phone's alarms, as a pulled edit does.
+  expect(pulled.changed).toContain("alarms");
+
+  for (const side of [phone, web]) {
+    expect(await side.run(side.data.alarms)).toEqual([]);
+    expect(await side.run(side.data.pendingChanges)).toEqual([]);
+  }
+  // Deleting it again, or an alarm never saved, changes nothing.
+  await phone.run(phone.data.deleteAlarm("alarm-1"));
+  await phone.run(phone.data.deleteAlarm("never-saved"));
+  await phone.run(phone.data.saveAlarm(newAlarm("alarm-1")));
+  expect(await phone.run(phone.data.alarms)).toEqual([]);
+  expect(await phone.run(phone.data.pendingChanges)).toEqual([]);
+});
+
 test("reviews from both devices append, and the outbox empties after a push", async () => {
   const { phone, web, sync, api } = await pair();
   const cardId = (await phone.run(phone.data.collection)).cards[0]!.id;

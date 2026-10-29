@@ -1,5 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import {
+  cardMemory,
   Collection,
   replayCard,
   studyQueue,
@@ -248,4 +249,64 @@ test("the next card is the queue's head with its note and type, and an undone ca
     origin: "web",
   }));
   expect(nextStudyCard(state, log, deckId, now)).toBeUndefined();
+});
+
+test("a card's memory follows its deck's desired retention", () => {
+  const { state, cardId } = fixture();
+  const log: LogEntry[] = [
+    { kind: "review", id: "r", cardId, at: now, grade: 4, durationMs: 1, origin: "phone" },
+  ];
+  const atPreset = cardMemory(state, log, cardId, now)!.due.getTime();
+  state.decks[0]!.fields.desiredRetention.value = 0.99;
+  expect(cardMemory(state, log, cardId, now)!.due.getTime()).toBeLessThan(atPreset);
+});
+
+function seeded(seed: number) {
+  let next = seed;
+  return new Collection({
+    deviceId: "a",
+    now: () => now,
+    random: () => new Uint8Array(16).fill(next++),
+  });
+}
+test("studying a deck includes its subdecks, as Anki does, and not its siblings", () => {
+  const c = seeded(100);
+  const parent = c.createDeck("Idiomas");
+  const child = c.createDeck("Idiomas::Inglês");
+  const sibling = c.createDeck("Idiomas2");
+  c.addBasicNote(parent.id, "parent", "x");
+  c.addBasicNote(child.id, "child", "x");
+  c.addBasicNote(sibling.id, "sibling", "x");
+  const state = c.snapshot();
+  const fronts = (deckId: string) =>
+    studyQueue(state, [], deckId, now).map(
+      ({ card }) =>
+        state.notes.find((note) => note.id === card.fields.noteId.value)?.values[0]?.value,
+    );
+  expect(new Set(fronts(parent.id))).toEqual(new Set(["parent", "child"]));
+  expect(fronts(child.id)).toEqual(["child"]);
+});
+
+test("a subdeck's card schedules with the subdeck's own preset", () => {
+  const c = seeded(200);
+  const parent = c.createDeck("Idiomas");
+  const child = c.createDeck("Idiomas::Inglês");
+  c.addBasicNote(child.id, "child", "x");
+  const state = c.snapshot();
+  const cardId = state.cards[0]!.id;
+  // Easy three days ago: not due at 90% retention, due at the subdeck's 99%.
+  const log: LogEntry[] = [
+    {
+      kind: "review",
+      id: "r",
+      cardId,
+      at: now - 3 * 86_400_000,
+      grade: 4,
+      durationMs: 1,
+      origin: "phone",
+    },
+  ];
+  expect(studyQueue(state, log, parent.id, now)).toHaveLength(0);
+  state.decks.find((d) => d.id === child.id)!.fields.desiredRetention.value = 0.99;
+  expect(studyQueue(state, log, parent.id, now).map((item) => item.card.id)).toEqual([cardId]);
 });

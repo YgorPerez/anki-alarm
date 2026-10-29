@@ -1,9 +1,15 @@
 /* oxlint-disable unicorn/require-post-message-target-origin -- Workers and BroadcastChannels do not take a target origin. */
+// A tab's handle on the database, which lives in one leader tab's Worker (Web Locks owns the
+// Worker's lifetime, including VFS installation). Every request is an Effect: it asks who leads,
+// sends the operation and waits for the answer, failing typed when storage can't answer.
+import { Data, Deferred, Effect, Exit, Fiber, Schedule } from "effect";
+
 import {
   fromFailure,
   WRITES,
   type Args,
   type Kind,
+  type LeaderFailed,
   type Message,
   type Operation,
   type Output,
@@ -15,155 +21,168 @@ const LONG_OPERATIONS: Partial<Record<Kind, number>> = {
   exportApkg: 600_000,
 };
 
-/** One instance per tab. Web Locks owns the entire Worker lifetime, including VFS installation. */
-class WebData {
-  private channel = new BroadcastChannel("anki-alarm:data:v1");
-  private id = crypto.randomUUID();
-  private worker: Worker | undefined;
-  private leader: string | undefined;
-  private failure?: string;
-  private listeners = new Set<() => void>();
-  private writeListeners = new Set<() => void>();
-  private pending = new Map<
-    string,
-    { resolve: (value: unknown) => void; reject: (error: Error) => void }
-  >();
-  private release?: () => void;
-  private abort = new AbortController();
+/** No offline storage in this browser, no leader answered in time, or the tab closed. */
+class StorageUnavailable extends Data.TaggedError("StorageUnavailable")<{
+  message: string;
+}> {}
+type WebDataError = LeaderFailed | StorageUnavailable;
 
-  constructor() {
-    this.channel.addEventListener("message", ({ data }: MessageEvent<Message>) =>
-      this.receive(data),
-    );
-    if (!navigator.locks || !navigator.storage?.getDirectory) {
-      this.failure = "This browser does not support offline storage";
-      return;
+interface WebData {
+  request: <K extends Kind>(kind: K, ...args: Args<K>) => Effect.Effect<Output<K>, WebDataError>;
+  /** After any tab's write or a sync that changed something: refresh what's shown. */
+  subscribe: (listener: () => void) => () => void;
+  /** After this tab's own writes commit: what schedules its sync. */
+  onLocalWrite: (listener: () => void) => () => void;
+  close: () => void;
+}
+
+const subscription = (set: Set<() => void>) => (listener: () => void) => {
+  set.add(listener);
+  return () => {
+    set.delete(listener);
+  };
+};
+
+/** One per tab. */
+function openWebData(): WebData {
+  const channel = new BroadcastChannel("anki-alarm:data:v1");
+  const self = crypto.randomUUID();
+  let worker: Worker | undefined;
+  let leader: string | undefined;
+  let failure: string | undefined;
+  const listeners = new Set<() => void>();
+  const writeListeners = new Set<() => void>();
+  const pending = new Map<string, Deferred.Deferred<unknown, WebDataError>>();
+  let release: (() => void) | undefined;
+  const abort = new AbortController();
+
+  const receive = (message: Message) => {
+    if (message.type === "discover" && leader === self)
+      channel.postMessage({ type: "leader", id: self });
+    if (message.type === "leader") leader = message.id;
+    if (message.type === "changed") for (const listener of listeners) listener();
+    if (message.type === "request" && message.leader === self) worker?.postMessage(message);
+    if (message.type === "response") {
+      const deferred = pending.get(message.id);
+      if (deferred)
+        Deferred.doneUnsafe(
+          deferred,
+          message.ok ? Exit.succeed(message.result) : Exit.fail(fromFailure(message.error)),
+        );
     }
+  };
+  const changed = () => {
+    channel.postMessage({ type: "changed" });
+    for (const listener of listeners) listener();
+  };
+  channel.addEventListener("message", ({ data }: MessageEvent<Message>) => receive(data));
+  if (!navigator.locks || !navigator.storage?.getDirectory) {
+    failure = "This browser does not support offline storage";
+  } else {
     void navigator.locks
-      .request("anki-alarm:database:v1", { signal: this.abort.signal }, async () => {
+      .request("anki-alarm:database:v1", { signal: abort.signal }, async () => {
         await new Promise<void>((resolve) => {
-          this.release = resolve;
-          this.worker = new Worker(new URL("./database.worker.ts", import.meta.url), {
+          release = resolve;
+          worker = new Worker(new URL("./database.worker.ts", import.meta.url), {
             type: "module",
           });
-          this.worker.addEventListener("message", ({ data }) => {
+          worker.addEventListener("message", ({ data }) => {
             if (data.type === "ready") {
-              this.leader = this.id;
-              this.channel.postMessage({ type: "leader", id: this.id });
+              leader = self;
+              channel.postMessage({ type: "leader", id: self });
             } else if (data.type === "failed") {
-              this.failure = data.error;
+              failure = data.error;
             } else if (data.type === "changed") {
-              this.changed();
+              changed();
             } else {
-              this.receive(data);
-              this.channel.postMessage(data);
+              receive(data);
+              channel.postMessage(data);
             }
           });
-          this.worker.addEventListener("error", (event) => {
-            this.failure = event.message;
+          worker.addEventListener("error", (event) => {
+            failure = event.message;
           });
         });
-        this.worker?.terminate();
-        this.worker = undefined;
+        worker?.terminate();
+        worker = undefined;
       })
       .catch((error: unknown) => {
-        if (!this.abort.signal.aborted) this.failure = String(error);
+        if (!abort.signal.aborted) failure = String(error);
       });
   }
 
-  private receive(message: Message) {
-    if (message.type === "discover" && this.leader === this.id)
-      this.channel.postMessage({ type: "leader", id: this.id });
-    if (message.type === "leader") this.leader = message.id;
-    if (message.type === "changed") for (const listener of this.listeners) listener();
-    if (message.type === "request" && message.leader === this.id) this.worker?.postMessage(message);
-    if (message.type === "response") {
-      const pending = this.pending.get(message.id);
-      if (message.ok) pending?.resolve(message.result);
-      else pending?.reject(fromFailure(message.error));
-    }
-  }
-
-  private changed() {
-    this.channel.postMessage({ type: "changed" });
-    for (const listener of this.listeners) listener();
-  }
-
-  /** After any tab's write or a sync that changed something: refresh what's shown. */
-  subscribe = (listener: () => void) => {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  };
-
-  /** After this tab's own writes commit: what schedules its sync. */
-  onLocalWrite = (listener: () => void) => {
-    this.writeListeners.add(listener);
-    return () => {
-      this.writeListeners.delete(listener);
-    };
-  };
-
-  async request<K extends Kind>(kind: K, ...args: Args<K>): Promise<Output<K>> {
-    // The leader answers with the operation's own result.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    const result = (await this.send({ kind, args } as Operation)) as Output<K>;
-    if (WRITES.has(kind)) for (const listener of this.writeListeners) listener();
-    return result;
-  }
-
-  private send(operation: Operation): Promise<unknown> {
-    if (this.leader !== this.id) this.leader = undefined;
-    const id = crypto.randomUUID();
-    return new Promise((resolve, reject) => {
+  const request = <K extends Kind>(kind: K, ...args: Args<K>) =>
+    Effect.gen(function* () {
+      // The leader answers with the operation's own result.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      const operation = { kind, args } as Operation;
+      if (leader !== self) leader = undefined;
+      const id = crypto.randomUUID();
+      const answer = Deferred.makeUnsafe<unknown, WebDataError>();
+      pending.set(id, answer);
       let sent = false;
-      const finish = (error?: Error, result?: unknown) => {
-        clearInterval(discovery);
-        clearTimeout(timeout);
-        this.pending.delete(id);
-        if (error) reject(error);
-        else resolve(result);
-      };
-      const send = () => {
-        if (this.failure) return finish(new Error(this.failure));
+      /** Sends once a leader is known; until then asks who leads. */
+      const send = Effect.sync(() => {
+        if (failure) {
+          Deferred.doneUnsafe(answer, Exit.fail(new StorageUnavailable({ message: failure })));
+          return;
+        }
         if (sent) return;
         // Discover before sending so an old leader id is never reused after a handoff.
-        if (!this.leader) {
-          this.channel.postMessage({ type: "discover" });
+        if (!leader) {
+          channel.postMessage({ type: "discover" });
           return;
         }
         sent = true;
-        const request = { type: "request", id, leader: this.leader, operation } as const;
-        if (this.leader === this.id) this.worker?.postMessage(request);
-        else this.channel.postMessage(request);
-      };
-      this.pending.set(id, {
-        resolve: (value) => finish(undefined, value),
-        reject: (error) => finish(error),
+        const message = { type: "request", id, leader, operation } as const;
+        if (leader === self) worker?.postMessage(message);
+        else channel.postMessage(message);
       });
-      const discovery = setInterval(send, 100);
+      const discovery = yield* Effect.forkChild(Effect.repeat(send, Schedule.spaced("100 millis")));
       // A sync waits on the network, and a package is read or written whole; the rest is quick.
-      const timeout = setTimeout(() => {
-        this.leader = undefined;
-        finish(
-          new Error(
-            "Storage unavailable. The operation may have committed; reload before retrying.",
+      const result = yield* Deferred.await(answer).pipe(
+        Effect.timeoutOrElse({
+          duration: LONG_OPERATIONS[kind] ?? 20_000,
+          orElse: () =>
+            Effect.suspend(() => {
+              leader = undefined;
+              return Effect.fail(
+                new StorageUnavailable({
+                  message:
+                    "Storage unavailable. The operation may have committed; reload before retrying.",
+                }),
+              );
+            }),
+        }),
+        Effect.ensuring(
+          Effect.andThen(
+            Effect.sync(() => pending.delete(id)),
+            Fiber.interrupt(discovery),
           ),
-        );
-      }, LONG_OPERATIONS[operation.kind] ?? 20_000);
-      send();
+        ),
+      );
+      if (WRITES.has(kind)) for (const listener of writeListeners) listener();
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      return result as Output<K>;
     });
-  }
 
-  close = () => {
-    this.abort.abort();
-    this.worker?.terminate();
-    this.release?.();
-    for (const pending of this.pending.values()) pending.reject(new Error("Tab closed"));
-    this.channel.close();
+  return {
+    request,
+    subscribe: subscription(listeners),
+    onLocalWrite: subscription(writeListeners),
+    close: () => {
+      abort.abort();
+      worker?.terminate();
+      release?.();
+      for (const answer of pending.values())
+        Deferred.doneUnsafe(answer, Exit.fail(new StorageUnavailable({ message: "Tab closed" })));
+      channel.close();
+    },
   };
 }
 
 let instance: WebData | undefined;
-export const webData = () => (instance ??= new WebData());
+export const webData = () => (instance ??= openWebData());
+/** The Promise adapter for React and TanStack Query: one request, as a promise. */
+export const webRequest = <K extends Kind>(kind: K, ...args: Args<K>) =>
+  Effect.runPromise(webData().request(kind, ...args));

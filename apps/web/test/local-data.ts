@@ -4,7 +4,16 @@ import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 
 import { wasmApkgSqlite } from "../src/data/apkg.ts";
 import { operations } from "../src/data/operations.ts";
-import { WRITES, type Args, type Kind, type Operation, type Output } from "../src/data/protocol.ts";
+import {
+  LeaderFailed,
+  toFailure,
+  WRITES,
+  type Args,
+  type Kind,
+  type Operation,
+  type Output,
+} from "../src/data/protocol.ts";
+import { Effect } from "effect";
 import { openDevice } from "./device.ts";
 
 // Replace only the browser transport/OPFS boundary. Reads and writes still use the real data
@@ -33,15 +42,23 @@ const subscription = (set: Set<() => void>) => (listener: () => void) => {
 };
 
 export const testWebData = {
-  async request<K extends Kind>(kind: K, ...args: Args<K>): Promise<Output<K>> {
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    const { result, changed } = await (await execute)({ kind, args } as Operation);
-    if (changed) for (const listener of listeners) listener();
-    if (WRITES.has(kind)) for (const listener of writeListeners) listener();
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    return result as Output<K>;
-  },
+  request: <K extends Kind>(kind: K, ...args: Args<K>) =>
+    Effect.tryPromise({
+      try: async () => {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+        const { result, changed } = await (await execute)({ kind, args } as Operation);
+        if (changed) for (const listener of listeners) listener();
+        if (WRITES.has(kind)) for (const listener of writeListeners) listener();
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+        return result as Output<K>;
+      },
+      // What crosses from the leader: the failure's message and tag.
+      catch: (error) => new LeaderFailed(toFailure(error)),
+    }),
   subscribe: subscription(listeners),
   onLocalWrite: subscription(writeListeners),
   close: () => {},
 };
+/** `webRequest` over the test's data: what screens and tests arrange state with. */
+export const testWebRequest = <K extends Kind>(kind: K, ...args: Args<K>) =>
+  Effect.runPromise(testWebData.request(kind, ...args));

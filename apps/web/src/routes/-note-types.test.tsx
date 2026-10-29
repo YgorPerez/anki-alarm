@@ -1,15 +1,13 @@
 import { screen } from "@testing-library/react";
 import { expect, test } from "vite-plus/test";
 
-import { webData } from "#/data/client.ts";
+import { webRequest } from "#/data/client.ts";
 
 import { renderRoute } from "../../test/render.tsx";
 
-const data = () => webData();
-
 test("a note type's fields, templates and CSS change with a preview, asking before data goes", async () => {
-  const deckId = await data().request("change", { kind: "createDeck", name: "Animais" });
-  await data().request("change", {
+  const deckId = await webRequest("change", { kind: "createDeck", name: "Animais" });
+  await webRequest("change", {
     kind: "addNote",
     deckId: deckId!,
     noteTypeId: "",
@@ -33,7 +31,7 @@ test("a note type's fields, templates and CSS change with a preview, asking befo
   expect(preview).toContain(".card { color: red }");
   await user.click(screen.getByRole("button", { name: "Salvar" }));
   expect(await screen.findByText("Salvo.")).toBeDefined();
-  let state = await data().request("collection");
+  let state = await webRequest("collection");
   const type = state.noteTypes[0]!;
   expect(type.fields.fieldNames.value).toEqual(["Palavra", "Back"]);
   expect(type.fields.templates.value.map((t) => t.front)).toEqual(["{{Palavra}}", "{{Back}}"]);
@@ -50,7 +48,7 @@ test("a note type's fields, templates and CSS change with a preview, asking befo
   ).toBeDefined();
   await user.click(screen.getByRole("button", { name: "Salvar mesmo assim" }));
   expect(await screen.findByText("Salvo.")).toBeDefined();
-  state = await data().request("collection");
+  state = await webRequest("collection");
   expect(state.notes[0]!.values.map((v) => v.value)).toEqual(["dog"]);
 
   // A name Anki can't use blocks the save.

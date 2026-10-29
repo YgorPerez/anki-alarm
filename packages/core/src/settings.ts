@@ -6,6 +6,11 @@ export interface Settings {
   id: string;
   fields: { [K in keyof ThemeChoice]: Field<ThemeChoice[K]> };
 }
+/** The theme choice a settings record holds; a value this version can't read is the factory one. */
+export const themeChoiceOf = (settings: Settings): ThemeChoice =>
+  parseThemeChoice(
+    Object.fromEntries(Object.entries(settings.fields).map(([key, field]) => [key, field.value])),
+  );
 /** One field clock per color; unchanged fields retain their clock. */
 export function updateThemeSettings(
   previous: Settings | undefined,

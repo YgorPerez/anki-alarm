@@ -1,0 +1,6 @@
+{
+  // Pure package, no build, like Core and stats-ui.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "types": [] },
+  "include": ["src/**/*.ts"]
+}

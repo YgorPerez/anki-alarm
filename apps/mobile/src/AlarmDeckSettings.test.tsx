@@ -1,13 +1,14 @@
-import { fireEvent, render, screen } from "@testing-library/react-native/pure";
+/* oxlint-disable eslint/no-await-in-loop -- Presses land one after another, as a thumb does them. */
+import { fireEvent, screen } from "@testing-library/react-native/pure";
 import { expect, test } from "vite-plus/test";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Effect } from "effect";
-import { MAX_NEED, newAlarm, type Alarm } from "@app/core";
+import { MAX_NEED, newAlarm } from "@app/core";
+import { renderOptions } from "../test/alarm-options.tsx";
 import { localData } from "./database.ts";
 import { AlarmDeckSettings } from "./AlarmDeckSettings.tsx";
 
 test("the alarm editor picks a deck and N", async () => {
-  const state = await Effect.runPromise(
+  await Effect.runPromise(
     localData((data) =>
       data.changeCollection((c) => {
         c.createDeck("Inglês");
@@ -15,38 +16,19 @@ test("the alarm editor picks a deck and N", async () => {
       }),
     ),
   );
-  const verbs = state.decks.find((d) => d.fields.name.value === "Inglês::Verbos")!;
-  let alarm: Alarm = newAlarm("a");
-  const show = () => (
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" } } })
-      }
-    >
-      <AlarmDeckSettings
-        alarm={alarm}
-        locale="en"
-        onChange={(next) => {
-          alarm = next;
-        }}
-      />
-    </QueryClientProvider>
-  );
-  const view = await render(show());
+  await renderOptions(AlarmDeckSettings, newAlarm("a"), "en");
   await fireEvent.press(await screen.findByRole("radio", { name: "Inglês::Verbos" }));
-  expect(alarm.deckId).toBe(verbs.id);
-  await view.rerender(show());
-  screen.getByRole("radio", { name: "Inglês::Verbos", checked: true });
+  await screen.findByRole("radio", { name: "Inglês::Verbos", checked: true });
   screen.getByRole("radio", { name: "Inglês", checked: false });
+
   screen.getByText("3 cards");
   await fireEvent.press(screen.getByRole("button", { name: "More cards" }));
-  expect(alarm.need).toBe(4);
-  alarm = { ...alarm, need: 1 };
-  await view.rerender(show());
-  await fireEvent.press(screen.getByRole("button", { name: "Fewer cards" }));
-  expect(alarm.need).toBe(1);
-  alarm = { ...alarm, need: MAX_NEED };
-  await view.rerender(show());
-  await fireEvent.press(screen.getByRole("button", { name: "More cards" }));
-  expect(alarm.need).toBe(MAX_NEED);
+  await screen.findByText("4 cards");
+  for (let i = 0; i < 4; i++)
+    await fireEvent.press(screen.getByRole("button", { name: "Fewer cards" }));
+  // At least one card dismisses an alarm.
+  await screen.findByText("1 cards");
+  for (let i = 1; i <= MAX_NEED; i++)
+    await fireEvent.press(screen.getByRole("button", { name: "More cards" }));
+  expect(await screen.findByText(`${MAX_NEED} cards`)).toBeDefined();
 });

@@ -35,7 +35,7 @@ export const FieldRecord = Schema.Struct({
 });
 export const Tombstone = Schema.Struct({
   id: Schema.String,
-  kind: Schema.Literals(["decks", "presets", "noteTypes", "notes", "cards"]),
+  kind: Schema.Literals(["decks", "presets", "noteTypes", "notes", "cards", "alarms"]),
   sequence: Schema.Int,
   hlc: Hlc,
 });
@@ -147,6 +147,12 @@ export class UpdateRequired extends Schema.TaggedError<UpdateRequired>()(
   { syncProtocol: Schema.Int },
   { httpApiStatus: 426 },
 ) {}
+/** The Worker's storage (D1, R2) or the session lookup failed. Try again later. */
+export class SyncUnavailable extends Schema.TaggedError<SyncUnavailable>()(
+  "SyncUnavailable",
+  { message: Schema.String },
+  { httpApiStatus: 503 },
+) {}
 /** No better-auth session: sign in again. */
 export class Unauthorized extends Schema.TaggedError<Unauthorized>()(
   "Unauthorized",
@@ -164,7 +170,7 @@ export class CurrentUser extends Context.Service<CurrentUser, { readonly id: str
  */
 export class Session extends HttpApiMiddleware.Service<Session, { provides: CurrentUser }>()(
   "Session",
-  { error: Unauthorized, requiredForClient: true },
+  { error: [Unauthorized, SyncUnavailable], requiredForClient: true },
 ) {}
 
 export class SyncMetadataApi extends HttpApiGroup.make("metadata")
@@ -181,12 +187,12 @@ export class SyncChangesApi extends HttpApiGroup.make("changes")
     HttpApiEndpoint.post("push", "/sync/push", {
       payload: PushPayload,
       success: PushResult,
-      error: UpdateRequired,
+      error: [UpdateRequired, SyncUnavailable],
     }),
     HttpApiEndpoint.post("pull", "/sync/pull", {
       payload: PullPayload,
       success: PullResult,
-      error: UpdateRequired,
+      error: [UpdateRequired, SyncUnavailable],
     }),
   )
   .middleware(Session) {}
@@ -201,18 +207,18 @@ export class SyncMediaApi extends HttpApiGroup.make("media")
     HttpApiEndpoint.post("missing", "/sync/media/missing", {
       payload: MissingMediaPayload,
       success: MissingMediaResult,
-      error: UpdateRequired,
+      error: [UpdateRequired, SyncUnavailable],
     }),
     HttpApiEndpoint.put("upload", "/sync/media/:sha256", {
       params: MediaParams,
       payload: MediaBytes,
       success: HttpApiSchema.NoContent,
-      error: [UpdateRequired, MediaRejected],
+      error: [UpdateRequired, MediaRejected, SyncUnavailable],
     }),
     HttpApiEndpoint.get("download", "/sync/media/:sha256", {
       params: MediaParams,
       success: MediaBytes,
-      error: [UpdateRequired, MediaNotFound],
+      error: [UpdateRequired, MediaNotFound, SyncUnavailable],
     }),
   )
   .middleware(Session) {}
