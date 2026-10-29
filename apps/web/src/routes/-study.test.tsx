@@ -41,7 +41,7 @@ test("after sign-in the phone's deck is studied with Core's card and the review 
 
   await user.click(await screen.findByRole("button", { name: "Entrar com o Google" }));
   const decks = await screen.findByRole("list", { name: "Baralhos" });
-  const deck = await within(decks).findByRole("link", { name: /Palavras/ });
+  const deck = await within(decks).findByRole("link", { name: /^Palavras/ });
   expect(deck.textContent).toContain("1 para hoje");
   expect(screen.getByText("Conectado como ana@example.com")).toBeDefined();
 

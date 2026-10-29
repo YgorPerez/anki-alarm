@@ -103,8 +103,32 @@ export {
   cardMemory,
   CardState,
   dueInDays,
+  readDueDays,
 } from "./study.ts";
 export { renderCard } from "./template.ts";
+export {
+  basicField,
+  noteDraft,
+  noteTypeChoices,
+  editedNoteType,
+  editedValues,
+  noteTypeEditOf,
+  noteTypeImpact,
+  noteTypeProblems,
+} from "./note-types.ts";
+export { browseCards } from "./browse.ts";
+export type { BrowseRow } from "./browse.ts";
+export { runCommand } from "./commands.ts";
+export { presetTexts, readPresetTexts, validPresetText } from "./preset-text.ts";
+export type { PresetTexts } from "./preset-text.ts";
+export type { CollectionCommand } from "./commands.ts";
+export type {
+  NoteDraft,
+  NoteTypeChoice,
+  NoteTypeEdit,
+  NoteTypeImpact,
+  NoteTypeProblem,
+} from "./note-types.ts";
 export {
   DEFAULT_READ_ALOUD_LANGUAGE,
   READ_ALOUD_LANGUAGES,
@@ -114,9 +138,9 @@ export {
 export { isLanguageTag } from "./locale.ts";
 export type { ReadAloud, ReadAloudInput } from "./read-aloud.ts";
 export type { RenderInput } from "./template.ts";
-export { readApkg, readApkgMedia } from "./apkg.ts";
+export { packageEntries, readApkg, readApkgMedia } from "./apkg.ts";
 export type { ApkgHost, ApkgMedia, AnkiDatabase, AnkiPackage } from "./apkg.ts";
-export { writeApkg } from "./apkg-export.ts";
+export { apkgFileName, writeApkg } from "./apkg-export.ts";
 export type { ApkgExportInput, ApkgWriteHost, WritableDatabase } from "./apkg-export.ts";
 export type { LogEntry, MemoryState, Grade } from "./study.ts";
 export { studyStats } from "./stats.ts";

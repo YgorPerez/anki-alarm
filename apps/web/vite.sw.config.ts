@@ -1,6 +1,8 @@
 import { serwist } from "@serwist/vite";
 import { defineConfig } from "vite-plus";
 
+import { SHELL_PAGES } from "./src/shell.ts";
+
 // Run after Start's multi-environment build: all client chunks (including SQLite's Worker/WASM)
 // must exist before Serwist collects the manifest. No Cloudflare/SSR plugins run in this build.
 export default defineConfig({
@@ -16,14 +18,9 @@ export default defineConfig({
       globDirectory: "dist/client",
       globPatterns: ["**/*.{js,css,wasm,woff2}"],
       maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
-      additionalPrecacheEntries: [
-        "/",
-        "/?lang=en",
-        "/settings/theme",
-        "/settings/theme?lang=en",
-        "/study",
-        "/study?lang=en",
-      ].map((url) => ({ url, revision: String(Date.now()) })),
+      additionalPrecacheEntries: SHELL_PAGES.flatMap((page) => [page, `${page}?lang=en`]).map(
+        (url) => ({ url, revision: String(Date.now()) }),
+      ),
     }),
   ],
 });

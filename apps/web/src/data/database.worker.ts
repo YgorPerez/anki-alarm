@@ -7,6 +7,7 @@ import { makeSyncClient } from "@app/contracts";
 import { Effect, ManagedRuntime } from "effect";
 
 import { SYNC_URL } from "../env.ts";
+import { wasmApkgSqlite } from "./apkg.ts";
 import { operations } from "./operations.ts";
 import { toFailure, type Operation, type Response } from "./protocol.ts";
 
@@ -44,8 +45,12 @@ const open = async () => {
   };
   // Card media in OPFS `media/<name>` next to the databases (ADR 0006), copied on sync. The service
   // worker serves them to cards as `/media/<name>`.
-  const runtime = ManagedRuntime.make(clientDataLayer(driver, opfsMediaFiles()));
-  return operations(await runtime.runPromise(ClientData), syncClient);
+  const media = opfsMediaFiles();
+  const runtime = ManagedRuntime.make(clientDataLayer(driver, media));
+  return operations(await runtime.runPromise(ClientData), syncClient, {
+    sqlite: wasmApkgSqlite(sqlite),
+    media,
+  });
 };
 const ready = open();
 void ready.then(

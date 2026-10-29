@@ -9,6 +9,12 @@ import {
   type Output,
 } from "./protocol.ts";
 
+const LONG_OPERATIONS: Partial<Record<Kind, number>> = {
+  sync: 120_000,
+  importApkg: 600_000,
+  exportApkg: 600_000,
+};
+
 /** One instance per tab. Web Locks owns the entire Worker lifetime, including VFS installation. */
 class WebData {
   private channel = new BroadcastChannel("anki-alarm:data:v1");
@@ -137,18 +143,15 @@ class WebData {
         reject: (error) => finish(error),
       });
       const discovery = setInterval(send, 100);
-      // A sync waits on the network; everything else is local.
-      const timeout = setTimeout(
-        () => {
-          this.leader = undefined;
-          finish(
-            new Error(
-              "Storage unavailable. The operation may have committed; reload before retrying.",
-            ),
-          );
-        },
-        operation.kind === "sync" ? 120_000 : 20_000,
-      );
+      // A sync waits on the network, and a package is read or written whole; the rest is quick.
+      const timeout = setTimeout(() => {
+        this.leader = undefined;
+        finish(
+          new Error(
+            "Storage unavailable. The operation may have committed; reload before retrying.",
+          ),
+        );
+      }, LONG_OPERATIONS[operation.kind] ?? 20_000);
       send();
     });
   }

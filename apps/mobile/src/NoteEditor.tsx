@@ -1,29 +1,25 @@
-import type { Deck, Locale, Note, NoteType } from "@app/core";
+import {
+  basicField,
+  noteDraft,
+  noteTypeChoices,
+  type NoteDraft,
+  type Deck,
+  type Locale,
+  type Note,
+  type NoteType,
+  type NoteTypeChoice,
+} from "@app/core";
 import { useForm } from "@tanstack/react-form";
 import { Text, View } from "react-native";
 import { Choice, SaveButtons, TextField } from "./controls.tsx";
 import { editingCopy, type EditingTranslate } from "./editing-copy.ts";
 import { regular } from "./fonts.ts";
 
-export interface NoteDraft {
-  /** Empty for Basic in a collection that has no note type yet: Core creates it. */
-  noteTypeId: string;
-  deckId: string;
-  values: string[];
-}
-interface TypeChoice {
-  id: string;
-  name: string;
-  fieldNames: string[];
-}
-const BASIC: TypeChoice = { id: "", name: "Basic", fieldNames: ["Front", "Back"] };
 /** The app's own Basic shows its two fields in the UI's language. */
-const fieldLabel = (t: EditingTranslate, type: TypeChoice, name: string) =>
-  type.name === "Basic" && name === "Front"
-    ? t("front")
-    : type.name === "Basic" && name === "Back"
-      ? t("back")
-      : name;
+const fieldLabel = (t: EditingTranslate, type: NoteTypeChoice, name: string) => {
+  const basic = basicField(type, name);
+  return basic ? t(basic) : name;
+};
 
 /**
  * A note's fields, following its note type, and the deck its cards are in. A new note picks its
@@ -49,19 +45,8 @@ export function NoteEditor({
   onCancel: () => void;
 }) {
   const t = editingCopy(locale);
-  const types: TypeChoice[] = noteTypes.length
-    ? noteTypes.map((type) => ({
-        id: type.id,
-        name: type.fields.name.value,
-        fieldNames: type.fields.fieldNames.value,
-      }))
-    : [BASIC];
-  const initialType = types.find((type) => type.id === note?.fields.noteTypeId.value) ?? types[0]!;
-  const defaultValues: NoteDraft = {
-    noteTypeId: initialType.id,
-    deckId,
-    values: initialType.fieldNames.map((_, i) => note?.values[i]?.value ?? ""),
-  };
+  const types = noteTypeChoices(noteTypes);
+  const { type: initialType, draft: defaultValues } = noteDraft(types, note, deckId);
   const form = useForm({ defaultValues, onSubmit: ({ value }) => onSave(value) });
   return (
     <View className="gap-6" pointerEvents={busy ? "none" : "auto"}>
@@ -84,7 +69,7 @@ export function NoteEditor({
               disabled={busy}
               onChange={(id) => {
                 field.handleChange(id);
-                const type = types.find((choice) => choice.id === id) ?? BASIC;
+                const type = types.find((choice) => choice.id === id) ?? initialType;
                 form.setFieldValue(
                   "values",
                   type.fieldNames.map(() => ""),

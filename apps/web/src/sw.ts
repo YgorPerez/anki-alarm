@@ -1,6 +1,8 @@
 /// <reference lib="webworker" />
 import { Serwist, type PrecacheEntry, type SerwistGlobalConfig } from "serwist";
 
+import { SHELL_PAGES } from "./shell.ts";
+
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
     __SW_MANIFEST: (PrecacheEntry | string)[] | undefined;
@@ -35,7 +37,7 @@ const serwist = new Serwist({
       matcher: ({ request, url }) =>
         request.mode === "navigate" &&
         url.origin === self.location.origin &&
-        ["/", "/settings/theme", "/study"].includes(url.pathname),
+        SHELL_PAGES.includes(url.pathname),
       handler: async ({ request, url }) => {
         try {
           return await fetch(request);

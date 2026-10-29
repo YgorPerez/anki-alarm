@@ -1,5 +1,7 @@
 import type { ImportSummary } from "@app/client-data";
 import {
+  apkgFileName,
+  packageEntries,
   readApkg,
   readApkgMedia,
   writeApkg,
@@ -40,14 +42,8 @@ async function pickPackage(): Promise<Uint8Array | undefined> {
 
 /** The package's zip entries and zstd, held in memory: one unzip path for records and media. */
 export function unzipped(bytes: Uint8Array): Omit<ApkgHost, "openSqlite"> {
-  const zip = unzipSync(bytes);
   return {
-    entries: Object.keys(zip),
-    read: async (entry) => {
-      const content = zip[entry];
-      if (!content) throw new Error(`Missing package entry ${entry}`);
-      return content;
-    },
+    ...packageEntries(unzipSync(bytes)),
     decompressZstd: (compressed) => decompress(compressed),
   };
 }
@@ -89,19 +85,10 @@ export async function exportApkg(deckId: string): Promise<string | undefined> {
   } catch {
     return undefined;
   }
-  const name = `${fileName(deck.fields.name.value)}.apkg`;
+  const name = apkgFileName(deck.fields.name.value);
   await folder.createFile(name, "application/octet-stream").write(bytes);
   return name;
 }
-/** A deck name as a file name: `::` levels joined by dashes, no path characters. */
-const fileName = (deck: string) =>
-  deck
-    .split("::")
-    .join(" - ")
-    // oxlint-disable-next-line no-control-regex -- control characters can't go in a file name.
-    .replace(/[/\\:*?"<>|\u0000-\u001f]/g, "_")
-    .trim() || "deck";
-
 /** A fresh in-memory SQLite for the collection, and media from the app's media folder. */
 function writeHost(): ApkgWriteHost {
   return {

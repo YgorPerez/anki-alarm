@@ -1,11 +1,12 @@
-import { nextStudyCard, renderCard, type Grade, type LogEntry } from "@app/core";
+import { nextStudyCard, type Grade, type LogEntry } from "@app/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { copy, type T } from "#/copy.ts";
 import { webData } from "#/data/client.ts";
 import { studyQuery } from "#/data/queries.ts";
+import { CardFrame } from "#/ui/card-frame.tsx";
 import { Button } from "#/ui/shadcn/button.tsx";
 
 // The deck is a search parameter, so the offline shell has one /study page for every deck.
@@ -15,27 +16,10 @@ export const Route = createFileRoute("/study")({
   component: Study,
 });
 
-/** Where card media load from. #53 copies each deck's files there. */
-const mediaUrl = (name: string) => `/media/${encodeURIComponent(name)}`;
-
-const darkQuery = "(prefers-color-scheme: dark)";
-const subscribeDark = (listener: () => void) => {
-  const media = window.matchMedia?.(darkQuery);
-  media?.addEventListener("change", listener);
-  return () => media?.removeEventListener("change", listener);
-};
-const useDark = () =>
-  useSyncExternalStore(
-    subscribeDark,
-    () => window.matchMedia?.(darkQuery).matches ?? false,
-    () => false,
-  );
-
 /** Show the front, reveal the back, grade: the phone's flow, with Core rendering the card. */
 function Study() {
   const { deck: deckId = "", lang = "pt-BR" } = Route.useSearch();
   const t = copy(lang);
-  const dark = useDark();
   const session = useStudySession(deckId);
   const { query, card, note, type, busy, error, revealed } = session;
   const deckName = query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value;
@@ -64,21 +48,15 @@ function Study() {
       )}
       {card && note && type ? (
         <>
-          <iframe
-            key={`${card.id}-${revealed}-${dark}`}
+          <CardFrame
+            key={`${card.id}-${revealed}`}
             title={t(revealed ? "answer" : "front")}
-            // Same origin for card media; no scripts, so a shared deck's HTML can't run code.
-            sandbox="allow-same-origin"
-            srcDoc={renderCard({
-              note,
-              type,
-              ordinal: card.fields.ordinal.value,
-              side: revealed ? "back" : "front",
-              dark,
-              media: mediaUrl,
-              ...(deckName === undefined ? {} : { deckName }),
-            })}
-            className="min-h-80 w-full flex-1 rounded-lg border-0 bg-background"
+            note={note}
+            type={type}
+            ordinal={card.fields.ordinal.value}
+            side={revealed ? "back" : "front"}
+            {...(deckName === undefined ? {} : { deckName })}
+            className="min-h-80 flex-1"
           />
           <AnswerControls t={t} session={session} />
         </>

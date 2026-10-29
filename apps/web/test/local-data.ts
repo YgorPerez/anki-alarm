@@ -1,5 +1,8 @@
+import { memoryMediaFiles } from "@app/client-data";
 import type { SyncClient } from "@app/contracts";
+import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 
+import { wasmApkgSqlite } from "../src/data/apkg.ts";
 import { operations } from "../src/data/operations.ts";
 import { WRITES, type Args, type Kind, type Operation, type Output } from "../src/data/protocol.ts";
 import { openDevice } from "./device.ts";
@@ -7,7 +10,9 @@ import { openDevice } from "./device.ts";
 // Replace only the browser transport/OPFS boundary. Reads and writes still use the real data
 // service, migrations, Core rules and the leader's operations, against a fresh SQLite database for
 // each test file.
-const service = openDevice("web");
+/** The browser's OPFS media, in memory: what import stores and export reads. */
+export const webMedia = memoryMediaFiles();
+const service = openDevice("web", webMedia);
 
 let syncClient: () => Promise<SyncClient> = () =>
   Promise.reject(new Error("This test has no sync server"));
@@ -15,7 +20,9 @@ let syncClient: () => Promise<SyncClient> = () =>
 export const setSyncClient = (client: () => Promise<SyncClient>) => {
   syncClient = client;
 };
-const execute = service.then((data) => operations(data, () => syncClient()));
+const execute = Promise.all([service, sqlite3InitModule()]).then(([data, sqlite]) =>
+  operations(data, () => syncClient(), { sqlite: wasmApkgSqlite(sqlite), media: webMedia }),
+);
 const listeners = new Set<() => void>();
 const writeListeners = new Set<() => void>();
 const subscription = (set: Set<() => void>) => (listener: () => void) => {

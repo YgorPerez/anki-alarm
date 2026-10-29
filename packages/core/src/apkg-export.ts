@@ -87,6 +87,17 @@ export async function writeApkg(
   return entries;
 }
 
+/** The file name a deck exports as: `::` levels joined by dashes, no path characters. */
+export const apkgFileName = (deckName: string) =>
+  `${
+    deckName
+      .split("::")
+      .join(" - ")
+      // oxlint-disable-next-line no-control-regex -- control characters can't go in a file name.
+      .replace(/[/\\:*?"<>|\u0000-\u001f]/g, "_")
+      .trim() || "deck"
+  }.apkg`;
+
 /** Anki's schema-11 DDL, as `rslib/src/storage/schema11.sql` creates it. */
 const SCHEMA = [
   "PRAGMA journal_mode = DELETE",

@@ -6,6 +6,7 @@ import {
   type Deck,
   type Locale,
   type Note,
+  type NoteDraft,
 } from "@app/core";
 import type { ClientData } from "@app/client-data";
 import { useForm } from "@tanstack/react-form";
@@ -29,7 +30,7 @@ import { CardActions } from "./CardActions.tsx";
 import { DeckOptionsEditor } from "./DeckOptionsEditor.tsx";
 import { editingCopy } from "./editing-copy.ts";
 import { bold, regular } from "./fonts.ts";
-import { NoteEditor, type NoteDraft } from "./NoteEditor.tsx";
+import { NoteEditor } from "./NoteEditor.tsx";
 import { StudyScreen } from "./StudyScreen.tsx";
 import { pickAndImportApkg } from "./apkg.ts";
 import { DeckExport } from "./DeckExport.tsx";

@@ -1,15 +1,10 @@
-import { CardState, type Card, type Locale, type MemoryState } from "@app/core";
+import { CardState, readDueDays, type Card, type Locale, type MemoryState } from "@app/core";
 import { useForm } from "@tanstack/react-form";
 import { Alert, Text, View } from "react-native";
 import { Button, TextField } from "./controls.tsx";
 import { copy } from "./copy.ts";
 import { editingCopy } from "./editing-copy.ts";
 import { bold, regular } from "./fonts.ts";
-
-const days = (text: string) => {
-  const value = /^\d+$/.test(text.trim()) ? Number(text.trim()) : Number.NaN;
-  return value <= 36_500 ? value : undefined;
-};
 
 /**
  * Forget and Set due date for each card of a note. Both append to the review log. AnkiDroid's API
@@ -75,7 +70,7 @@ function CardRow({
   const form = useForm({
     defaultValues: { days: "1" },
     onSubmit: ({ value, formApi }) => {
-      onSetDueDate(days(value.days)!);
+      onSetDueDate(readDueDays(value.days)!);
       formApi.reset();
     },
   });
@@ -109,7 +104,8 @@ function CardRow({
           <form.Field
             name="days"
             validators={{
-              onChange: ({ value }) => (days(value) === undefined ? t("invalidDays") : undefined),
+              onChange: ({ value }) =>
+                readDueDays(value) === undefined ? t("invalidDays") : undefined,
             }}
           >
             {(field) => (

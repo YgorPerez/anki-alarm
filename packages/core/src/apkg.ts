@@ -101,6 +101,18 @@ export async function readApkg(
   return { package: parsed, media: await readMedia(host, latest, unpack) };
 }
 
+/** A host's entries and reader over a package's unzipped files, held in memory. */
+export const packageEntries = (
+  files: Readonly<Record<string, Uint8Array>>,
+): Pick<ApkgHost, "entries" | "read"> => ({
+  entries: Object.keys(files),
+  read: async (entry) => {
+    const content = files[entry];
+    if (!content) throw new Error(`Missing package entry ${entry}`);
+    return content;
+  },
+});
+
 /**
  * Lists only the package's media files, without opening its collection: for an export of a deck
  * linked from AnkiDroid, whose API hands out records but not media.

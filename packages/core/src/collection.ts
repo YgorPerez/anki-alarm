@@ -11,6 +11,7 @@ import {
 } from "./ankidroid.ts";
 import { cardId, importId, uuid7 } from "./ids.ts";
 import { isLanguageTag } from "./locale.ts";
+import { editedNoteType, editedValues, noteTypeProblems, type NoteTypeEdit } from "./note-types.ts";
 import { studyDayStart, type LogEntry } from "./study.ts";
 
 /** FSRS-6's default weights, which every new preset starts from. */
@@ -139,6 +140,9 @@ function ordinalsFor(type: NoteType, values: readonly string[]): number[] {
     for (const match of value.matchAll(/\{\{c(\d+)::/g)) numbers.add(Number(match[1]) - 1);
   return numbers.size ? [...numbers].sort((a, b) => a - b) : [0];
 }
+/** Anki's field or template ids, following their fields or templates through an edit. */
+const follow = (ids: string[] | undefined, items: readonly { from?: number }[]) =>
+  ids && items.map(({ from }) => (from === undefined ? "" : (ids[from] ?? "")));
 /** Anki joins field names and values with the unit separator. */
 const SEPARATOR = "\u001f";
 /** The clock after every field of `previous`, even when the wall clock went backwards. */
@@ -400,6 +404,79 @@ export class Collection {
     values.forEach((value, i) => {
       if (note.values[i]?.value !== value) note.values[i] = { value, hlc: this.tick() };
     });
+    // A cloze number the note didn't have gets its card. One taken out keeps its card, as in Anki.
+    const cards = this.cardsOf(id);
+    const have = new Set(cards.map((c) => c.fields.ordinal.value));
+    const deckId = cards[0]?.fields.deckId.value;
+    if (deckId && type.fields.kind.value === "cloze")
+      for (const ordinal of ordinalsFor(type, values))
+        if (!have.has(ordinal)) this.addCard(id, ordinal, deckId);
+  }
+  /** A note's cards, by ordinal. */
+  private cardsOf(noteId: string) {
+    return this.state.cards
+      .filter((c) => c.fields.noteId.value === noteId)
+      .sort((a, b) => a.fields.ordinal.value - b.fields.ordinal.value);
+  }
+  /** A new card. Its id is the note's and ordinal's unless a card had it, then a fresh one. */
+  private addCard(noteId: string, ordinal: number, deckId: string, hlc = this.tick()) {
+    let id = cardId(noteId, ordinal);
+    if (this.state.cards.some((c) => c.id === id) || this.deleted("cards", id))
+      id = uuid7(this.env.now(), this.env.random());
+    this.state.cards.push(this.record({ noteId, deckId, ordinal, suspended: false }, id, hlc));
+  }
+  /**
+   * Changes a note type's name, fields, templates and CSS (see `NoteTypeEdit`). Notes move their
+   * values with their fields, and templates follow renamed fields. On a standard type, a removed
+   * template deletes its cards, a moved one renumbers them, and a new one adds a card to every
+   * note, in the deck of its first card. Only what changed takes a new clock.
+   */
+  editNoteType(id: string, edit: NoteTypeEdit) {
+    const type = this.state.noteTypes.find((t) => t.id === id);
+    if (!type || noteTypeProblems(type, edit).length) throw new Error("Invalid note type");
+    const fields = type.fields;
+    const next = editedNoteType(type, edit).fields;
+    for (const key of ["name", "fieldNames", "templates", "css"] as const)
+      if (!same(fields[key].value, next[key].value))
+        Object.assign(fields, { [key]: { value: next[key].value, hlc: this.tick() } });
+    if (type.anki) {
+      const fieldIds = follow(type.anki.fieldIds, edit.fields);
+      const templateIds = follow(type.anki.templateIds, edit.templates);
+      if (fieldIds) type.anki.fieldIds = fieldIds;
+      if (templateIds) type.anki.templateIds = templateIds;
+    }
+    const notes = this.state.notes.filter((n) => n.fields.noteTypeId.value === id);
+    for (const note of notes) {
+      const before = note.values;
+      note.values = editedValues(before, edit).map((value, i) => {
+        const kept = before[i];
+        return kept?.value === value ? kept : { value, hlc: this.tick() };
+      });
+    }
+    if (fields.kind.value === "cloze") return;
+    for (const note of notes) {
+      const cards = this.cardsOf(note.id);
+      const deckId = cards[0]?.fields.deckId.value;
+      for (const card of cards) {
+        const ordinal = edit.templates.findIndex((t) => t.from === card.fields.ordinal.value);
+        if (ordinal < 0) this.remove("cards", card.id);
+        else if (ordinal !== card.fields.ordinal.value)
+          card.fields.ordinal = { value: ordinal, hlc: this.tick() };
+      }
+      if (deckId)
+        edit.templates.forEach((t, ordinal) => {
+          if (t.from === undefined) this.addCard(note.id, ordinal, deckId);
+        });
+    }
+  }
+  /** Deletes notes and their cards. */
+  deleteNotes(ids: readonly string[]) {
+    if (!ids.every((id) => this.state.notes.some((n) => n.id === id)))
+      throw new Error("Invalid note");
+    for (const id of new Set(ids)) {
+      for (const card of this.cardsOf(id)) this.remove("cards", card.id);
+      this.remove("notes", id);
+    }
   }
   /** Changes a preset, which every deck using it shares. Stamps only the changed options. */
   updatePreset(id: string, patch: Partial<PresetOptions>) {
@@ -422,6 +499,13 @@ export class Collection {
     for (const card of cards)
       if (card.fields.deckId.value !== deckId)
         card.fields.deckId = { value: deckId, hlc: this.tick() };
+  }
+  /** Moves every card of the note to `deckId`. */
+  moveNote(id: string, deckId: string) {
+    this.moveCards(
+      this.cardsOf(id).map((c) => c.id),
+      deckId,
+    );
   }
   /** Deletes the deck, its cards, and the notes left without a card. */
   deleteDeck(id: string) {
