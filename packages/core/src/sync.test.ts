@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
 import {
   alarmFromRecord,
+  alarmTombstone,
   mergeRecord,
   newAlarm,
   resolveChange,
@@ -185,6 +186,27 @@ describe("alarm records", () => {
     };
     Object.assign(synced.fields.sound, { value: { kind: "mystery" } });
     expect(alarmFromRecord(synced).sound).toEqual({ kind: "default" });
+  });
+
+  test("a deleted alarm syncs as a tombstone in its slot, and no later edit brings it back", () => {
+    const alarm = stampAlarm(undefined, newAlarm("alarm"), { ...env, now: () => 5000 });
+    const deleted: SyncChange = {
+      kind: "tombstone",
+      tombstone: alarmTombstone(alarm, { ...env, now: () => 10 }),
+    };
+    expect(deleted.tombstone).toEqual({
+      id: "alarm",
+      kind: "alarms",
+      sequence: 0,
+      hlc: { wallMs: 5000, counter: 1, deviceId: "phone" },
+    });
+    const edited: SyncChange = {
+      kind: "alarms",
+      record: stampAlarm(alarm, { ...newAlarm("alarm"), label: "Gym" }, { ...env, now: () => 9e9 }),
+    };
+    expect(syncSlot(deleted)).toEqual(syncSlot(edited));
+    expect(resolveChange({ kind: "alarms", record: alarm }, deleted)).toEqual(deleted);
+    expect(resolveChange(deleted, edited)).toBeUndefined();
   });
 });
 

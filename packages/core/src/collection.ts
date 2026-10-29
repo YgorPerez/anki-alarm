@@ -98,9 +98,11 @@ export type Card = RecordFields<{
 }> &
   AnkiIdentity;
 export type RecordKind = "decks" | "presets" | "noteTypes" | "notes" | "cards";
+/** The kinds a delete syncs for: the collection's records, and alarms. */
+export type TombstoneKind = RecordKind | "alarms";
 export interface Tombstone {
   id: string;
-  kind: RecordKind;
+  kind: TombstoneKind;
   sequence: number;
   hlc: Hlc;
 }

@@ -38,6 +38,18 @@ it("saves alarms and replaces the native schedule with every enabled alarm", asy
   ).toEqual([alarm]);
   expect(await Effect.runPromise(controller.list)).toEqual([alarm, second]);
 });
+it("deleting an alarm takes it off the native schedule", async () => {
+  const native = memoryAlarmService();
+  const controller = alarmController(memoryAlarmRepository());
+  const run = <A>(effect: Effect.Effect<A, Error, AlarmService>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(native.layer)));
+  const other = { ...alarm, id: "b" };
+  await run(controller.save(alarm));
+  await run(controller.save(other));
+  await run(controller.remove(alarm.id));
+  expect(await run(Effect.flatMap(AlarmService, (service) => service.list))).toEqual([other]);
+  expect(await Effect.runPromise(controller.list)).toEqual([other]);
+});
 it("persists a replayed journal once and acknowledges only after successful storage", async () => {
   const native = memoryAlarmService();
   const repository = memoryAlarmRepository();

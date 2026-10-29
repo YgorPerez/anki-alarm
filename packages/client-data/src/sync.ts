@@ -60,8 +60,11 @@ const recordTables = { decks, presets, noteTypes, notes, cards } as const;
 type RecordTable = keyof typeof recordTables;
 const RECORD_TABLES = ["decks", "presets", "noteTypes", "notes", "cards"] as const;
 const isRecordTable = (kind: string): kind is RecordTable => kind in recordTables;
-/** Alarms and their journal live in anki-alarm.db; everything else in collection.db. */
-const inAlarmDb = (change: Change) => change.kind === "alarms" || change.kind === "alarmEvent";
+/** Alarms, their deletes and their journal live in anki-alarm.db; everything else in collection.db. */
+const inAlarmDb = (change: Change) =>
+  change.kind === "alarms" ||
+  change.kind === "alarmEvent" ||
+  (change.kind === "tombstone" && change.tombstone.kind === "alarms");
 
 /** The contract checks a change's envelope; Core's types describe its records. */
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion
@@ -148,6 +151,8 @@ export function syncEngine({
       changes.push({ kind: "media", record: row.body });
     for (const row of await collectionDb.select().from(reviewLog))
       changes.push({ kind: "reviewLog", entry: row.body });
+    for (const row of await alarmDb.select().from(tombstones))
+      changes.push({ kind: "tombstone", tombstone: row.body });
     for (const row of await alarmDb.select({ id: alarms.id }).from(alarms)) {
       const record = await alarmRecord(row.id);
       if (record) changes.push({ kind: "alarms", record });
@@ -238,8 +243,18 @@ export function syncEngine({
       const row = (await collectionDb.select().from(settings))[0];
       return row && { kind: "settings", record: row.body };
     }
-    if (change.kind === "alarms") {
-      const record = await alarmRecord(change.record.id);
+    const alarmId =
+      change.kind === "alarms"
+        ? change.record.id
+        : change.kind === "tombstone" && change.tombstone.kind === "alarms"
+          ? change.tombstone.id
+          : undefined;
+    if (alarmId !== undefined) {
+      const deleted = (
+        await alarmDb.select().from(tombstones).where(eq(tombstones.id, alarmId))
+      )[0];
+      if (deleted) return { kind: "tombstone", tombstone: deleted.body };
+      const record = await alarmRecord(alarmId);
       return record && { kind: "alarms", record };
     }
     if (change.kind === "media") {
@@ -296,15 +311,23 @@ export function syncEngine({
         .insert(mediaTable)
         .values({ id: body.id, body })
         .onConflictDoUpdate({ target: mediaTable.id, set: { body } });
-    } else if (change.kind === "tombstone") {
+    } else if (change.kind === "tombstone" && change.tombstone.kind === "alarms") {
+      const { tombstone } = change;
+      await alarmDb
+        .insert(tombstones)
+        .values({ id: tombstone.id, body: tombstone })
+        .onConflictDoUpdate({ target: tombstones.id, set: { body: tombstone } });
+      await alarmDb.delete(alarms).where(eq(alarms.id, tombstone.id));
+      await alarmDb.delete(alarmRecords).where(eq(alarmRecords.id, tombstone.id));
+    } else if (change.kind === "tombstone" && isRecordTable(change.tombstone.kind)) {
       const { tombstone } = change;
       await collectionDb
         .insert(tombstones)
         .values({ id: tombstone.id, body: tombstone })
         .onConflictDoUpdate({ target: tombstones.id, set: { body: tombstone } });
-      const table = recordTables[tombstone.kind];
+      const table = recordTables[change.tombstone.kind];
       await collectionDb.delete(table).where(eq(table.id, tombstone.id));
-    } else if (isRecordTable(change.kind)) {
+    } else if (change.kind !== "tombstone" && isRecordTable(change.kind)) {
       const table = recordTables[change.kind];
       // The record is of the table's kind.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion
@@ -436,6 +459,8 @@ export function syncEngine({
           if (!winner) continue;
           await write(winner);
           changed.add(winner.kind);
+          // A delete changes its record's kind too: a pulled alarm delete re-arms alarms.
+          if (winner.kind === "tombstone") changed.add(winner.tombstone.kind);
         }
       };
       await inAlarms(() => resolveAll(page.filter(inAlarmDb)));

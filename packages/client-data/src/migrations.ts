@@ -68,6 +68,14 @@ const migrations = [
       "CREATE TABLE IF NOT EXISTS ankidroid_sent (id TEXT PRIMARY KEY NOT NULL)",
     ],
   },
+  {
+    // Deleted alarms, which sync like the collection's deletes (ADR 0001).
+    id: 10,
+    database: "anki-alarm.db",
+    statements: [
+      "CREATE TABLE IF NOT EXISTS tombstones (id TEXT PRIMARY KEY NOT NULL, body TEXT NOT NULL)",
+    ],
+  },
 ] as const;
 
 // Both initial migrations are additive and safe to replay on databases created before the ledger.

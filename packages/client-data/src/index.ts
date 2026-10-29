@@ -7,6 +7,7 @@ import {
   alarmRecords,
   outbox,
   reviewLog,
+  tombstones,
 } from "./schema.ts";
 import { syncEngine } from "./sync.ts";
 export { AccountMismatch, type MediaSyncResult, type SyncResult } from "./sync.ts";
@@ -52,6 +53,7 @@ import {
   type AnkiDroidSource,
   type AlarmEvent,
   stampAlarm,
+  alarmTombstone,
 } from "@app/core";
 
 export type { AlarmEvent } from "@app/core";
@@ -128,6 +130,8 @@ interface Data extends Engine {
   setAutoSyncBack: (on: boolean) => Effect.Effect<void, Error>;
   alarms: Effect.Effect<Alarm[], Error>;
   saveAlarm: (alarm: Alarm) => Effect.Effect<void, Error>;
+  /** Deletes an alarm with a tombstone that syncs: no edit from another device brings it back. */
+  deleteAlarm: (alarmId: string) => Effect.Effect<void, Error>;
   /**
    * Stores native's journal events not stored yet, each queued to sync (append-only, like
    * reviews). Draining the same events again changes nothing.
@@ -350,6 +354,12 @@ async function open(driver: SQLiteConnection, media: MediaFiles): Promise<Data> 
             .select()
             .from(alarmRecords)
             .where(eq(alarmRecords.id, alarm.id));
+          // A deleted alarm stays deleted: an editor still open on it saves nothing.
+          const [deleted] = await alarmDb
+            .select()
+            .from(tombstones)
+            .where(eq(tombstones.id, alarm.id));
+          if (deleted) return;
           const record = stampAlarm(previous?.body, alarm, env);
           await alarmDb
             .insert(alarms)
@@ -360,6 +370,26 @@ async function open(driver: SQLiteConnection, media: MediaFiles): Promise<Data> 
             .values({ id: alarm.id, body: record })
             .onConflictDoUpdate({ target: alarmRecords.id, set: { body: record } });
           await alarmDb.insert(outbox).values({ kind: "alarms", recordId: alarm.id, body: record });
+        }),
+      ),
+    deleteAlarm: (alarmId) =>
+      local(() =>
+        transaction(alarmSql, async () => {
+          const [record] = await alarmDb
+            .select()
+            .from(alarmRecords)
+            .where(eq(alarmRecords.id, alarmId));
+          const [row] = await alarmDb.select().from(alarms).where(eq(alarms.id, alarmId));
+          // An alarm from before sync has no record yet: its tombstone stamps after it.
+          const previous = record?.body ?? (row && stampAlarm(undefined, readAlarm(row.data), env));
+          if (!previous) return;
+          const tombstone = alarmTombstone(previous, env);
+          await alarmDb.insert(tombstones).values({ id: alarmId, body: tombstone });
+          await alarmDb.delete(alarms).where(eq(alarms.id, alarmId));
+          await alarmDb.delete(alarmRecords).where(eq(alarmRecords.id, alarmId));
+          await alarmDb
+            .insert(outbox)
+            .values({ kind: "tombstones", recordId: alarmId, body: tombstone });
         }),
       ),
     ingestEvents: (events) =>

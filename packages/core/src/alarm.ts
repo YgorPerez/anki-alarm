@@ -1,4 +1,4 @@
-import { nextClock, type CollectionEnvironment, type Field } from "./collection.ts";
+import { nextClock, type CollectionEnvironment, type Field, type Tombstone } from "./collection.ts";
 
 /** ISO weekdays: Monday = 1, Sunday = 7. A once-date is a local YYYY-MM-DD. */
 export interface AlarmRule {
@@ -178,6 +178,11 @@ export function stampAlarm(
     }),
   ) as AlarmRecord["fields"];
   return { id, fields };
+}
+
+/** Deletes an alarm (ADR 0001 › deletes): beats every edit of the record, even a newer one. */
+export function alarmTombstone(record: AlarmRecord, env: CollectionEnvironment): Tombstone {
+  return { id: record.id, kind: "alarms", sequence: 0, hlc: nextClock(record, env) };
 }
 
 /** The alarm a synced record describes. A property it lacks takes the new-alarm default. */

@@ -35,7 +35,7 @@ export const FieldRecord = Schema.Struct({
 });
 export const Tombstone = Schema.Struct({
   id: Schema.String,
-  kind: Schema.Literals(["decks", "presets", "noteTypes", "notes", "cards"]),
+  kind: Schema.Literals(["decks", "presets", "noteTypes", "notes", "cards", "alarms"]),
   sequence: Schema.Int,
   hlc: Hlc,
 });

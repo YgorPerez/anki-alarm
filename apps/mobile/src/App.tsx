@@ -26,6 +26,7 @@ import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
 import type { ListRenderItemInfo } from "react-native";
 import {
+  Alert,
   AppState,
   BackHandler,
   Pressable,
@@ -50,6 +51,7 @@ import { useUI } from "./ui.ts";
 const repository = {
   list: localData((data) => data.alarms),
   save: (alarm: Alarm) => localData((data) => data.saveAlarm(alarm)),
+  remove: (alarmId: string) => localData((data) => data.deleteAlarm(alarmId)),
   ingest: (events: readonly import("./alarms.ts").AlarmEvent[]) =>
     localData((data) => data.ingestEvents(events)),
   events: localData((data) => data.events),
@@ -174,6 +176,18 @@ function Home() {
     },
     [controller, locale, client],
   );
+  const remove = useCallback(
+    (alarmId: string) => {
+      void run(controller.remove(alarmId))
+        .then(() => {
+          void client.invalidateQueries({ queryKey: ["alarms"] });
+          setEditing(null);
+          setError("");
+        })
+        .catch(() => setError(copy(locale)("alarmError")));
+    },
+    [controller, locale, client],
+  );
   const renderAlarm = useCallback(
     ({ item }: ListRenderItemInfo<Alarm>) => (
       <AlarmRow alarm={item} locale={locale} onEdit={setEditing} onSave={save} />
@@ -281,6 +295,9 @@ function Home() {
                 locale={locale}
                 onSave={save}
                 onCancel={() => setEditing(null)}
+                {...(alarms.some((a) => a.id === editing.id)
+                  ? { onDelete: () => remove(editing.id) }
+                  : {})}
               />
             ) : (
               <>
@@ -378,11 +395,14 @@ function AlarmEditor({
   locale,
   onSave,
   onCancel,
+  onDelete,
 }: {
   alarm: Alarm;
   locale: Locale;
   onSave: (alarm: Alarm) => void;
   onCancel: () => void;
+  /** A saved alarm can be deleted; a new one only cancelled. */
+  onDelete?: () => void;
 }) {
   const [options, setOptions] = useState(alarm);
   const [label, setLabel] = useState(alarm.label);
@@ -464,6 +484,20 @@ function AlarmEditor({
       <Pressable accessibilityRole="button" onPress={onCancel}>
         <Text className="text-body text-foreground">{t("cancel")}</Text>
       </Pressable>
+      {onDelete ? (
+        <Pressable
+          accessibilityRole="button"
+          className="min-h-12 justify-center"
+          onPress={() =>
+            Alert.alert(t("deleteAlarmTitle"), t("deleteAlarmBody"), [
+              { text: t("cancel"), style: "cancel" },
+              { text: t("deleteAlarm"), style: "destructive", onPress: onDelete },
+            ])
+          }
+        >
+          <Text className="text-body text-attention">{t("deleteAlarm")}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

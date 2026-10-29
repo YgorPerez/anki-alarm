@@ -50,6 +50,7 @@ export type {
   Template,
   RecordKind,
   Tombstone,
+  TombstoneKind,
   CollectionState,
   CollectionEnvironment,
 } from "./collection.ts";
@@ -66,6 +67,7 @@ export {
   MAX_SNOOZE_CAP,
   SNOOZE_CHOICES,
   stampAlarm,
+  alarmTombstone,
   alarmFromRecord,
   awakeCheckAfter,
   AWAKE_CHECK_DELAYS,
