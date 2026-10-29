@@ -26,17 +26,17 @@ function fakeAccount(server: ReturnType<typeof memorySyncServer>, picks: Account
   let user: AccountUser | null = null;
   const calls = { signOut: 0 };
   const account: Account = {
-    current: async () => user,
-    signIn: async () => (user = picks.shift() ?? null),
-    signOut: async () => {
+    current: Effect.sync(() => user),
+    signIn: Effect.sync(() => (user = picks.shift() ?? null)),
+    signOut: Effect.sync(() => {
       calls.signOut += 1;
       user = null;
-    },
-    client: async () => {
+    }),
+    client: Effect.promise(async () => {
       const api = await fakeSyncApi({ ...server, user: user?.id ?? null });
       apis.push(api);
       return api.client;
-    },
+    }),
   };
   return { account, calls };
 }
@@ -44,7 +44,7 @@ const ana = { id: "ana", email: "ana@example.com" };
 const bia = { id: "bia", email: "bia@example.com" };
 
 async function show(account: Account) {
-  const sync = createSync({ account, data });
+  const sync = createSync({ account, data: localData });
   syncs.push(sync);
   await sync.start();
   await render(<AccountPanel sync={sync} locale="pt-BR" />);

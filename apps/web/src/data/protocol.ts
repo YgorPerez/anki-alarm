@@ -81,9 +81,16 @@ export const toFailure = (error: unknown): Failure => {
   const message = error instanceof Error ? error.message : String(error);
   return typeof tag === "string" ? { message, tag } : { message };
 };
+/**
+ * The leader's operation failed. `_tag` is the original error's (`UpdateRequired`, `Unauthorized`…),
+ * so the sync scheduler reads it as it would on the phone; `LeaderFailed` when it had none.
+ */
+export class LeaderFailed extends Error {
+  readonly ["_tag"]: string;
+  constructor(failure: Failure) {
+    super(failure.message);
+    this["_tag"] = failure.tag ?? "LeaderFailed";
+  }
+}
 /** Back to an error the sync scheduler can read the tag of. */
-export const fromFailure = (failure: Failure) => {
-  const error = new Error(failure.message);
-  if (failure.tag !== undefined) Object.defineProperty(error, "_tag", { value: failure.tag });
-  return error;
-};
+export const fromFailure = (failure: Failure) => new LeaderFailed(failure);

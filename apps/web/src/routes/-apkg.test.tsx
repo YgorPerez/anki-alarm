@@ -5,8 +5,6 @@ import { screen, within } from "@testing-library/react";
 import { strFromU8, unzipSync } from "fflate";
 import { expect, test } from "vite-plus/test";
 
-import { webData } from "#/data/client.ts";
-
 import { downloads } from "../../test/downloads.ts";
 import { webMedia } from "../../test/local-data.ts";
 import { renderRoute } from "../../test/render.tsx";
@@ -35,16 +33,26 @@ test("an Anki package imports with its media, and a deck exports back with them"
   const media: Record<string, string> = JSON.parse(strFromU8(zip["media"]!));
   expect(Object.values(media).length).toBeGreaterThan(0);
 
-  // The export reads back into the same records, with no new reviews.
-  const before = await webData().request("reviewLog");
-  const summary = await webData().request("importApkg", download!.bytes);
-  expect(summary.entries).toBe(0);
-  expect(await webData().request("reviewLog")).toHaveLength(before.length);
+  // Importing the export again merges into the same records and adds no reviews.
+  await user.click(screen.getByRole("link", { name: "‹ Voltar" }));
+  const exported = new File([download!.bytes.slice()], download!.name);
+  await user.upload(await screen.findByLabelText("Importar .apkg"), exported);
+  expect(
+    await screen.findByText(/^Importado: \d+ notas, \d+ cartões e 0 revisões\.$/),
+  ).toBeDefined();
+  const again = await screen.findByRole("list", { name: "Baralhos" });
+  expect(within(again).getAllByRole("link", { name: "Editar Português::Verbos" })).toHaveLength(1);
 });
+
+/** The decks as the home screen lists them: here, the first test's. */
+const listed = async () =>
+  within(await screen.findByRole("list", { name: "Baralhos" }))
+    .getAllByRole("link")
+    .map((link) => link.textContent);
 
 test("a file that isn't a package says so and changes nothing", async () => {
   const { user } = await renderRoute("/");
-  const before = await webData().request("collection");
+  const before = await listed();
   await user.upload(
     await screen.findByLabelText("Importar .apkg"),
     new File(["not a zip"], "notes.apkg"),
@@ -54,5 +62,5 @@ test("a file that isn't a package says so and changes nothing", async () => {
       "Não foi possível importar este arquivo. Confira se é um .apkg do Anki.",
     ),
   ).toBeDefined();
-  expect(await webData().request("collection")).toEqual(before);
+  expect(await listed()).toEqual(before);
 });

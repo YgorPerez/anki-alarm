@@ -5,7 +5,7 @@ import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
 
 import { collectionQuery } from "#/data/queries.ts";
-import { webData } from "#/data/client.ts";
+import { webRequest } from "#/data/client.ts";
 import { change } from "#/data/write.ts";
 import { download } from "#/download.ts";
 import { editingCopy, type EditingT } from "#/editing-copy.ts";
@@ -215,7 +215,7 @@ function DeckExport({ deckId, t }: { deckId: string; t: EditingT }) {
         onClick={async () => {
           setState({ kind: "busy" });
           try {
-            const file = await webData().request("exportApkg", deckId);
+            const file = await webRequest("exportApkg", deckId);
             download(file.name, file.bytes);
             setState({ kind: "done", name: file.name });
           } catch {

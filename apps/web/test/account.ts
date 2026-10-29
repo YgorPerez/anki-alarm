@@ -1,4 +1,5 @@
 import type { Account, AccountUser } from "@app/client-data";
+import { Effect } from "effect";
 import { fakeSyncApi, type FakeSyncApi, type MemorySyncServer } from "@app/contracts/testing";
 
 import { setSyncClient } from "./local-data.ts";
@@ -9,11 +10,11 @@ import { setSyncClient } from "./local-data.ts";
  */
 export const google = { user: null as AccountUser | null, picks: [] as AccountUser[] };
 export const fakeAccount: Account = {
-  current: async () => google.user,
-  signIn: async () => (google.user = google.picks.shift() ?? null),
-  signOut: async () => {
+  current: Effect.sync(() => google.user),
+  signIn: Effect.sync(() => (google.user = google.picks.shift() ?? null)),
+  signOut: Effect.sync(() => {
     google.user = null;
-  },
+  }),
 };
 
 const apis: FakeSyncApi[] = [];

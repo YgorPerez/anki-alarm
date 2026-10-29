@@ -2,6 +2,7 @@
 // a session whose cookie the phone sends itself (auth.ts).
 import {
   accountSync,
+  type AccountFailed,
   type AccountState,
   type Account as AnyAccount,
   type ClientData,
@@ -15,26 +16,27 @@ export type { AccountState, AccountUser } from "@app/client-data";
 /** The signed-in Google account and its session. The phone's is in auth.ts. */
 export interface Account extends AnyAccount {
   /** The contract's client, carrying the session. */
-  client: () => Promise<SyncClient>;
+  client: Effect.Effect<SyncClient, AccountFailed>;
 }
 
 type Data = ClientData["Service"];
-type UseData = <A, E>(use: (data: Data) => Effect.Effect<A, E>) => Promise<A>;
+/** The phone's local database, opened on first use (`localData`). */
+type UseData = <A, E extends Error>(
+  use: (data: Data) => Effect.Effect<A, E>,
+) => Effect.Effect<A, E | Error>;
 
 export function createSync({ account, data }: { account: Account; data: UseData }) {
   return accountSync({
     account,
     data: {
-      syncAccount: () => data((d) => d.syncAccount),
+      syncAccount: data((d) => d.syncAccount),
       adoptAccount: (userId) => data((d) => d.adoptAccount(userId)),
-      sync: async () => {
-        const client = await account.client();
-        return data((d) => d.sync(client));
-      },
+      sync: Effect.flatMap(account.client, (client) => data((d) => d.sync(client))),
       subscribe: (listener) => {
         let unsubscribe: (() => void) | undefined;
         let disposed = false;
-        void data((d) => Effect.sync(() => d)).then((d) => {
+        // The database opens in the background; a listener added before then subscribes after.
+        void Effect.runPromise(data((d) => Effect.succeed(d))).then((d) => {
           if (!disposed) unsubscribe = d.subscribe(listener);
         });
         return () => {

@@ -33,9 +33,9 @@ export interface AnkiDroidApi {
 
 /** The provider client-data's sync back and pull call. */
 export const ankiDroidProvider = (api: AnkiDroidApi): AnkiDroidProvider => ({
-  readDeck: (deckId) => Effect.runPromise(api.readDeck(deckId)),
-  cards: (noteIds) => Effect.runPromise(api.cards(noteIds)),
-  answer: (answer) => Effect.runPromise(api.answer(answer)),
+  readDeck: api.readDeck,
+  cards: api.cards,
+  answer: api.answer,
 });
 
 /**

@@ -10,7 +10,7 @@ import {
   type ThemeField,
 } from "@app/core";
 import { useQuery } from "@tanstack/react-query";
-import { webData } from "./data/client.ts";
+import { webData, webRequest } from "./data/client.ts";
 import { queryClient } from "./query.ts";
 
 // SQLite is the source of truth. localStorage caches only derived CSS for the first paint.
@@ -22,7 +22,7 @@ const key = ["settings"];
 const options = {
   queryKey: key,
   queryFn: async () => {
-    const settings = await webData().request("settings");
+    const settings = await webRequest("settings");
     let legacy: string | null = null;
     try {
       legacy = localStorage.getItem("theme");
@@ -36,7 +36,7 @@ const options = {
     } catch {
       patch = {};
     }
-    const migrated = await webData().request("setTheme", patch);
+    const migrated = await webRequest("setTheme", patch);
     try {
       localStorage.removeItem("theme");
     } catch {
@@ -52,7 +52,7 @@ export const useThemeChoice = () => {
 export const useStorageState = () => useQuery(options, queryClient);
 const save = async (patch: Partial<ThemeChoice>) => {
   try {
-    const settings = await webData().request("setTheme", patch);
+    const settings = await webRequest("setTheme", patch);
     queryClient.setQueryData(key, settings);
     queryClient.setQueryData(["storage-error"], null);
     return settings;

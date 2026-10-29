@@ -3,6 +3,7 @@
 // the browser is back online, and a few seconds after this tab's writes.
 import { accountSync, type AccountState, type AccountSync } from "@app/client-data";
 import { Throttler } from "@tanstack/pacer";
+import { Effect } from "effect";
 import { useSyncExternalStore } from "react";
 
 import { webAccount } from "./auth.ts";
@@ -18,9 +19,9 @@ export const webSync = () => {
   instance ??= accountSync({
     account: webAccount,
     data: {
-      syncAccount: () => webData().request("syncAccount"),
+      syncAccount: Effect.suspend(() => webData().request("syncAccount")),
       adoptAccount: (userId) => webData().request("adoptAccount", userId),
-      sync: () => webData().request("sync"),
+      sync: Effect.suspend(() => webData().request("sync")),
       subscribe: webData().onLocalWrite,
     },
   });

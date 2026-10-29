@@ -56,21 +56,21 @@ const ana: AccountUser = { id: "ana", email: "ana@example.com" };
 async function signedIn(server: ReturnType<typeof memorySyncServer>, user: AccountUser) {
   const data = await device();
   const account: Account = {
-    current: async () => user,
-    signIn: async () => user,
-    signOut: async () => {},
+    current: Effect.succeed(user),
+    signIn: Effect.succeed(user),
+    signOut: Effect.void,
   };
   const sync = accountSync({
     account,
     debounceMs: 10,
     data: {
-      syncAccount: () => run(data.syncAccount),
-      adoptAccount: (id) => run(data.adoptAccount(id)),
-      sync: async () => {
-        const api = await fakeSyncApi({ ...server, user: user.id });
+      syncAccount: data.syncAccount,
+      adoptAccount: data.adoptAccount,
+      sync: Effect.gen(function* () {
+        const api = yield* Effect.promise(() => fakeSyncApi({ ...server, user: user.id }));
         apis.push(api);
-        return run(data.sync(api.client));
-      },
+        return yield* data.sync(api.client);
+      }),
       subscribe: data.subscribe,
     },
   });

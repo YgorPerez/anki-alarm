@@ -2,6 +2,7 @@
 // ID token, and better-auth's Expo client trades it for a session kept in SecureStore. The sync
 // client sends that session's cookie.
 import { expoClient } from "@better-auth/expo/client";
+import { AccountFailed } from "@app/client-data";
 import { makeSyncClient } from "@app/contracts";
 import { GoogleSignin, isSuccessResponse } from "@react-native-google-signin/google-signin";
 import { createAuthClient } from "better-auth/client";
@@ -20,6 +21,14 @@ const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 const user = (data: { user: { id: string; email: string } } | null | undefined) =>
   data ? { id: data.user.id, email: data.user.email } : null;
 
+/** A call to Google's picker or better-auth, failing as `AccountFailed`. */
+const google = <A>(message: string, call: () => Promise<A>) =>
+  Effect.tryPromise({
+    try: call,
+    catch: (cause) =>
+      new AccountFailed({ message: cause instanceof Error ? cause.message : message, cause }),
+  });
+
 function googleAccount(baseURL: string, webClientId: string): Account {
   const auth = createAuthClient({
     baseURL,
@@ -29,11 +38,11 @@ function googleAccount(baseURL: string, webClientId: string): Account {
   });
   GoogleSignin.configure({ webClientId });
   return {
-    async current() {
+    current: google("Session check failed", async () => {
       const { data } = await auth.getSession();
       return user(data);
-    },
-    async signIn(): Promise<AccountUser | null> {
+    }),
+    signIn: google("Sign-in failed", async (): Promise<AccountUser | null> => {
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       const picked = await GoogleSignin.signIn();
       if (!isSuccessResponse(picked)) return null;
@@ -42,20 +51,19 @@ function googleAccount(baseURL: string, webClientId: string): Account {
       const { data, error } = await auth.signIn.social({ provider: "google", idToken: { token } });
       if (error || !data || !("user" in data)) throw new Error(error?.message ?? "Sign-in failed");
       return user(data);
-    },
-    async signOut() {
+    }),
+    signOut: google("Sign-out failed", async () => {
       await auth.signOut();
       await GoogleSignin.signOut();
-    },
-    async client() {
-      const cookie = await auth.getCookie();
-      return Effect.runPromise(
+    }),
+    client: Effect.flatMap(
+      google("Session cookie unreadable", async () => auth.getCookie()),
+      (cookie) =>
         makeSyncClient({
           baseUrl: baseURL,
           headers: (): Record<string, string> => (cookie ? { cookie } : {}),
         }),
-      );
-    },
+    ),
   };
 }
 

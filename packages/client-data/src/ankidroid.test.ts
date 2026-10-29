@@ -12,21 +12,24 @@ function fakeAnkiDroid() {
   const calls: string[] = [];
   const state = { ignoreAnswers: false };
   const provider: AnkiDroidProvider = {
-    readDeck: async (deckId) => {
-      calls.push(`read ${deckId}`);
-      return structuredClone(source);
-    },
-    cards: async (noteIds) => {
-      calls.push(`cards ${noteIds.join(",")}`);
-      return structuredClone(source.cards.filter((c) => noteIds.includes(c.noteId)));
-    },
-    answer: async ({ noteId, ord, ease, timeTakenMs }) => {
-      calls.push(`answer ${noteId}:${ord} ease ${ease} ${timeTakenMs}ms`);
-      const card = source.cards.find((c) => c.noteId === noteId && c.ord === ord);
-      if (!card) return null;
-      if (!state.ignoreAnswers) review(card, NOW / 1000);
-      return { ...card };
-    },
+    readDeck: (deckId) =>
+      Effect.sync(() => {
+        calls.push(`read ${deckId}`);
+        return structuredClone(source);
+      }),
+    cards: (noteIds) =>
+      Effect.sync(() => {
+        calls.push(`cards ${noteIds.join(",")}`);
+        return structuredClone(source.cards.filter((c) => noteIds.includes(c.noteId)));
+      }),
+    answer: ({ noteId, ord, ease, timeTakenMs }) =>
+      Effect.sync(() => {
+        calls.push(`answer ${noteId}:${ord} ease ${ease} ${timeTakenMs}ms`);
+        const card = source.cards.find((c) => c.noteId === noteId && c.ord === ord);
+        if (!card) return null;
+        if (!state.ignoreAnswers) review(card, NOW / 1000);
+        return { ...card };
+      }),
   };
   return { provider, source, calls, state, review };
 }

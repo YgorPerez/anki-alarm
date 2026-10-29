@@ -4,7 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
 import { copy, type T } from "#/copy.ts";
-import { webData } from "#/data/client.ts";
+import { webRequest } from "#/data/client.ts";
 import { studyQuery } from "#/data/queries.ts";
 import { CardFrame } from "#/ui/card-frame.tsx";
 import { Button } from "#/ui/shadcn/button.tsx";
@@ -177,7 +177,7 @@ function useStudySession(deckId: string) {
       write(async () => {
         if (!cardId || !revealed) return {};
         const started = query.data?.started ?? performance.now();
-        const entry = await webData().request(
+        const entry = await webRequest(
           "answerCard",
           cardId,
           grade,
@@ -190,7 +190,7 @@ function useStudySession(deckId: string) {
       write(async () => {
         const last = state.answers.at(-1);
         if (!last) return {};
-        await webData().request("undo", last.id);
+        await webRequest("undo", last.id);
         return { answers: state.answers.slice(0, -1), undone: last.cardId };
       }),
   };

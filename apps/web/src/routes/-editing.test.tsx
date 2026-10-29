@@ -1,13 +1,9 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { expect, test } from "vite-plus/test";
 
-import { webData } from "#/data/client.ts";
+import { webRequest } from "#/data/client.ts";
 
 import { renderRoute } from "../../test/render.tsx";
-
-const data = () => webData();
-const noteValues = async () =>
-  (await data().request("collection")).notes.map((n) => n.values.map((v) => v.value));
 
 test("a new deck gets options and a note, which the browser finds and edits as you type", async () => {
   const { user } = await renderRoute("/");
@@ -26,25 +22,28 @@ test("a new deck gets options and a note, which the browser finds and edits as y
   await user.type(newPerDay, "5");
   await user.click(screen.getByRole("button", { name: "Salvar" }));
   expect(await screen.findByText("Salvo.")).toBeDefined();
-  const [preset] = (await data().request("collection")).presets;
-  expect(preset!.fields.newPerDay.value).toBe(5);
+  // Leaving and coming back shows what was saved.
+  await user.click(screen.getByRole("link", { name: "‹ Voltar" }));
+  await user.click(await screen.findByRole("link", { name: "Editar Inglês" }));
+  expect(await screen.findByLabelText("Cartões novos por dia")).toHaveProperty("value", "5");
 
   await user.click(screen.getByRole("button", { name: "Adicionar nota" }));
   await user.type(await screen.findByLabelText("Frente"), "cat");
   await user.type(screen.getByLabelText("Verso"), "gato");
   await user.click(screen.getByRole("button", { name: "Adicionar" }));
   expect(await screen.findByText("Nota adicionada.")).toBeDefined();
-  expect(await noteValues()).toEqual([["cat", "gato"]]);
-  const deckId = (await data().request("collection")).decks[0]!.id;
-  await data().request("change", {
+  const cards = screen.getByRole("list", { name: "Cartões" });
+  expect(await within(cards).findByRole("button", { name: /cat/ })).toBeDefined();
+  // Another note, added elsewhere (another tab): the browser lists it too.
+  const { decks } = await webRequest("collection");
+  await webRequest("change", {
     kind: "addNote",
-    deckId,
+    deckId: decks[0]!.id,
     noteTypeId: "",
     values: ["bird", "pássaro"],
   });
 
   // The browser lists cards by their front, and the search waits for typing to pause.
-  const cards = screen.getByRole("list", { name: "Cartões" });
   expect(await within(cards).findByRole("button", { name: /bird/ })).toBeDefined();
   await user.type(screen.getByRole("searchbox", { name: "Buscar" }), "GATO");
   await waitFor(() => expect(within(cards).queryByRole("button", { name: /bird/ })).toBeNull());
@@ -55,33 +54,35 @@ test("a new deck gets options and a note, which the browser finds and edits as y
   await user.clear(back);
   await user.type(back, "gata");
   // Autosave: no button, a save once typing pauses.
-  await waitFor(async () => expect(await noteValues()).toContainEqual(["cat", "gata"]), {
-    timeout: 3000,
-  });
-  expect(await screen.findByText("Salvo.")).toBeDefined();
-  const pending = await data().request("pendingChanges");
-  expect(pending.filter((p) => p.kind === "notes")).not.toHaveLength(0);
+  expect(await screen.findByText("Salvo.", {}, { timeout: 3000 })).toBeDefined();
+  await user.clear(screen.getByRole("searchbox", { name: "Buscar" }));
+  await user.click(await within(cards).findByRole("button", { name: /bird/ }));
+  expect(await screen.findByLabelText("Verso")).toHaveProperty("value", "pássaro");
+  await user.click(within(cards).getByRole("button", { name: /cat/ }));
+  await waitFor(() => expect(screen.getByLabelText("Verso")).toHaveProperty("value", "gata"));
 
-  // Card actions append to the review log, once the card has a review.
+  // Card actions wait for a first review, then move and forget the card.
   const card = screen.getByRole("group", { name: "Card 1" });
   expect(within(card).getByRole("button", { name: "Esquecer" })).toHaveProperty("disabled", true);
-  const state = await data().request("collection");
+  expect(within(card).getByText("Novo")).toBeDefined();
+  const state = await webRequest("collection");
   const cat = state.notes.find((n) => n.values[0]!.value === "cat")!;
   const cardId = state.cards.find((c) => c.fields.noteId.value === cat.id)!.id;
-  await data().request("answerCard", cardId, 3, 2000);
-  await user.click(await within(card).findByRole("button", { name: "Definir vencimento" }));
+  await webRequest("answerCard", cardId, 3, 2000);
+  const due = await within(card).findByText(/^Vence em /);
+  const reviewed = due.textContent;
+  const days = within(card).getByLabelText("Vence daqui a quantos dias (0 = hoje)");
+  await user.clear(days);
+  await user.type(days, "7");
+  await user.click(within(card).getByRole("button", { name: "Definir vencimento" }));
+  await waitFor(() => expect(within(card).getByText(/^Vence em /).textContent).not.toBe(reviewed));
   await user.click(within(card).getByRole("button", { name: "Esquecer" }));
   await user.click(within(card).getByRole("button", { name: "Esquecer" }));
-  await waitFor(async () =>
-    expect((await data().request("reviewLog")).map((e) => e.kind)).toEqual([
-      "review",
-      "setDueDate",
-      "reset",
-    ]),
-  );
+  expect(await within(card).findByText("Novo")).toBeDefined();
 
   await user.click(screen.getByRole("button", { name: "Excluir nota" }));
   await user.click(screen.getByRole("button", { name: "Excluir" }));
   expect(await screen.findByText("Escolha um cartão para editar a nota.")).toBeDefined();
-  expect(await noteValues()).toEqual([["bird", "pássaro"]]);
+  await waitFor(() => expect(within(cards).queryByRole("button", { name: /cat/ })).toBeNull());
+  expect(within(cards).getByRole("button", { name: /bird/ })).toBeDefined();
 }, 30_000);
