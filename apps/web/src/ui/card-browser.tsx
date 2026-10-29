@@ -32,6 +32,8 @@ export function CardBrowser({
   onQuery: (query: string) => void;
   onSelect: (row: BrowseRow) => void;
 }) {
+  // React Compiler would keep the list's height from the first render (see DeckList).
+  "use no memo";
   const t = editingCopy(locale);
   // Pacer: one search after typing pauses, not one per key.
   const [search] = useState(() => new Debouncer(onQuery, { wait: SEARCH_MS }));

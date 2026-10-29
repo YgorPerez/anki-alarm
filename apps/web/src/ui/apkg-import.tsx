@@ -25,8 +25,8 @@ export function ApkgImport({ locale }: { locale: Locale }) {
         type="file"
         accept=".apkg"
         aria-label={t("importApkg")}
-        className="sr-only"
-        tabIndex={-1}
+        // Out of the page and its accessibility tree: the button above opens it.
+        hidden
         disabled={busy}
         onChange={async (event) => {
           const file = event.target.files?.[0];

@@ -53,6 +53,9 @@ const ROW_HEIGHT = 72;
 
 /** The decks, virtualized against the window: a big collection only renders what's on screen. */
 function DeckList({ lang, t }: { lang: Locale; t: T }) {
+  // React Compiler would keep the list's height from the first render: the virtualizer object
+  // never changes, though what it measures does.
+  "use no memo";
   const edit = editingCopy(lang);
   const decks = useQuery(decksQuery);
   const list = useRef<HTMLUListElement>(null);
