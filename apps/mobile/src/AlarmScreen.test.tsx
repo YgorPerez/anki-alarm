@@ -265,7 +265,7 @@ test("with the awake check on, the dismissal schedules it after the alarm's dela
           ring={ring}
           locale="pt-BR"
           layer={native.layer}
-          gradeDelayMs={0}
+          gradeDelayMs={50}
           onDismissed={() => {
             dismissed = true;
           }}
