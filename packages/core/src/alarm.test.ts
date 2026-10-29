@@ -4,14 +4,19 @@ import {
   awakeCheckAfter,
   newAlarm,
   nextAlarmRing,
-  nextRing,
   parseAlarmSound,
   readAlarm,
+  skipNextRing,
+  skipOffer,
+  undoSkip,
+  upcomingRing,
 } from "./index.ts";
 
 describe("next ring", () => {
   it.each(fixtures)("$name", (fixture) => {
-    expect(nextRing(fixture.rule, Date.parse(fixture.now), fixture.zone)).toBe(
+    const skip = "skip" in fixture ? Date.parse(fixture.skip) : null;
+    const alarm = { ...newAlarm("fixture"), rule: fixture.rule, skip };
+    expect(upcomingRing(alarm, Date.parse(fixture.now), fixture.zone)).toBe(
       fixture.expected === null ? null : Date.parse(fixture.expected),
     );
   });
@@ -61,6 +66,7 @@ describe("a new alarm", () => {
       awakeCheck: false,
       awakeCheckMinutes: 5,
       readAloud: false,
+      skip: null,
     });
   });
 });
@@ -135,5 +141,58 @@ it("reports actual elapsed time across daylight saving changes", () => {
     alarmId: "spring",
     at: Date.parse("2026-03-08T07:30:00Z"),
     remainingMs: 3600000,
+  });
+});
+
+describe("skip the next ring", () => {
+  // Thursday 2026-10-29, 02:18 UTC; the alarm rings every day at 06:30.
+  const now = Date.parse("2026-10-29T02:18:00Z");
+  const daily = {
+    ...newAlarm("daily"),
+    rule: { hour: 6, minute: 30, repeatDays: [1, 2, 3, 4, 5, 6, 7] },
+  };
+
+  it("skips one occurrence: the next ring is the one after it", () => {
+    const skipped = skipNextRing(daily, now, "UTC");
+    expect(skipped.skip).toBe(Date.parse("2026-10-29T06:30:00Z"));
+    expect(nextAlarmRing([skipped], now, "UTC")).toMatchObject({
+      at: Date.parse("2026-10-30T06:30:00Z"),
+    });
+    expect(nextAlarmRing([undoSkip(skipped)], now, "UTC")).toMatchObject({
+      at: Date.parse("2026-10-29T06:30:00Z"),
+    });
+  });
+
+  it("offers skip for enabled repeating alarms, and undo while the skip is ahead", () => {
+    expect(skipOffer(daily, now, "UTC")).toBe("skip");
+    const skipped = skipNextRing(daily, now, "UTC");
+    expect(skipOffer(skipped, now, "UTC")).toBe("undo");
+    expect(upcomingRing(skipped, now, "UTC")).toBe(Date.parse("2026-10-30T06:30:00Z"));
+    expect(skipOffer({ ...daily, enabled: false }, now, "UTC")).toBeNull();
+    expect(skipOffer({ ...skipped, enabled: false }, now, "UTC")).toBeNull();
+    const once = { ...daily, rule: { hour: 6, minute: 30, onceDate: "2026-10-29" } };
+    expect(skipOffer(once, now, "UTC")).toBeNull();
+    expect(skipNextRing(once, now, "UTC")).toEqual(once);
+  });
+
+  it("clears itself once the skipped occurrence has passed", () => {
+    const skipped = skipNextRing(daily, now, "UTC");
+    const friday = Date.parse("2026-10-29T12:00:00Z");
+    expect(skipOffer(skipped, friday, "UTC")).toBe("skip");
+    expect(upcomingRing(skipped, friday, "UTC")).toBe(Date.parse("2026-10-30T06:30:00Z"));
+  });
+
+  it("no longer applies once the rule stops ringing at the skipped time", () => {
+    const skipped = skipNextRing(daily, now, "UTC");
+    const earlier = { ...skipped, rule: { ...skipped.rule, hour: 6, minute: 0 } };
+    expect(skipOffer(earlier, now, "UTC")).toBe("skip");
+    expect(upcomingRing(earlier, now, "UTC")).toBe(Date.parse("2026-10-29T06:00:00Z"));
+  });
+
+  it("is read back from stored alarms, and is absent from alarms saved before it", () => {
+    const { skip: _skip, ...legacy } = daily;
+    expect(readAlarm(legacy).skip).toBeNull();
+    expect(readAlarm({ ...legacy, skip: "tomorrow" }).skip).toBeNull();
+    expect(readAlarm({ ...legacy, skip: 1_800_000_000_000 }).skip).toBe(1_800_000_000_000);
   });
 });

@@ -51,6 +51,11 @@ play, and JS then speaks the front instead. While one reads, the ring stays sile
 timer waits; it restarts when the reading ends (RingPolicy `readingStarted`/`readingEnded`). Leaving the screen long enough to bring the ring
 back stops the reading. A missing TTS voice for the deck's language uses the engine's default.
 
+#78 adds skip next. An alarm's `skip` is the epoch-ms time of one occurrence that won't ring (null or
+absent for none). `NextRing.of(alarm, now, zone)` passes over it, as Core's `upcomingRing` does, so
+`setAlarms` arms the following occurrence, and the next occurrence again once JS sends the alarm
+with `skip` null. A skip that has passed, or that the rule no longer rings at, has no effect.
+
 ## Verification
 
 From the repository root:

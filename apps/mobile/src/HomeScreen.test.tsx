@@ -90,3 +90,80 @@ test("Home keeps long labels and deck paths available on a small phone at large 
     dimensions.mockRestore();
   }
 });
+
+test("the card menu skips the next ring of a repeating alarm, shows the ring after it and undoes", async () => {
+  vi.useFakeTimers();
+  // Thursday 23:18; the alarm rings weekdays at 06:30, next on Friday.
+  vi.setSystemTime(new Date("2026-10-29T23:18:00Z"));
+  const alarm = {
+    ...newAlarm("a"),
+    label: "Trabalho",
+    rule: { hour: 6, minute: 30, repeatDays: [1, 2, 3, 4, 5] },
+  };
+  const saved: Alarm[] = [];
+  const view = (alarms: Alarm[], locale: "pt-BR" | "en" = "pt-BR") => (
+    <HomeScreen
+      alarms={alarms}
+      decks={[]}
+      locale={locale}
+      zone="UTC"
+      use24Hour
+      onEdit={() => {}}
+      onAdd={() => {}}
+      onToggle={() => {}}
+      onSkip={(a) => saved.push(a)}
+    />
+  );
+  const result = await render(view([alarm]));
+  await fireEvent.press(screen.getByRole("button", { name: "Mais opções: Trabalho" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Pular a próxima" }));
+  expect(saved.at(-1)?.skip).toBe(Date.parse("2026-10-30T06:30:00Z"));
+  expect(screen.queryByRole("button", { name: "Pular a próxima" })).toBeNull();
+
+  await result.rerender(view([saved.at(-1)!]));
+  expect(screen.getByText("Pulado · toca seg., 2 de nov.")).toBeTruthy();
+  expect(screen.getByText("Próximo 06:30 · em 79 h 12 min")).toBeTruthy();
+  await fireEvent.press(screen.getByRole("button", { name: "Mais opções: Trabalho" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Desfazer pulo" }));
+  expect(saved.at(-1)?.skip).toBeNull();
+
+  await result.rerender(view([saved[0]!], "en"));
+  expect(screen.getByText("Skipped · rings Mon, Nov 2")).toBeTruthy();
+  await fireEvent.press(screen.getByRole("button", { name: "More options: Trabalho" }));
+  expect(screen.getByRole("button", { name: "Undo skip" })).toBeTruthy();
+
+  // Once the skipped Friday ring has passed, the skip clears itself.
+  await result.rerender(view([saved[0]!]));
+  await act(() => vi.setSystemTime(new Date("2026-10-30T07:00:00Z")));
+  await act(() => vi.advanceTimersByTime(1000));
+  expect(screen.queryByText(/Pulado/)).toBeNull();
+  expect(screen.getByText("Próximo 06:30 · em 71 h 30 min")).toBeTruthy();
+});
+
+test("the card menu is only for enabled repeating alarms", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-29T23:18:00Z"));
+  const repeating = { ...newAlarm("a"), label: "Semana" };
+  await render(
+    <HomeScreen
+      alarms={[
+        { ...repeating, id: "off", label: "Desligado", enabled: false },
+        {
+          ...repeating,
+          id: "once",
+          label: "Uma vez",
+          rule: { hour: 7, minute: 0, onceDate: "2026-10-30" },
+        },
+      ]}
+      decks={[]}
+      locale="pt-BR"
+      zone="UTC"
+      use24Hour
+      onEdit={() => {}}
+      onAdd={() => {}}
+      onToggle={() => {}}
+      onSkip={() => {}}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: /Mais opções/ })).toBeNull();
+});

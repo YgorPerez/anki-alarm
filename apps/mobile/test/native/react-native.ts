@@ -20,6 +20,10 @@ export const TextInput = host("TextInput");
 export const ScrollView = host("RCTScrollView");
 export const Switch = host("RCTSwitch");
 export const KeyboardAvoidingView = View;
+/** Renders its content only while visible, as React Native's Modal does. */
+export function Modal({ visible = true, children, ...props }: Props & { visible?: boolean }) {
+  return visible ? createElement("Modal", props, children) : null;
+}
 
 /** A View that answers presses, as React Native's Pressable renders one. */
 export function Pressable({ children, disabled, ...props }: Props) {

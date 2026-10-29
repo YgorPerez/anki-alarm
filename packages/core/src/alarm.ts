@@ -32,6 +32,11 @@ export interface Alarm {
   awakeCheckMinutes: number;
   /** Reads each card's front aloud in the session: its own audio, else TTS. */
   readAloud: boolean;
+  /**
+   * The time (epoch ms) of one occurrence that won't ring. Once it has passed, or the rule no
+   * longer rings then, it has no effect.
+   */
+  skip: number | null;
 }
 
 /** The sounds shipped in the app. Native plays each from `res/raw/alarm_<id>`. */
@@ -80,6 +85,7 @@ export const newAlarm = (id: string): Alarm => ({
   awakeCheck: false,
   awakeCheckMinutes: 5,
   readAloud: false,
+  skip: null,
 });
 
 /** The largest N the editor offers. */
@@ -109,7 +115,8 @@ type Upgraded =
   | "snoozeCap"
   | "awakeCheck"
   | "awakeCheckMinutes"
-  | "readAloud";
+  | "readAloud"
+  | "skip";
 type StoredAlarm = Omit<Alarm, Upgraded> & Partial<Record<Upgraded, unknown>>;
 
 /** A whole number kept within `min..max`; anything else is the fallback. */
@@ -129,6 +136,7 @@ export function readAlarm({
   awakeCheck,
   awakeCheckMinutes,
   readAloud,
+  skip,
   ...alarm
 }: StoredAlarm): Alarm {
   const defaults = newAlarm(alarm.id);
@@ -148,6 +156,7 @@ export function readAlarm({
       defaults.awakeCheckMinutes,
     ),
     readAloud: readAloud === true,
+    skip: typeof skip === "number" && Number.isFinite(skip) ? skip : null,
   };
 }
 
@@ -206,6 +215,7 @@ export function alarmFromRecord(record: AlarmRecord): Alarm {
     awakeCheck: record.fields.awakeCheck?.value,
     awakeCheckMinutes: record.fields.awakeCheckMinutes?.value,
     readAloud: record.fields.readAloud?.value,
+    skip: record.fields.skip?.value,
   });
 }
 
@@ -271,6 +281,31 @@ export interface NextAlarmRing {
   remainingMs: number;
 }
 
+/** The alarm's next ring after `now`, passing over its skipped occurrence. */
+export function upcomingRing(alarm: Alarm, now: number, zone: string): number | null {
+  const at = nextRing(alarm.rule, now, zone);
+  return at !== null && at === alarm.skip ? nextRing(alarm.rule, at, zone) : at;
+}
+
+/**
+ * What the alarm's menu offers: skipping the next ring of an enabled repeating alarm, or undoing a
+ * skip that is still ahead. Null for one-off and disabled alarms.
+ */
+export function skipOffer(alarm: Alarm, now: number, zone: string): "skip" | "undo" | null {
+  if (!alarm.enabled || alarm.rule.onceDate || !alarm.rule.repeatDays?.length) return null;
+  const at = nextRing(alarm.rule, now, zone);
+  if (at === null) return null;
+  return at === alarm.skip ? "undo" : "skip";
+}
+
+/** Skips the alarm's next occurrence; it rings again at the one after. */
+export const skipNextRing = (alarm: Alarm, now: number, zone: string): Alarm =>
+  skipOffer(alarm, now, zone) === "skip"
+    ? { ...alarm, skip: nextRing(alarm.rule, now, zone) }
+    : alarm;
+
+export const undoSkip = (alarm: Alarm): Alarm => ({ ...alarm, skip: null });
+
 /** Earliest future ring among enabled alarms. Ties keep the input order. */
 export function nextAlarmRing(
   alarms: readonly Alarm[],
@@ -280,7 +315,7 @@ export function nextAlarmRing(
   let next: NextAlarmRing | null = null;
   for (const alarm of alarms) {
     if (!alarm.enabled) continue;
-    const at = nextRing(alarm.rule, now, zone);
+    const at = upcomingRing(alarm, now, zone);
     if (at !== null && (next === null || at < next.at)) {
       next = { alarmId: alarm.id, at, remainingMs: at - now };
     }

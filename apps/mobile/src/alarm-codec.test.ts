@@ -82,6 +82,7 @@ it("keeps every alarm property through native", () => {
     awakeCheck: true,
     awakeCheckMinutes: 10,
     readAloud: true,
+    skip: 1_800_000_000_000,
   };
   // Every property here differs from its default, so a dropped one would show; a new property
   // needs a value here too.

@@ -206,6 +206,9 @@ session** is a special mode of it on the phone.
 - **Read aloud** on/off.
 - **Awake check** on/off, with its delay (5 minutes by default).
 - Snooze on/off, snooze length, and the snooze cap.
+- Skip next: a repeating, enabled alarm can skip one occurrence from its card's menu, and undo it.
+  It rings again at the occurrence after; the skip syncs like the other properties and clears
+  itself once the skipped time has passed. Decided in #78.
 
 ### Ringing
 
