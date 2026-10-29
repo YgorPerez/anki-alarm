@@ -1,7 +1,7 @@
 import {
   FACTORY_THEME,
   nativeAppearance,
-  parseThemeChoice,
+  themeChoiceOf,
   themeFor,
   type Hex,
   type ThemeChoice,
@@ -11,7 +11,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
 import { localData } from "./database.ts";
 import { queryClient } from "./query.ts";
-import type { Settings } from "@app/core";
 import { requireNativeModule } from "expo";
 import { Uniwind } from "uniwind";
 
@@ -20,16 +19,12 @@ const appearance = requireNativeModule<{
   queueIcon: (primary: number, secondary: number) => void;
 }>("ThemeAppearance");
 
-const choiceOf = (settings: Settings) =>
-  parseThemeChoice(
-    Object.fromEntries(Object.entries(settings.fields).map(([key, field]) => [key, field.value])),
-  );
 const options = {
   queryKey: ["settings"],
   queryFn: () => Effect.runPromise(localData((data) => data.settings)),
 };
 export const initializeTheme = async () => {
-  setTheme(choiceOf(await queryClient.fetchQuery(options)));
+  setTheme(themeChoiceOf(await queryClient.fetchQuery(options)));
 };
 /**
  * Lays the derived theme over tokens.css in both modes. The alarm screen, always dark, reads the
@@ -49,12 +44,12 @@ const setTheme = (choice: ThemeChoice) => {
 
 export const useThemeChoice = () => {
   const query = useQuery(options);
-  return query.data ? choiceOf(query.data) : FACTORY_THEME;
+  return query.data ? themeChoiceOf(query.data) : FACTORY_THEME;
 };
 const persistTheme = async (patch: Partial<ThemeChoice>) => {
   const settings = await Effect.runPromise(localData((data) => data.setTheme(patch)));
   queryClient.setQueryData(options.queryKey, settings);
-  setTheme(choiceOf(settings));
+  setTheme(themeChoiceOf(settings));
 };
 export const setThemeField = (field: ThemeField, value: Hex | "primary") =>
   persistTheme({ [field]: value });
@@ -62,7 +57,7 @@ export const resetTheme = () => persistTheme(FACTORY_THEME);
 
 /** Called only after the launcher shortcut warning has been accepted. */
 export const queueThemeIcon = async () => {
-  const choice = choiceOf(await queryClient.fetchQuery(options));
+  const choice = themeChoiceOf(await queryClient.fetchQuery(options));
   const { primary, secondary } = nativeAppearance(choice);
   appearance.queueIcon(primary, secondary);
 };

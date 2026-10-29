@@ -86,7 +86,7 @@ export type { Alarm, AlarmRecord, AlarmRule, AlarmSound, BundledSound } from "./
 export { releaseVersion } from "./release.ts";
 export { newerApk, SYNC_PROTOCOL } from "./release.ts";
 export { releaseArtifact } from "./release.ts";
-export { updateThemeSettings } from "./settings.ts";
+export { themeChoiceOf, updateThemeSettings } from "./settings.ts";
 export type { Settings } from "./settings.ts";
 
 export { reliabilitySteps } from "./reliability.ts";

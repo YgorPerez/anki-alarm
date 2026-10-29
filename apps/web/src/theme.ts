@@ -1,6 +1,7 @@
 import {
   FACTORY_THEME,
   parseThemeChoice,
+  themeChoiceOf,
   type Settings,
   themeFor,
   type Hex,
@@ -18,10 +19,6 @@ const STYLE_ID = "theme";
 export const THEME_SCRIPT = `try{var c=localStorage.getItem("${CSS_KEY}");if(c){var s=document.createElement("style");s.id="${STYLE_ID}";s.textContent=c;document.head.appendChild(s)}}catch(e){}`;
 
 const key = ["settings"];
-const themeChoiceFromSettings = (settings: Settings) =>
-  parseThemeChoice(
-    Object.fromEntries(Object.entries(settings.fields).map(([name, field]) => [name, field.value])),
-  );
 const options = {
   queryKey: key,
   queryFn: async () => {
@@ -50,7 +47,7 @@ const options = {
 };
 export const useThemeChoice = () => {
   const result = useQuery(options, queryClient);
-  return result.data ? themeChoiceFromSettings(result.data) : FACTORY_THEME;
+  return result.data ? themeChoiceOf(result.data) : FACTORY_THEME;
 };
 export const useStorageState = () => useQuery(options, queryClient);
 const save = async (patch: Partial<ThemeChoice>) => {
@@ -96,7 +93,7 @@ const themeCss = (choice: ThemeChoice) => {
 const apply = () => {
   const settings = queryClient.getQueryData<Settings>(key);
   if (!settings) return;
-  const choice = themeChoiceFromSettings(settings);
+  const choice = themeChoiceOf(settings);
   const css = choice === FACTORY_THEME ? "" : themeCss(choice);
   let style = document.getElementById(STYLE_ID);
   if (!style) {
