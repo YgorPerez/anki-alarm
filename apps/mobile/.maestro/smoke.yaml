@@ -22,7 +22,10 @@ appId: dev.ygorperez.ankialarm
 - tapOn: "Criar baralho|Create deck"
 - tapOn: "Nome do baralho|Deck name"
 - inputText: "Maestro"
-- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Salvar|Save"
+    direction: DOWN
 - tapOn: "Salvar|Save"
 - assertVisible: "Maestro"
 # Each tab has the shared gear; Settings returns to the tab that opened it.
