@@ -48,6 +48,11 @@ test("Home shows localized alarm details, edits, adds and refreshes next ring af
   await act(() => vi.advanceTimersByTime(60000));
   expect(screen.getByText("11:19")).toBeTruthy();
   expect(screen.getByText("Next 7:00 AM · in 7 h 41 min")).toBeTruthy();
+  // Past a day, the wait counts days, as the editor's "Rings in" does.
+  await result.rerender(
+    view([{ ...alarm, rule: { hour: 8, minute: 0, repeatDays: [6] } }], "pt-BR"),
+  );
+  expect(screen.getByText("Próximo 08:00 · em 1 d 8 h 41 min")).toBeTruthy();
   await result.rerender(view([], "en"));
   expect(screen.getByText("No alarms enabled")).toBeTruthy();
 });
