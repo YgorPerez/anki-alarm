@@ -20,7 +20,7 @@ import { CollectionScreen } from "./CollectionScreen.tsx";
 import { androidAnkiDroid } from "./ankidroid-android.ts";
 import { syncBackAfterSession } from "./ankidroid.ts";
 import { StatsScreen } from "./StatsScreen.tsx";
-import { statsCopy } from "./stats-copy.ts";
+import { statsCopy } from "@app/stats-ui";
 import { Effect } from "effect";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";

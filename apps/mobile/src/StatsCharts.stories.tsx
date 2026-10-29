@@ -2,8 +2,8 @@ import type { Meta, StoryObj } from "@storybook/react-native";
 import { FACTORY_THEME, themeFor, type RetentionRow } from "@app/core";
 import { View } from "react-native";
 import { ScopedTheme } from "uniwind";
-import { CountChart, GradeChart, GradeLegend, RetentionTable } from "./StatsCharts.tsx";
-import { statsCopy } from "./stats-copy.ts";
+import { retentionTable, statsCopy } from "@app/stats-ui";
+import { GradeLegend, RetentionTable, StatsChart } from "./StatsCharts.tsx";
 
 const light = themeFor(FACTORY_THEME, "light");
 const dark = themeFor(FACTORY_THEME, "dark");
@@ -15,12 +15,11 @@ const month = Array.from({ length: 30 }, (_, i) => ({
   good: 6 + ((i * 5) % 9) + Math.floor(i / 3),
   easy: (i * 11) % 6,
 }));
-const forecast = (fill: string) =>
-  Array.from({ length: 30 }, (_, day) => ({
-    x: day,
-    n: day === 0 ? 24 : Math.max(0, 18 - day + ((day * 7) % 6)),
-    fill,
-  }));
+const forecast = Array.from({ length: 30 }, (_, day) => ({
+  x: day,
+  n: day === 0 ? 24 : Math.max(0, 18 - day + ((day * 7) % 6)),
+  fill: "primary" as const,
+}));
 const tally = (passed: number, failed: number) => ({
   passed,
   failed,
@@ -48,22 +47,28 @@ function Gallery({ mode, locale }: { mode: "light" | "dark"; locale: "pt-BR" | "
   return (
     <ScopedTheme theme={mode}>
       <View style={{ flex: 1, gap: 24, padding: 24, backgroundColor: theme.background }}>
-        <GradeChart
-          label={t("reviews")}
-          rows={month}
-          format={(day) => (day === 0 ? t("today") : String(day))}
+        <StatsChart
+          chart={{
+            kind: "grade",
+            label: t("reviews"),
+            rows: month,
+            format: (day) => (day === 0 ? t("today") : String(day)),
+          }}
           theme={theme}
           locale={locale}
         />
         <GradeLegend t={t} theme={theme} />
-        <CountChart
-          label={t("forecast")}
-          rows={forecast(theme.primary)}
-          format={(day) => (day === 0 ? t("today") : `+${day}`)}
+        <StatsChart
+          chart={{
+            kind: "count",
+            label: t("forecast"),
+            rows: forecast,
+            format: (day) => (day === 0 ? t("today") : `+${day}`),
+          }}
           theme={theme}
           locale={locale}
         />
-        <RetentionTable rows={retention} t={t} />
+        <RetentionTable table={retentionTable(retention, t)} />
       </View>
     </ScopedTheme>
   );
