@@ -1,90 +1,14 @@
 import { nextAlarmRing, type Alarm, type Locale } from "@app/core";
-import { useEffect, useState, type ReactNode } from "react";
-import {
-  AppState,
-  FlatList,
-  Pressable,
-  Switch,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import type { ReactNode } from "react";
+import { FlatList, Pressable, Switch, Text, View } from "react-native";
+import { Clock, timeText, useNow } from "./clock.tsx";
 import { bold, regular } from "./fonts.ts";
 import { copy } from "./copy.ts";
 
 type Deck = { id: string; name: string };
 
-/** Resamples on resume as well as each second, so sleeping never leaves a stale clock. */
-function useClock() {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const tick = () => setNow(Date.now());
-    const timer = setInterval(tick, 1000);
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") tick();
-    });
-    return () => {
-      clearInterval(timer);
-      subscription.remove();
-    };
-  }, []);
-  return now;
-}
-
-function timeParts(at: number, locale: Locale, zone: string, use24Hour: boolean) {
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: zone,
-    hour: use24Hour ? "2-digit" : "numeric",
-    minute: "2-digit",
-    hour12: !use24Hour,
-  }).formatToParts(at);
-}
-function timeText(at: number, locale: Locale, zone: string, use24Hour: boolean) {
-  return timeParts(at, locale, zone, use24Hour)
-    .map((part) => part.value)
-    .join("")
-    .replace(/\s+/g, " ");
-}
 function ruleTime(alarm: Alarm) {
   return Date.UTC(2000, 0, 1, alarm.rule.hour, alarm.rule.minute);
-}
-
-export function HomeClock({
-  now,
-  locale,
-  zone,
-  use24Hour,
-}: {
-  now: number;
-  locale: Locale;
-  zone: string;
-  use24Hour: boolean;
-}) {
-  const parts = timeParts(now, locale, zone, use24Hour);
-  const { width, fontScale } = useWindowDimensions();
-  return (
-    <View className="flex-row flex-wrap items-baseline gap-2">
-      <Text
-        className="text-foreground"
-        style={{
-          ...bold,
-          fontSize: Math.min(68, (width - 48) / (3.5 * fontScale)),
-          fontVariant: ["tabular-nums"],
-        }}
-      >
-        {parts
-          .filter((p) => p.type !== "dayPeriod")
-          .map((p) => p.value)
-          .join("")
-          .trim()}
-      </Text>
-      {parts.some((p) => p.type === "dayPeriod") && (
-        <Text style={regular} className="text-body text-muted-foreground">
-          {parts.find((p) => p.type === "dayPeriod")?.value}
-        </Text>
-      )}
-    </View>
-  );
 }
 
 function repeatSummary(alarm: Alarm, now: number, locale: Locale, zone: string) {
@@ -209,7 +133,7 @@ export function HomeScreen({
   refreshing?: boolean;
   onRefresh?: () => void;
 }) {
-  const now = useClock();
+  const now = useNow();
   const t = copy(locale);
   const next = nextAlarmRing(alarms, now, zone);
   const minutes = next ? Math.ceil(next.remainingMs / 60000) : 0;
@@ -225,7 +149,7 @@ export function HomeScreen({
         onRefresh={onRefresh}
         ListHeaderComponent={
           <View className="gap-4 pb-4">
-            <HomeClock now={now} locale={locale} zone={zone} use24Hour={use24Hour} />
+            <Clock at={now} locale={locale} zone={zone} use24Hour={use24Hour} />
             <Text style={regular} className="text-body text-muted-foreground">
               {next
                 ? t("nextAlarm", { time: timeText(next.at, locale, zone, use24Hour), left })

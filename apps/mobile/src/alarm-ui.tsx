@@ -1,7 +1,8 @@
 import type { alarmSession, Grade, Locale } from "@app/core";
-import { useEffect, useRef, useState } from "react";
-import { BackHandler, Pressable, Text } from "react-native";
-import { bold } from "./alarm-screen.ts";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { BackHandler, Pressable, ScrollView, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { bold } from "./fonts.ts";
 import { copy } from "./copy.ts";
 import { AnswerControls, CardSide } from "./StudyScreen.tsx";
 
@@ -60,14 +61,24 @@ export function useBlockBack() {
   }, []);
 }
 
-/** The wall clock, refreshed every `everyMs`. */
-export function useClock(everyMs = 15_000) {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), everyMs);
-    return () => clearInterval(timer);
-  }, [everyMs]);
-  return now;
+/**
+ * An alarm screen's frame: the clock and what goes with it on top, the card and the controls
+ * below. At large font scales the top shrinks and scrolls, so the card keeps some room and the
+ * controls stay at the thumb.
+ */
+export function AlarmFrame({ top, children }: { top: ReactNode; children: ReactNode }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View
+      className="flex-1 gap-4 bg-background px-6"
+      style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
+    >
+      <ScrollView className="shrink grow-0" contentContainerClassName="gap-4">
+        {top}
+      </ScrollView>
+      {children}
+    </View>
+  );
 }
 
 type Next = NonNullable<ReturnType<typeof alarmSession>["next"]>;
@@ -90,19 +101,21 @@ export function AlarmCard({
   const t = copy(locale);
   return (
     <>
-      <CardSide
-        key={`${next.card.id}-${reveal.revealed}`}
-        label={t(reveal.revealed ? "answer" : "front")}
-        dark
-        input={{
-          note: next.note,
-          type: next.noteType,
-          ordinal: next.card.fields.ordinal.value,
-          side: reveal.revealed ? "back" : "front",
-          dark: true,
-          deckName: next.deckName,
-        }}
-      />
+      <View className="min-h-40 flex-1">
+        <CardSide
+          key={`${next.card.id}-${reveal.revealed}`}
+          label={t(reveal.revealed ? "answer" : "front")}
+          dark
+          input={{
+            note: next.note,
+            type: next.noteType,
+            ordinal: next.card.fields.ordinal.value,
+            side: reveal.revealed ? "back" : "front",
+            dark: true,
+            deckName: next.deckName,
+          }}
+        />
+      </View>
       <AnswerControls
         revealed={reveal.revealed}
         gradesShown={reveal.gradesShown}

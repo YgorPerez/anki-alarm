@@ -3,17 +3,18 @@ import { awakeCheckSession, RING_POLICY, type Grade, type Locale } from "@app/co
 import { Effect, type Layer } from "effect";
 import { useEffect, useRef } from "react";
 import { Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { AlarmService, AwakeCheck } from "./alarms.ts";
 import {
   AlarmCard,
+  AlarmFrame,
   PillButton,
   useBlockBack,
-  useClock,
   useGuarded,
   useReveal,
 } from "./alarm-ui.tsx";
-import { bold, GRADE_DELAY_MS, signalWith } from "./alarm-screen.ts";
+import { GRADE_DELAY_MS, signalWith } from "./alarm-screen.ts";
+import { bold, regular } from "./fonts.ts";
+import { Clock, useNow } from "./clock.tsx";
 import { copy } from "./copy.ts";
 import { localData } from "./database.ts";
 
@@ -26,30 +27,29 @@ const TIMEOUT_MS = RING_POLICY.awakeCheckSeconds * 1000;
 export function AwakeCheckScreen({
   check,
   locale,
+  zone,
+  use24Hour,
   layer,
   onPassed,
   gradeDelayMs = GRADE_DELAY_MS,
 }: {
   check: AwakeCheck;
   locale: Locale;
+  /** The phone's IANA zone and the system's 12 or 24 h setting, as on Home's clock. */
+  zone: string;
+  use24Hour: boolean;
   layer: Layer.Layer<AlarmService>;
   onPassed: () => void;
   gradeDelayMs?: number;
 }) {
   const t = copy(locale);
-  const insets = useSafeAreaInsets();
-  const now = useClock(1000);
+  const now = useNow();
   const prompt = useAwakeCheck(check, layer, onPassed, gradeDelayMs);
   const left = Math.max(0, (check.shownAt ?? now) + TIMEOUT_MS - now);
   const next = prompt.session?.next;
-  return (
-    <View
-      className="flex-1 gap-4 bg-background px-6"
-      style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
-    >
-      <Text className="text-clock text-foreground" style={bold}>
-        {new Date(now).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}
-      </Text>
+  const top = (
+    <>
+      <Clock at={now} locale={locale} zone={zone} use24Hour={use24Hour} />
       <Text className="text-question text-foreground" style={bold}>
         {t("stillAwake")}
       </Text>
@@ -60,16 +60,25 @@ export function AwakeCheckScreen({
             style={{ width: `${(left / TIMEOUT_MS) * 100}%` }}
           />
         </View>
-        <Text className="text-label text-attention">
+        <Text className="text-label text-attention" style={regular}>
           {t("awakeCheckLeft", { seconds: String(Math.ceil(left / 1000)) })}
         </Text>
       </View>
       {prompt.error && (
-        <Text accessibilityRole="alert" className="text-body text-destructive">
+        <Text accessibilityRole="alert" className="text-body text-destructive" style={regular}>
           {t("alarmError")}
         </Text>
       )}
-      {next && (
+      {prompt.session && !next && (
+        <Text className="text-body text-muted-foreground" style={regular}>
+          {t("noCards")}
+        </Text>
+      )}
+    </>
+  );
+  return (
+    <AlarmFrame top={top}>
+      {next ? (
         <AlarmCard
           next={next}
           reveal={prompt.card}
@@ -78,14 +87,13 @@ export function AwakeCheckScreen({
           onReveal={prompt.card.reveal}
           onAnswer={prompt.answer}
         />
+      ) : (
+        <View className="flex-1" />
       )}
       {prompt.session && !next && (
-        <>
-          <Text className="flex-1 text-body text-muted-foreground">{t("noCards")}</Text>
-          <PillButton primary label={t("imAwake")} busy={prompt.busy} onPress={prompt.pass} />
-        </>
+        <PillButton primary label={t("imAwake")} busy={prompt.busy} onPress={prompt.pass} />
       )}
-    </View>
+    </AlarmFrame>
   );
 }
 

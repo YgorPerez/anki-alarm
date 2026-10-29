@@ -12,17 +12,18 @@ import {
 import { Effect, type Layer } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { AlarmService, Ring } from "./alarms.ts";
 import {
   AlarmCard,
+  AlarmFrame,
   PillButton,
   useBlockBack,
-  useClock,
   useGuarded,
   useReveal,
 } from "./alarm-ui.tsx";
-import { bold, GRADE_DELAY_MS, signalWith } from "./alarm-screen.ts";
+import { GRADE_DELAY_MS, signalWith } from "./alarm-screen.ts";
+import { bold, regular } from "./fonts.ts";
+import { Clock, timeText, useNow } from "./clock.tsx";
 import { mediaUrl } from "./media.ts";
 import { copy } from "./copy.ts";
 import { localData } from "./database.ts";
@@ -59,48 +60,69 @@ async function readFront(
 export function AlarmScreen({
   ring,
   locale,
+  zone,
+  use24Hour,
   layer,
   onDismissed,
   gradeDelayMs = GRADE_DELAY_MS,
 }: {
   ring: Ring;
   locale: Locale;
+  /** The phone's IANA zone and the system's 12 or 24 h setting, as on Home's clock. */
+  zone: string;
+  use24Hour: boolean;
   layer: Layer.Layer<AlarmService>;
   onDismissed: () => void;
   gradeDelayMs?: number;
 }) {
   const t = copy(locale);
-  const insets = useSafeAreaInsets();
-  const clock = useClock();
+  const now = useNow();
   const alarm = useAlarmSession(ring, layer, onDismissed, gradeDelayMs);
+  const time = (at: number) => timeText(at, locale, zone, use24Hour);
   const { session, current, offer } = alarm;
   const stage = stageOf(current, alarm.started, session);
   const inSession = stage === "card" || stage === "noCards";
-  return (
-    <View
-      className="flex-1 gap-4 bg-background px-6"
-      style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
-    >
-      <Text className="text-clock text-foreground" style={bold}>
-        {clockTime(current.snoozedUntil ?? clock, locale)}
-      </Text>
-      <Text className="text-body text-muted-foreground">{current.alarm.label}</Text>
+  const header = (
+    <>
+      <Clock at={current.snoozedUntil ?? now} locale={locale} zone={zone} use24Hour={use24Hour} />
+      {current.alarm.label ? (
+        <Text className="text-body text-muted-foreground" style={regular}>
+          {current.alarm.label}
+        </Text>
+      ) : null}
       {inSession && session && <Progress session={session} locale={locale} />}
       {alarm.error && (
-        <Text accessibilityRole="alert" className="text-body text-destructive">
+        <Text accessibilityRole="alert" className="text-body text-destructive" style={regular}>
           {t("alarmError")}
         </Text>
       )}
-      <StageBody stage={stage} alarm={alarm} locale={locale} />
-      {offer && (inSession || stage === "start") && (
-        <SnoozeLink offer={offer} busy={alarm.busy} locale={locale} onPress={alarm.snooze} />
-      )}
-    </View>
+    </>
+  );
+  const snooze = offer && (inSession || stage === "start") && (
+    <SnoozeLink offer={offer} busy={alarm.busy} locale={locale} onPress={alarm.snooze} />
+  );
+  if (stage === "card" && session?.next)
+    return (
+      <AlarmFrame top={header}>
+        <SessionCard next={session.next} alarm={alarm} locale={locale} />
+        {snooze}
+      </AlarmFrame>
+    );
+  return (
+    <AlarmFrame
+      top={
+        <>
+          {header}
+          <StageWords stage={stage} alarm={alarm} locale={locale} time={time} />
+        </>
+      }
+    >
+      <View className="flex-1" />
+      <StageAction stage={stage} alarm={alarm} locale={locale} />
+      {snooze}
+    </AlarmFrame>
   );
 }
-
-const clockTime = (at: number, locale: Locale) =>
-  new Date(at).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
 
 type Stage = "snoozed" | "start" | "card" | "noCards" | "done";
 function stageOf(ring: Ring, started: boolean, session: Session | undefined): Stage {
@@ -110,8 +132,39 @@ function stageOf(ring: Ring, started: boolean, session: Session | undefined): St
   return session.next ? "card" : "noCards";
 }
 
-/** What sits between the header and the snooze link at each stage of the ring. */
-function StageBody({
+/** What a stage without a card says under the header. */
+function StageWords({
+  stage,
+  alarm,
+  locale,
+  time,
+}: {
+  stage: Stage;
+  alarm: ReturnType<typeof useAlarmSession>;
+  locale: Locale;
+  time: (at: number) => string;
+}) {
+  const { session, current } = alarm;
+  if (stage === "snoozed")
+    return (
+      <Snoozed
+        until={time(current.snoozedUntil ?? 0)}
+        need={session?.need}
+        left={alarm.offer?.left ?? 0}
+        locale={locale}
+      />
+    );
+  if (stage === "noCards")
+    return (
+      <Text className="text-question text-foreground" style={bold}>
+        {copy(locale)("noCards")}
+      </Text>
+    );
+  return null;
+}
+
+/** The one full-width button a stage without a card has at the thumb. */
+function StageAction({
   stage,
   alarm,
   locale,
@@ -121,37 +174,13 @@ function StageBody({
   locale: Locale;
 }) {
   const t = copy(locale);
-  const { session, current, busy } = alarm;
+  const { busy } = alarm;
   if (stage === "snoozed")
-    return (
-      <>
-        <Snoozed
-          until={clockTime(current.snoozedUntil ?? 0, locale)}
-          need={session?.need}
-          left={alarm.offer?.left ?? 0}
-          locale={locale}
-        />
-        <PillButton label={t("answerNow")} busy={busy} onPress={alarm.start} />
-      </>
-    );
+    return <PillButton label={t("answerNow")} busy={busy} onPress={alarm.start} />;
   if (stage === "start")
-    return (
-      <>
-        <View className="flex-1" />
-        <PillButton primary label={t("start")} busy={busy} onPress={alarm.start} />
-      </>
-    );
-  if (stage === "card" && session?.next)
-    return <SessionCard next={session.next} alarm={alarm} locale={locale} />;
+    return <PillButton primary label={t("start")} busy={busy} onPress={alarm.start} />;
   if (stage === "noCards")
-    return (
-      <>
-        <Text className="flex-1 text-question text-foreground" style={bold}>
-          {t("noCards")}
-        </Text>
-        <PillButton label={t("dismiss")} busy={busy} onPress={alarm.dismiss} />
-      </>
-    );
+    return <PillButton label={t("dismiss")} busy={busy} onPress={alarm.dismiss} />;
   return null;
 }
 
@@ -170,7 +199,9 @@ function SessionCard({
     <>
       {next.again && (
         <View className="self-start rounded-pill bg-attention-tint px-3 py-1">
-          <Text className="text-label text-attention">{t("cameBack")}</Text>
+          <Text className="text-label text-attention" style={regular}>
+            {t("cameBack")}
+          </Text>
         </View>
       )}
       <AlarmCard
@@ -205,21 +236,26 @@ function Snoozed({
         ? t("snoozesLeftOne")
         : t("snoozesLeft", { count: String(left) });
   return (
-    <View className="flex-1 justify-center gap-3">
+    <View className="gap-3">
       <Text className="text-question text-foreground" style={bold}>
         {t("snoozed")}
       </Text>
       {need !== undefined && (
-        <Text className="text-body text-attention">
+        <Text className="text-body text-attention" style={regular}>
           {t("snoozedUntil", { time: until, count: String(need) })}
         </Text>
       )}
-      <Text className="text-body text-muted-foreground">{snoozesLeft}</Text>
+      <Text className="text-body text-muted-foreground" style={regular}>
+        {snoozesLeft}
+      </Text>
     </View>
   );
 }
 
-/** Snooze stands alone: a text link under the bottom controls, its cost in the attention color. */
+/**
+ * Snooze stands alone: a text link under the bottom controls, its cost in the attention color.
+ * The extra space above it keeps a thumb that misses a grade from snoozing.
+ */
 function SnoozeLink({
   offer,
   busy,
@@ -242,9 +278,9 @@ function SnoozeLink({
       onPress={() => {
         void onPress();
       }}
-      className="min-h-12 items-center justify-center"
+      className="mt-4 min-h-12 items-center justify-center"
     >
-      <Text className="text-label text-muted-foreground underline">
+      <Text className="text-label text-muted-foreground underline" style={regular}>
         {length} ·{" "}
         <Text className="text-attention" style={bold}>
           {cost}
@@ -269,7 +305,7 @@ function Progress({ session, locale }: { session: Session; locale: Locale }) {
           />
         ))}
       </View>
-      <Text className="text-label text-attention">
+      <Text className="text-label text-attention" style={regular}>
         {copy(locale)("progress", {
           right: String(session.right),
           need: String(session.need),

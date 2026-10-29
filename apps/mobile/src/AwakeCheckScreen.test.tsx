@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Effect } from "effect";
 import { newAlarm } from "@app/core";
@@ -38,7 +38,11 @@ async function shownCheck(ringId: string, deckId: string | null) {
   return { native, check: native.awakeCheck()! };
 }
 
-async function show(check: AwakeCheck, layer: ReturnType<typeof memoryAlarmService>["layer"]) {
+async function show(
+  check: AwakeCheck,
+  layer: ReturnType<typeof memoryAlarmService>["layer"],
+  display: { zone: string; use24Hour: boolean } = { zone: "UTC", use24Hour: true },
+) {
   let passed = 0;
   await render(
     <QueryClientProvider
@@ -49,6 +53,8 @@ async function show(check: AwakeCheck, layer: ReturnType<typeof memoryAlarmServi
       <AwakeCheckScreen
         check={check}
         locale="pt-BR"
+        zone={display.zone}
+        use24Hour={display.use24Hour}
         layer={layer}
         gradeDelayMs={0}
         onPassed={() => passed++}
@@ -82,6 +88,19 @@ test("one answer, any grade, passes the check and is a normal review", async () 
   expect(log.map((e) => e.kind === "review" && [e.grade, e.origin, e.ringId])).toEqual([
     [1, "alarm", check.id],
   ]);
+});
+
+test("the check's clock is Home's: the system's 12 or 24 h setting, in the phone's zone", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-29T09:20:00Z"));
+  try {
+    const { native, check } = await shownCheck("ring-clock", null);
+    await show(check, native.layer, { zone: "America/Sao_Paulo", use24Hour: false });
+    expect(screen.getByText("6:20")).toBeTruthy();
+    expect(screen.getByText("AM")).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("a check already answered before a restart passes at once", async () => {
