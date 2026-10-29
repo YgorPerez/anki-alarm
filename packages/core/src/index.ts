@@ -19,6 +19,7 @@ export {
   parseCollection,
   parseRecord,
   validOption,
+  PRESET_LIMITS,
 } from "./collection.ts";
 export {
   ankiDroidAccess,
@@ -106,6 +107,7 @@ export {
   CardState,
   dueInDays,
   readDueDays,
+  MAX_DUE_DAYS,
 } from "./study.ts";
 export { renderCard } from "./template.ts";
 export {
