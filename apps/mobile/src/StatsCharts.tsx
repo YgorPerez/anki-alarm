@@ -50,7 +50,7 @@ export function GradeLegend({ t, theme }: { t: StatsCopy; theme: Theme }) {
     <View className="flex-row flex-wrap gap-4">
       {GRADES.map((grade) => (
         <View key={grade} className="flex-row items-center gap-2">
-          <View className="size-3 rounded-full" style={{ backgroundColor: theme[grade] }} />
+          <View className="size-3 rounded-pill" style={{ backgroundColor: theme[grade] }} />
           <Text style={[regular, { color: theme[GRADE_INK[grade]] }]} className="text-label">
             {t(grade)}
           </Text>

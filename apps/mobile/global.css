@@ -1,3 +1,8 @@
 @import "tailwindcss";
 @import "uniwind";
 @import "@app/design-tokens/tokens.css";
+
+/* Phone controls use pills; containers use the shared 16px lg token. */
+@theme {
+  --radius-pill: 999px;
+}

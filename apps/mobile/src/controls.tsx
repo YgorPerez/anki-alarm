@@ -24,8 +24,8 @@ export function Button({
       onPress={onPress}
       className={
         primary
-          ? "min-h-12 justify-center rounded-full bg-primary px-5 py-3 active:opacity-80 disabled:opacity-40"
-          : "min-h-12 justify-center rounded-full bg-surface px-5 py-3 active:opacity-80 disabled:opacity-40"
+          ? "min-h-12 justify-center rounded-pill bg-primary px-5 py-3 active:opacity-80 disabled:opacity-40"
+          : "min-h-12 justify-center rounded-pill bg-surface px-5 py-3 active:opacity-80 disabled:opacity-40"
       }
     >
       <Text
@@ -125,7 +125,7 @@ export function Choice<T extends string>({
               accessibilityLabel={option.label}
               disabled={disabled}
               onPress={() => onChange(option.value)}
-              className={`min-h-12 justify-center rounded-full border px-4 py-2 active:opacity-80 ${selected ? "border-primary bg-primary" : "border-border bg-surface"}`}
+              className={`min-h-12 justify-center rounded-pill border px-4 py-2 active:opacity-80 ${selected ? "border-primary bg-primary" : "border-border bg-surface"}`}
             >
               <Text
                 style={regular}

@@ -249,8 +249,16 @@ web, popovers and dialogs may take one soft shadow.
 
 ## Shapes
 
-Pills (`rounded.pill`) for every button and grade, chips included. Rounded rectangles for
-containers: `lg` 16px for sheets and dialogs, `xl` 20px for the today card. Hairlines are 1px.
+The phone uses two radii: **pill to press, 16px to contain**. Buttons, grades, chips, toggles and
+segments use `rounded-pill` (999px). Cards, fields, sheets, dialogs and banners use `rounded-lg`
+(16px), including containers that open a screen when tapped. Hairlines are 1px.
+
+`vp lint apps/mobile` enforces this scale with zero violations. Use these two classes rather than
+radius aliases, arbitrary values or dynamic class names. Inline `borderRadius` and corner radius
+properties accept only the numeric literals `16` and `999`.
+
+The web keeps its existing scale: pills for controls, `lg` 16px for sheets and dialogs, and `xl`
+20px for the today card. The shared radius tokens remain unchanged.
 
 ## Components
 
