@@ -19,6 +19,7 @@
     "@app/contracts": "workspace:*",
     "@app/core": "workspace:*",
     "@app/design-tokens": "workspace:*",
+    "@app/stats-ui": "workspace:*",
     "@better-auth/expo": "1.7.14",
     "@expo-google-fonts/atkinson-hyperlegible": "^0.4.1",
     "@react-native-google-signin/google-signin": "16.1.5",

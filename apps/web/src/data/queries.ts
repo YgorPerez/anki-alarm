@@ -36,6 +36,19 @@ export const collectionQuery = queryOptions({
   queryFn: snapshot,
 });
 
+/** What the stats page computes from: the collection, the log, the alarms and their journal. */
+export const statsQuery = queryOptions({
+  queryKey: ["stats"],
+  queryFn: async () => {
+    const [{ collection, log, now }, alarms, events] = await Promise.all([
+      snapshot(),
+      webData().request("alarms"),
+      webData().request("events"),
+    ]);
+    return { collection, log, alarms, events, now };
+  },
+});
+
 /** A study session's data; `started` times the answer to the card on screen. */
 export const studyQuery = (deckId: string) =>
   queryOptions({

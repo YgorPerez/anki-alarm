@@ -5,6 +5,7 @@ import {
   newAlarm,
   resolveChange,
   signInPlan,
+  syncSlot,
   stampAlarm,
   type SyncChange,
   type Note,
@@ -113,6 +114,26 @@ describe("resolveChange", () => {
   test("reviews only append: a review already stored is never replaced", () => {
     expect(resolveChange(undefined, review)).toEqual(review);
     expect(resolveChange(review, review)).toBeUndefined();
+  });
+
+  test("alarm journal events only append, in their own slot by event id", () => {
+    const event: SyncChange = {
+      kind: "alarmEvent",
+      event: {
+        id: "event",
+        kind: "ringStarted",
+        alarmId: "alarm",
+        ringId: "ring",
+        wallTime: 10,
+        elapsedRealtime: 5,
+      },
+    };
+    expect(syncSlot(event)).toEqual({ kind: "alarmEvent", id: "event" });
+    expect(resolveChange(undefined, event)).toEqual(event);
+    expect(resolveChange(event, event)).toBeUndefined();
+    expect(
+      resolveChange(event, { kind: "alarmEvent", event: { ...event.event, wallTime: 99 } }),
+    ).toBeUndefined();
   });
 });
 

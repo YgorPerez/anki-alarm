@@ -128,6 +128,10 @@ interface Data extends Engine {
   setAutoSyncBack: (on: boolean) => Effect.Effect<void, Error>;
   alarms: Effect.Effect<Alarm[], Error>;
   saveAlarm: (alarm: Alarm) => Effect.Effect<void, Error>;
+  /**
+   * Stores native's journal events not stored yet, each queued to sync (append-only, like
+   * reviews). Draining the same events again changes nothing.
+   */
   ingestEvents: (events: readonly AlarmEvent[]) => Effect.Effect<void, Error>;
   events: Effect.Effect<AlarmEvent[], Error>;
   settings: Effect.Effect<Settings, Error>;
@@ -361,12 +365,24 @@ async function open(driver: SQLiteConnection, media: MediaFiles): Promise<Data> 
     ingestEvents: (events) =>
       serial(() =>
         transaction(alarmSql, async () => {
-          for (const event of events)
+          const known = new Set(
+            (await alarmDb.select({ id: alarmEvents.id }).from(alarmEvents)).map((r) => r.id),
+          );
+          let added = 0;
+          for (const event of events) {
+            if (known.has(event.id)) continue;
+            known.add(event.id);
+            added += 1;
+            await alarmDb.insert(alarmEvents).values({ id: event.id, data: event });
             await alarmDb
-              .insert(alarmEvents)
-              .values({ id: event.id, data: event })
-              .onConflictDoNothing();
+              .insert(outbox)
+              .values({ kind: "alarmEvent", recordId: event.id, body: event });
+          }
+          return added;
         }),
+      ).pipe(
+        // New events are a local write: the sync scheduler hears them.
+        Effect.flatMap((added) => Effect.sync(() => (added > 0 ? notify() : undefined))),
       ),
     events: serial(async () =>
       (

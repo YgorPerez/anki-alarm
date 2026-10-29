@@ -1,69 +1,25 @@
 import type { Meta, StoryObj } from "@storybook/react-native";
-import { FACTORY_THEME, themeFor, type RetentionRow } from "@app/core";
+import { FACTORY_THEME, themeFor } from "@app/core";
 import { View } from "react-native";
 import { ScopedTheme } from "uniwind";
-import { CountChart, GradeChart, GradeLegend, RetentionTable } from "./StatsCharts.tsx";
-import { statsCopy } from "./stats-copy.ts";
+import { statsCopy } from "@app/stats-ui";
+import { sampleCharts, sampleRetention } from "@app/stats-ui/fixtures";
+import { GradeLegend, RetentionTable, StatsChart } from "./StatsCharts.tsx";
 
 const light = themeFor(FACTORY_THEME, "light");
 const dark = themeFor(FACTORY_THEME, "dark");
-// A month of answers that grows toward today, deterministic so the story looks the same each time.
-const month = Array.from({ length: 30 }, (_, i) => ({
-  x: i - 29,
-  again: (i * 7) % 5,
-  hard: (i * 3) % 4,
-  good: 6 + ((i * 5) % 9) + Math.floor(i / 3),
-  easy: (i * 11) % 6,
-}));
-const forecast = (fill: string) =>
-  Array.from({ length: 30 }, (_, day) => ({
-    x: day,
-    n: day === 0 ? 24 : Math.max(0, 18 - day + ((day * 7) % 6)),
-    fill,
-  }));
-const tally = (passed: number, failed: number) => ({
-  passed,
-  failed,
-  rate: passed + failed ? passed / (passed + failed) : null,
-});
-const retention: RetentionRow[] = (
-  [
-    ["today", 12, 2, 30, 1],
-    ["yesterday", 9, 3, 27, 2],
-    ["week", 70, 14, 190, 12],
-    ["month", 290, 51, 820, 49],
-    ["year", 2400, 420, 7100, 380],
-    ["all", 2600, 450, 7300, 390],
-  ] as const
-).map(([period, yp, yf, mp, mf]) => ({
-  period,
-  young: tally(yp, yf),
-  mature: tally(mp, mf),
-  total: tally(yp + mp, yf + mf),
-}));
 
 function Gallery({ mode, locale }: { mode: "light" | "dark"; locale: "pt-BR" | "en" }) {
   const theme = mode === "dark" ? dark : light;
   const t = statsCopy(locale);
+  const charts = sampleCharts(t);
   return (
     <ScopedTheme theme={mode}>
       <View style={{ flex: 1, gap: 24, padding: 24, backgroundColor: theme.background }}>
-        <GradeChart
-          label={t("reviews")}
-          rows={month}
-          format={(day) => (day === 0 ? t("today") : String(day))}
-          theme={theme}
-          locale={locale}
-        />
+        <StatsChart chart={charts.reviews} theme={theme} locale={locale} />
         <GradeLegend t={t} theme={theme} />
-        <CountChart
-          label={t("forecast")}
-          rows={forecast(theme.primary)}
-          format={(day) => (day === 0 ? t("today") : `+${day}`)}
-          theme={theme}
-          locale={locale}
-        />
-        <RetentionTable rows={retention} t={t} />
+        <StatsChart chart={charts.forecast} theme={theme} locale={locale} />
+        <RetentionTable table={sampleRetention(t)} />
       </View>
     </ScopedTheme>
   );

@@ -1,4 +1,6 @@
 import type {
+  Alarm,
+  AlarmEvent,
   CollectionCommand,
   CollectionState,
   Grade,
@@ -19,6 +21,10 @@ export interface Operations {
   setTheme: [[patch: Partial<ThemeChoice>], Settings];
   collection: [[], CollectionState];
   reviewLog: [[], LogEntry[]];
+  /** The account's alarms, synced from the phone, to name them in wake-up stats. */
+  alarms: [[], Alarm[]];
+  /** The phones' alarm journals, synced append-only. */
+  events: [[], AlarmEvent[]];
   pendingChanges: [[], PendingChange[]];
   /** A review from the web, for a card in the deck's study queue now. */
   answerCard: [[cardId: string, grade: Grade, durationMs: number], LogEntry];

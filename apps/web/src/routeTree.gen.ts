@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as BrowseRouteImport } from './routes/browse'
 import { Route as DeckRouteImport } from './routes/deck'
 import { Route as NoteTypesRouteImport } from './routes/note-types'
+import { Route as StatsRouteImport } from './routes/stats'
 import { Route as StudyRouteImport } from './routes/study'
 import { Route as SettingsThemeRouteImport } from './routes/settings/theme'
 
@@ -36,6 +37,11 @@ const NoteTypesRoute = NoteTypesRouteImport.update({
   path: '/note-types',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StatsRoute = StatsRouteImport.update({
+  id: '/stats',
+  path: '/stats',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StudyRoute = StudyRouteImport.update({
   id: '/study',
   path: '/study',
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/browse': typeof BrowseRoute
   '/deck': typeof DeckRoute
   '/note-types': typeof NoteTypesRoute
+  '/stats': typeof StatsRoute
   '/study': typeof StudyRoute
   '/settings/theme': typeof SettingsThemeRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/browse': typeof BrowseRoute
   '/deck': typeof DeckRoute
   '/note-types': typeof NoteTypesRoute
+  '/stats': typeof StatsRoute
   '/study': typeof StudyRoute
   '/settings/theme': typeof SettingsThemeRoute
 }
@@ -69,21 +77,36 @@ export interface FileRoutesById {
   '/browse': typeof BrowseRoute
   '/deck': typeof DeckRoute
   '/note-types': typeof NoteTypesRoute
+  '/stats': typeof StatsRoute
   '/study': typeof StudyRoute
   '/settings/theme': typeof SettingsThemeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/browse' | '/deck' | '/note-types' | '/study' | '/settings/theme'
+    | '/'
+    | '/browse'
+    | '/deck'
+    | '/note-types'
+    | '/stats'
+    | '/study'
+    | '/settings/theme'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/browse' | '/deck' | '/note-types' | '/study' | '/settings/theme'
+  to:
+    | '/'
+    | '/browse'
+    | '/deck'
+    | '/note-types'
+    | '/stats'
+    | '/study'
+    | '/settings/theme'
   id:
     | '__root__'
     | '/'
     | '/browse'
     | '/deck'
     | '/note-types'
+    | '/stats'
     | '/study'
     | '/settings/theme'
   fileRoutesById: FileRoutesById
@@ -93,6 +116,7 @@ export interface RootRouteChildren {
   BrowseRoute: typeof BrowseRoute
   DeckRoute: typeof DeckRoute
   NoteTypesRoute: typeof NoteTypesRoute
+  StatsRoute: typeof StatsRoute
   StudyRoute: typeof StudyRoute
   SettingsThemeRoute: typeof SettingsThemeRoute
 }
@@ -127,6 +151,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NoteTypesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stats': {
+      id: '/stats'
+      path: '/stats'
+      fullPath: '/stats'
+      preLoaderRoute: typeof StatsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/study': {
       id: '/study'
       path: '/study'
@@ -149,6 +180,7 @@ const rootRouteChildren: RootRouteChildren = {
   BrowseRoute: BrowseRoute,
   DeckRoute: DeckRoute,
   NoteTypesRoute: NoteTypesRoute,
+  StatsRoute: StatsRoute,
   StudyRoute: StudyRoute,
   SettingsThemeRoute: SettingsThemeRoute,
 }

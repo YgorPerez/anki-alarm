@@ -1,7 +1,7 @@
 // The phone in the journeys: the real client-data service on Node's SQLite, signed in to the dev
 // Worker with an unsigned ID token as Android's account picker would give one, syncing through the
 // contract's client with its session cookie, as apps/mobile does.
-import type { Collection } from "@app/core";
+import type { Alarm, AlarmEvent, Collection } from "@app/core";
 import { makeSyncClient } from "@app/contracts";
 import { Effect } from "effect";
 
@@ -30,6 +30,9 @@ export async function phone(email: string) {
     /** Changes the collection, as the phone's editor does. */
     edit: (command: (collection: Collection) => void) => run(data.changeCollection(command)),
     sync: () => run(data.sync(client)),
+    /** Drains native's alarm journal and saves an alarm, as the phone does after a ring. */
+    rang: (alarm: Alarm, events: readonly AlarmEvent[]) =>
+      run(Effect.andThen(data.saveAlarm(alarm), data.ingestEvents(events))),
     reviewLog: () => run(data.reviewLog),
     deckNames: async () => (await run(data.collection)).decks.map((d) => d.fields.name.value),
   };
