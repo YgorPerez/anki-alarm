@@ -13,7 +13,7 @@ compatibility_flags = ["nodejs_compat"]
 binding = "DB"
 database_name = "app-sync"
 # Replace with the id `wrangler d1 create app-sync` prints. Local dev and tests ignore it.
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "aa5dc369-85e4-40ff-8de8-259b3ca5f297"
 migrations_dir = "migrations"
 
 # Media files by SHA-256, stored once for every user. Create it with
