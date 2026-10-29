@@ -61,7 +61,7 @@ test("the web shows the phone's study and wake-up stats once its journal syncs",
   const { user } = await renderRoute("/");
   await user.click(await screen.findByRole("button", { name: "Entrar com o Google" }));
   await within(await screen.findByRole("list", { name: "Baralhos" })).findByRole("link", {
-    name: /Palavras/,
+    name: /^Palavras/,
   });
   await user.click(screen.getByRole("link", { name: "Estatísticas" }));
 
