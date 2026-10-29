@@ -88,6 +88,10 @@ test("a stored session merges the device's first account and syncs it", async ()
   const { data, sync } = await signedIn(server, ana);
 
   expect(sync.state()).toMatchObject({ kind: "signedIn", user: ana });
+  // The panel's media line reads what the last sync did with files.
+  await vi.waitFor(() =>
+    expect(sync.state()).toMatchObject({ media: { storageRefused: false, missing: 0 } }),
+  );
   expect(await run(data.syncAccount)).toBe("ana");
   expect(server.stored("ana").some((change) => change.kind === "settings")).toBe(true);
 });

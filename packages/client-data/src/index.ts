@@ -15,6 +15,7 @@ import { memoryMediaFiles, type MediaFiles } from "./media.ts";
 export { syncScheduler, type SyncScheduler, type SyncStatus } from "./scheduler.ts";
 export {
   accountSync,
+  mediaNotice,
   type Account,
   type AccountData,
   type AccountState,

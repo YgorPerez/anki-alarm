@@ -49,6 +49,12 @@ const messages = {
     syncNow: "Sincronizar agora",
     signOut: "Sair",
     signOutNote: "Ao sair, seus dados continuam neste navegador.",
+    mediaHeld:
+      "Algumas imagens ou áudios não foram enviados. As notas que os usam sincronizam depois.",
+    mediaMissing:
+      "Faltam {count} arquivos de mídia neste navegador. Eles chegam na próxima sincronização.",
+    mediaRefused:
+      "Este navegador não deixou guardar as imagens e áudios dos baralhos. Libere espaço ou saia da janela anônima e sincronize de novo.",
     syncing: "Sincronizando…",
     synced: "Sincronizado às {time}",
     notSynced: "Ainda não sincronizado.",
@@ -105,6 +111,10 @@ const messages = {
     syncNow: "Sync now",
     signOut: "Sign out",
     signOutNote: "Signing out keeps your data in this browser.",
+    mediaHeld: "Some images or sounds didn't upload. The notes that use them sync later.",
+    mediaMissing: "{count} media files are missing in this browser. They arrive on the next sync.",
+    mediaRefused:
+      "This browser wouldn't store your decks' images and sounds. Free up space or leave private browsing, then sync again.",
     syncing: "Syncing…",
     synced: "Synced at {time}",
     notSynced: "Not synced yet.",

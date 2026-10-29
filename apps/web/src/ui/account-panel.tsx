@@ -1,4 +1,4 @@
-import type { AccountState } from "@app/client-data";
+import { mediaNotice, type AccountState } from "@app/client-data";
 import type { Locale } from "@app/core";
 
 import { copy, type T } from "#/copy.ts";
@@ -21,6 +21,12 @@ const syncLine = ({ sync }: Extract<AccountState, { kind: "signedIn" }>, locale:
     // react-doctor-disable-next-line react-doctor/no-locale-format-in-render -- Only the browser renders a signed-in state; the server renders loading.
     time: at.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }),
   });
+};
+
+/** What the last sync couldn't do with media files, if anything. */
+const mediaLine = ({ media }: Extract<AccountState, { kind: "signedIn" }>, t: T) => {
+  const notice = mediaNotice(media);
+  return notice && t(notice.key, { count: String(notice.count) });
 };
 
 /** Sign in with Google, the merge question, sync status and sign out. */
@@ -81,6 +87,9 @@ export function AccountPanel({ locale }: { locale: Locale }) {
           <p role="status" className="text-body text-muted-foreground">
             {syncLine(state, locale, t)}
           </p>
+          {mediaLine(state, t) !== null && (
+            <p className="text-body text-attention">{mediaLine(state, t)}</p>
+          )}
           <div className="flex flex-wrap gap-3">
             {state.sync.kind === "signedOut" ? (
               <Button size="lg" onClick={() => void webSync()?.signIn()}>

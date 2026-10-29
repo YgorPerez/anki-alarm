@@ -36,6 +36,15 @@ export type AccountState =
   /** `media` is what the last sync did with media files, until the first one ends. */
   | { kind: "signedIn"; user: AccountUser; sync: SyncStatus; media: MediaSyncResult | null };
 
+/** The media problem a sync left, worst first, as a copy key: null when files all moved. */
+export function mediaNotice(media: MediaSyncResult | null) {
+  if (!media) return null;
+  if (media.storageRefused) return { key: "mediaRefused", count: 0 } as const;
+  if (media.heldBack > 0) return { key: "mediaHeld", count: media.heldBack } as const;
+  if (media.missing > 0) return { key: "mediaMissing", count: media.missing } as const;
+  return null;
+}
+
 export function accountSync({
   account,
   data,
