@@ -23,3 +23,7 @@ vi.mock("../src/auth.ts", async () => {
   const { fakeAccount } = await import("./account.ts");
   return { webAccount: fakeAccount };
 });
+vi.mock("../src/download.ts", async () => {
+  const { downloads } = await import("./downloads.ts");
+  return { download: (name: string, bytes: Uint8Array) => downloads.push({ name, bytes }) };
+});

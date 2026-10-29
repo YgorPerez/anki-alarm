@@ -2,7 +2,13 @@
 import { expect, test } from "vite-plus/test";
 import {
   Collection,
+  editedNoteType,
+  editedValues,
+  basicField,
+  noteDraft,
+  noteTypeChoices,
   noteTypeEditOf,
+  readDueDays,
   noteTypeImpact,
   noteTypeProblems,
   renderCard,
@@ -90,17 +96,25 @@ test("renaming a field rewrites its references in every template syntax", () => 
       },
     ],
   });
-  c.editNoteType(typeId, {
+  const rename: NoteTypeEdit = {
     ...noteTypeEditOf(typeOf(c.snapshot(), typeId)),
     fields: [
       { name: "Term", from: 0 },
       { name: "Meaning", from: 1 },
       { name: "Reading", from: 2 },
     ],
-  });
-  expect(typeOf(c.snapshot(), typeId).fields.templates.value[0]!.front).toBe(
+  };
+  // The preview shows the type as saving will leave it.
+  const preview = editedNoteType(typeOf(c.snapshot(), typeId), rename);
+  c.editNoteType(typeId, rename);
+  const saved = typeOf(c.snapshot(), typeId);
+  expect(saved.fields.templates.value[0]!.front).toBe(
     "{{#Term}}{{Term}} {{text:Term}} {{ Term }}{{/Term}}{{^Term}}-{{/Term}}{{Wordy}}",
   );
+  expect(preview.fields.templates.value).toEqual(saved.fields.templates.value);
+  expect(preview.fields.fieldNames.value).toEqual(saved.fields.fieldNames.value);
+  const moved = { ...rename, fields: [{ name: "x", from: 1 }, { name: "y" }] };
+  expect(editedValues([{ value: "a" }, { value: "b" }], moved)).toEqual(["b", ""]);
 });
 
 test("a removed field drops its values; the preview of the impact counts them first", () => {
@@ -308,6 +322,29 @@ test("editing a cloze note adds a card for each new cloze number and keeps the o
     fields: [{ name: "Text", from: 0 }, { name: "Extra", from: 1 }, { name: "Source" }],
   });
   expect(c.snapshot().notes.find((n) => n.id === note.id)!.values).toHaveLength(3);
+});
+
+test("note editors offer the collection's note types, or Basic in an empty one", () => {
+  const { c, typeId } = vocabulary();
+  expect(noteTypeChoices(c.snapshot().noteTypes)).toEqual([
+    { id: typeId, name: "Vocabulary", fieldNames: ["Word", "Meaning", "Reading"] },
+  ]);
+  const [basic] = noteTypeChoices([]);
+  expect(basic).toEqual({ id: "", name: "Basic", fieldNames: ["Front", "Back"] });
+  expect(basicField(basic!, "Back")).toBe("back");
+  expect(basicField({ id: typeId, name: "Vocabulary", fieldNames: [] }, "Front")).toBeUndefined();
+  const { note, deckId } = vocabulary();
+  expect(noteDraft(noteTypeChoices(c.snapshot().noteTypes), note, deckId).draft).toEqual({
+    noteTypeId: typeId,
+    deckId,
+    values: ["水", "water", "みず"],
+  });
+  expect(noteDraft([], undefined, deckId)).toEqual({
+    type: basic,
+    draft: { noteTypeId: "", deckId, values: ["", ""] },
+  });
+  expect(readDueDays(" 7 ")).toBe(7);
+  for (const text of ["", "-1", "1.5", "36501", "x"]) expect(readDueDays(text)).toBeUndefined();
 });
 
 test("deleting notes deletes their cards", () => {

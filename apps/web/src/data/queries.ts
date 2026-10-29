@@ -30,6 +30,12 @@ export const decksQuery = queryOptions({
   },
 });
 
+/** The whole collection and log, for the editor: decks, notes, note types and card states. */
+export const collectionQuery = queryOptions({
+  queryKey: ["collection"],
+  queryFn: snapshot,
+});
+
 /** A study session's data; `started` times the answer to the card on screen. */
 export const studyQuery = (deckId: string) =>
   queryOptions({

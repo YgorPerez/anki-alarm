@@ -34,7 +34,7 @@ test("a study session on the web reaches the phone", async ({ page }) => {
   await page.goto("/?lang=en");
   await signIn(page, "ana@example.com");
   await synced(page);
-  const deck = page.getByRole("link", { name: /Palavras/ });
+  const deck = page.getByRole("link", { name: /^Palavras/ });
   await expect(deck).toContainText("2 due today");
 
   await deck.click();
@@ -75,7 +75,7 @@ test("studying offline keeps the reviews and syncs them when back online", async
   await context.setOffline(true);
   await page.reload();
   await expect(page.getByText("Signed in as bia@example.com")).toBeVisible();
-  await page.getByRole("link", { name: /Verbos/ }).click();
+  await page.getByRole("link", { name: /^Verbos/ }).click();
   await study(page, ["Hard", "Good"]);
   await page.getByRole("link", { name: "Back" }).click();
   await expect(page.getByText("No connection. Your reviews are kept and sync later.")).toBeVisible({
@@ -96,11 +96,11 @@ test("a second account asks before merging this browser's data, and cancel keeps
   await page.goto("/?lang=en");
   await signIn(page, "caio@example.com");
   await synced(page);
-  await expect(page.getByRole("link", { name: /Caio's deck/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Caio's deck/ })).toBeVisible();
 
   await page.getByRole("button", { name: "Sign out" }).click();
   // Signing out keeps this browser's data.
-  await expect(page.getByRole("link", { name: /Caio's deck/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Caio's deck/ })).toBeVisible();
   await signIn(page, "dani@example.com");
   await expect(page.getByText("This isn't the account last used in this browser")).toBeVisible();
   await page.getByRole("button", { name: "Cancel" }).click();
@@ -111,8 +111,8 @@ test("a second account asks before merging this browser's data, and cancel keeps
   await signIn(page, "dani@example.com");
   await page.getByRole("button", { name: "Merge into this account" }).click();
   await synced(page);
-  await expect(page.getByRole("link", { name: /Dani's deck/ })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Caio's deck/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Dani's deck/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Caio's deck/ })).toBeVisible();
   await dani.sync();
   expect(new Set(await dani.deckNames())).toEqual(new Set(["Dani's deck", "Caio's deck"]));
   // The first account only ever gets its own data.

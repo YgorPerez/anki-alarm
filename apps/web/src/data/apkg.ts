@@ -2,6 +2,7 @@
 import type { ClientData, ImportSummary, MediaFiles } from "@app/client-data";
 import {
   apkgFileName,
+  packageEntries,
   readApkg,
   writeApkg,
   type AnkiDatabase,
@@ -35,12 +36,7 @@ export function apkgOperations(data: ClientData["Service"], files: ApkgFiles) {
     importApkg: async (bytes: Uint8Array): Promise<ImportSummary> => {
       const zip = unzipSync(bytes);
       const { package: source, media } = await readApkg({
-        entries: Object.keys(zip),
-        read: async (entry) => {
-          const content = zip[entry];
-          if (!content) throw new Error(`Missing package entry ${entry}`);
-          return content;
-        },
+        ...packageEntries(zip),
         decompressZstd: (compressed) => decompress(compressed),
         openSqlite: files.sqlite.open,
       });

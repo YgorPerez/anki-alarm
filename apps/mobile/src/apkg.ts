@@ -1,6 +1,7 @@
 import type { ImportSummary } from "@app/client-data";
 import {
   apkgFileName,
+  packageEntries,
   readApkg,
   readApkgMedia,
   writeApkg,
@@ -41,14 +42,8 @@ async function pickPackage(): Promise<Uint8Array | undefined> {
 
 /** The package's zip entries and zstd, held in memory: one unzip path for records and media. */
 export function unzipped(bytes: Uint8Array): Omit<ApkgHost, "openSqlite"> {
-  const zip = unzipSync(bytes);
   return {
-    entries: Object.keys(zip),
-    read: async (entry) => {
-      const content = zip[entry];
-      if (!content) throw new Error(`Missing package entry ${entry}`);
-      return content;
-    },
+    ...packageEntries(unzipSync(bytes)),
     decompressZstd: (compressed) => decompress(compressed),
   };
 }

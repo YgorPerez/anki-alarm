@@ -130,6 +130,11 @@ export function dueInDays(days: number, now: number, hour = 4): number {
   date.setDate(date.getDate() + days);
   return date.getTime();
 }
+/** The days a Set due date form holds: a whole number from 0 to 36500, else undefined. */
+export function readDueDays(text: string): number | undefined {
+  const value = /^\d+$/.test(text.trim()) ? Number(text.trim()) : Number.NaN;
+  return value <= 36_500 ? value : undefined;
+}
 /** New cards come in creation order; a reset moves a card behind the untouched ones. */
 export function newPosition(card: Card, log: readonly LogEntry[], voided: ReadonlySet<string>) {
   return Math.max(

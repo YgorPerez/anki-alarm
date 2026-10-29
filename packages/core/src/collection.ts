@@ -11,12 +11,7 @@ import {
 } from "./ankidroid.ts";
 import { cardId, importId, uuid7 } from "./ids.ts";
 import { isLanguageTag } from "./locale.ts";
-import {
-  fieldRenames,
-  noteTypeProblems,
-  renameFieldReferences,
-  type NoteTypeEdit,
-} from "./note-types.ts";
+import { editedNoteType, editedValues, noteTypeProblems, type NoteTypeEdit } from "./note-types.ts";
 import { studyDayStart, type LogEntry } from "./study.ts";
 
 /** FSRS-6's default weights, which every new preset starts from. */
@@ -439,29 +434,11 @@ export class Collection {
   editNoteType(id: string, edit: NoteTypeEdit) {
     const type = this.state.noteTypes.find((t) => t.id === id);
     if (!type || noteTypeProblems(type, edit).length) throw new Error("Invalid note type");
-    const renames = fieldRenames(type, edit);
     const fields = type.fields;
-    const update = <K extends "name" | "fieldNames" | "templates" | "css">(
-      key: K,
-      value: NoteType["fields"][K]["value"],
-    ) => {
-      if (!same(fields[key].value, value))
-        Object.assign(fields, { [key]: { value, hlc: this.tick() } });
-    };
-    update("name", edit.name.trim());
-    update(
-      "fieldNames",
-      edit.fields.map((f) => f.name.trim()),
-    );
-    update(
-      "templates",
-      edit.templates.map((t) => ({
-        name: t.name.trim(),
-        front: renameFieldReferences(t.front, renames),
-        back: renameFieldReferences(t.back, renames),
-      })),
-    );
-    update("css", edit.css);
+    const next = editedNoteType(type, edit).fields;
+    for (const key of ["name", "fieldNames", "templates", "css"] as const)
+      if (!same(fields[key].value, next[key].value))
+        Object.assign(fields, { [key]: { value: next[key].value, hlc: this.tick() } });
     if (type.anki) {
       const fieldIds = follow(type.anki.fieldIds, edit.fields);
       const templateIds = follow(type.anki.templateIds, edit.templates);
@@ -471,8 +448,7 @@ export class Collection {
     const notes = this.state.notes.filter((n) => n.fields.noteTypeId.value === id);
     for (const note of notes) {
       const before = note.values;
-      note.values = edit.fields.map(({ from }, i) => {
-        const value = from === undefined ? "" : (before[from]?.value ?? "");
+      note.values = editedValues(before, edit).map((value, i) => {
         const kept = before[i];
         return kept?.value === value ? kept : { value, hlc: this.tick() };
       });

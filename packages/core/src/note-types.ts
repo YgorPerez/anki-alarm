@@ -1,4 +1,4 @@
-import type { CollectionState, NoteType, Template } from "./collection.ts";
+import type { CollectionState, Note, NoteType, Template } from "./collection.ts";
 
 /**
  * A note type as the web's editor saves it: fields and templates in their new order. `from` is a
@@ -78,7 +78,7 @@ export function noteTypeProblems(type: NoteType, edit: NoteTypeEdit): NoteTypePr
 /** `{{Field}}`, `{{#Field}}`, `{{/Field}}`, `{{^Field}}` and `{{filter:Field}}`. */
 const REFERENCE = /\{\{(\s*[#^/]?\s*(?:[^{}:]*:)*\s*)([^{}:]+?)(\s*)\}\}/g;
 /** A template with every reference to a renamed field following its new name. */
-export const renameFieldReferences = (template: string, renames: ReadonlyMap<string, string>) =>
+const renameFieldReferences = (template: string, renames: ReadonlyMap<string, string>) =>
   renames.size
     ? template.replace(REFERENCE, (whole, before: string, name: string, after: string) => {
         const renamed = renames.get(name);
@@ -87,13 +87,38 @@ export const renameFieldReferences = (template: string, renames: ReadonlyMap<str
     : template;
 
 /** The fields an edit renames: old name to new name. */
-export const fieldRenames = (type: NoteType, edit: NoteTypeEdit) =>
+const fieldRenames = (type: NoteType, edit: NoteTypeEdit) =>
   new Map(
     edit.fields.flatMap(({ name, from }) => {
       const old = from === undefined ? undefined : type.fields.fieldNames.value[from];
       return old !== undefined && old !== name.trim() ? [[old, name.trim()] as const] : [];
     }),
   );
+
+/** The note type as the edit would leave it, for a preview before saving. */
+export function editedNoteType(type: NoteType, edit: NoteTypeEdit): NoteType {
+  const renames = fieldRenames(type, edit);
+  const field = <T>(value: T) => ({ value, hlc: type.fields.name.hlc });
+  return {
+    ...type,
+    fields: {
+      ...type.fields,
+      name: field(edit.name.trim()),
+      fieldNames: field(edit.fields.map((f) => f.name.trim())),
+      templates: field(
+        edit.templates.map((t) => ({
+          name: t.name.trim(),
+          front: renameFieldReferences(t.front, renames),
+          back: renameFieldReferences(t.back, renames),
+        })),
+      ),
+      css: field(edit.css),
+    },
+  };
+}
+/** A note's values moved to the fields of an edit, new fields empty. */
+export const editedValues = (values: readonly { value: string }[], edit: NoteTypeEdit) =>
+  edit.fields.map(({ from }) => (from === undefined ? "" : (values[from]?.value ?? "")));
 
 export function noteTypeImpact(
   state: CollectionState,
@@ -117,3 +142,46 @@ export function noteTypeImpact(
   const added = edit.templates.filter((t) => t.from === undefined).length;
   return { notes: notes.length, valuesLost, cardsAdded: added * notes.length, cardsRemoved };
 }
+
+/** A note type a new note can take: its id (empty for Basic, made on first use) and fields. */
+export interface NoteTypeChoice {
+  id: string;
+  name: string;
+  fieldNames: string[];
+}
+const BASIC: NoteTypeChoice = { id: "", name: "Basic", fieldNames: ["Front", "Back"] };
+/** The note types a note editor offers; Basic when the collection has none yet. */
+export const noteTypeChoices = (types: readonly NoteType[]): NoteTypeChoice[] =>
+  types.length
+    ? types.map((type) => ({
+        id: type.id,
+        name: type.fields.name.value,
+        fieldNames: type.fields.fieldNames.value,
+      }))
+    : [BASIC];
+/** What a note editor holds: the note type, the deck of the note's cards, and the values. */
+export interface NoteDraft {
+  /** Empty for Basic in a collection that has no note type yet: Core makes it. */
+  noteTypeId: string;
+  deckId: string;
+  values: string[];
+}
+/** Where a note editor starts: the note's type and values, or a new note's first type. */
+export function noteDraft(
+  choices: readonly NoteTypeChoice[],
+  note: Note | undefined,
+  deckId: string,
+): { type: NoteTypeChoice; draft: NoteDraft } {
+  const type = choices.find((c) => c.id === note?.fields.noteTypeId.value) ?? choices[0] ?? BASIC;
+  const values = type.fieldNames.map((_, i) => note?.values[i]?.value ?? "");
+  return { type, draft: { noteTypeId: type.id, deckId, values } };
+}
+/** Basic's two fields, which the apps label in the UI's language; undefined for any other. */
+export const basicField = (type: NoteTypeChoice, name: string) =>
+  type.name !== "Basic"
+    ? undefined
+    : name === "Front"
+      ? ("front" as const)
+      : name === "Back"
+        ? ("back" as const)
+        : undefined;
