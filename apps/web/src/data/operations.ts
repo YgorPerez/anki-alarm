@@ -2,8 +2,10 @@
 // database Worker runs it over OPFS; screen tests run it over Node's SQLite.
 import type { ClientData } from "@app/client-data";
 import type { SyncClient } from "@app/contracts";
+import { runCommand } from "@app/core";
 import { Effect } from "effect";
 
+import { apkgOperations, type ApkgFiles } from "./apkg.ts";
 import { WRITES, type Args, type Kind, type Operation, type Output } from "./protocol.ts";
 
 const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect);
@@ -34,8 +36,13 @@ function coalesced<A>(task: () => Promise<A>) {
   };
 }
 
-export function operations(data: ClientData["Service"], client: () => Promise<SyncClient>) {
+export function operations(
+  data: ClientData["Service"],
+  client: () => Promise<SyncClient>,
+  files: ApkgFiles,
+) {
   const sync = coalesced(async () => run(data.sync(await client())));
+  const apkg = apkgOperations(data, files);
   const handlers: { [K in Exclude<Kind, "sync">]: (...args: Args<K>) => Promise<Output<K>> } = {
     settings: () => run(data.settings),
     setTheme: (patch) => run(data.setTheme(patch)),
@@ -44,6 +51,19 @@ export function operations(data: ClientData["Service"], client: () => Promise<Sy
     pendingChanges: () => run(data.pendingChanges),
     answerCard: (cardId, grade, durationMs) => run(data.answerCard(cardId, grade, durationMs)),
     undo: (entryId) => run(data.undo(entryId)),
+    change: async (command) => {
+      let id: string | undefined;
+      await run(
+        data.changeCollection((collection) => {
+          id = runCommand(collection, command);
+        }),
+      );
+      return id;
+    },
+    forgetCard: (cardId) => run(data.forgetCard(cardId)),
+    setDueDate: (cardId, days) => run(data.setDueDate(cardId, days)),
+    importApkg: apkg.importApkg,
+    exportApkg: apkg.exportApkg,
     syncAccount: () => run(data.syncAccount),
     adoptAccount: (userId) => run(data.adoptAccount(userId)),
   };

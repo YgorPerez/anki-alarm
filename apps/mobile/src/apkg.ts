@@ -1,5 +1,6 @@
 import type { ImportSummary } from "@app/client-data";
 import {
+  apkgFileName,
   readApkg,
   readApkgMedia,
   writeApkg,
@@ -89,19 +90,10 @@ export async function exportApkg(deckId: string): Promise<string | undefined> {
   } catch {
     return undefined;
   }
-  const name = `${fileName(deck.fields.name.value)}.apkg`;
+  const name = apkgFileName(deck.fields.name.value);
   await folder.createFile(name, "application/octet-stream").write(bytes);
   return name;
 }
-/** A deck name as a file name: `::` levels joined by dashes, no path characters. */
-const fileName = (deck: string) =>
-  deck
-    .split("::")
-    .join(" - ")
-    // oxlint-disable-next-line no-control-regex -- control characters can't go in a file name.
-    .replace(/[/\\:*?"<>|\u0000-\u001f]/g, "_")
-    .trim() || "deck";
-
 /** A fresh in-memory SQLite for the collection, and media from the app's media folder. */
 function writeHost(): ApkgWriteHost {
   return {

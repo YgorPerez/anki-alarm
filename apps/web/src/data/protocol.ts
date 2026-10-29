@@ -1,5 +1,14 @@
-import type { CollectionState, Grade, LogEntry, Settings, ThemeChoice } from "@app/core";
-import type { PendingChange, SyncResult } from "@app/client-data";
+import type {
+  CollectionCommand,
+  CollectionState,
+  Grade,
+  LogEntry,
+  Settings,
+  ThemeChoice,
+} from "@app/core";
+import type { ImportSummary, PendingChange, SyncResult } from "@app/client-data";
+
+import type { ApkgExport } from "./apkg.ts";
 
 /**
  * What a tab can ask the leader's database for: each operation's arguments and result. Commands
@@ -14,6 +23,14 @@ export interface Operations {
   /** A review from the web, for a card in the deck's study queue now. */
   answerCard: [[cardId: string, grade: Grade, durationMs: number], LogEntry];
   undo: [[entryId: string], LogEntry];
+  /** An editing command; resolves with the id of the deck or note it created. */
+  change: [[command: CollectionCommand], string | undefined];
+  forgetCard: [[cardId: string], LogEntry];
+  setDueDate: [[cardId: string, days: number], LogEntry];
+  /** An `.apkg`'s bytes: media go to OPFS before the records. */
+  importApkg: [[bytes: Uint8Array], ImportSummary];
+  /** Reads only. */
+  exportApkg: [[deckId: string], ApkgExport];
   syncAccount: [[], string | null];
   adoptAccount: [[userId: string], void];
   /** One sync with the signed-in session, run by the leader for every tab. */
@@ -29,6 +46,10 @@ export const WRITES: ReadonlySet<Kind> = new Set([
   "setTheme",
   "answerCard",
   "undo",
+  "change",
+  "forgetCard",
+  "setDueDate",
+  "importApkg",
   "adoptAccount",
 ]);
 

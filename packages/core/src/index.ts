@@ -124,7 +124,7 @@ export type { ReadAloud, ReadAloudInput } from "./read-aloud.ts";
 export type { RenderInput } from "./template.ts";
 export { readApkg, readApkgMedia } from "./apkg.ts";
 export type { ApkgHost, ApkgMedia, AnkiDatabase, AnkiPackage } from "./apkg.ts";
-export { writeApkg } from "./apkg-export.ts";
+export { apkgFileName, writeApkg } from "./apkg-export.ts";
 export type { ApkgExportInput, ApkgWriteHost, WritableDatabase } from "./apkg-export.ts";
 export type { LogEntry, MemoryState, Grade } from "./study.ts";
 export { studyStats } from "./stats.ts";
