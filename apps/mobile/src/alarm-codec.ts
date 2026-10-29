@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { readAlarm } from "@app/core";
-import type { Ring } from "./alarms.ts";
+import { RING_PHASES, type Ring } from "./alarms.ts";
 
 const alarm = Schema.Struct({
   id: Schema.String,
@@ -42,7 +42,7 @@ const ring = Schema.NullOr(
     id: Schema.String,
     alarm,
     startedAt: Schema.Number,
-    phase: Schema.String,
+    phase: Schema.Literals(RING_PHASES),
     // Rings stored before #46 have no snoozes.
     snoozes: Schema.optional(Schema.Number),
     snoozedUntil: Schema.optional(Schema.NullOr(Schema.Number)),

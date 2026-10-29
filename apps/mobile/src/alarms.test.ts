@@ -6,6 +6,7 @@ import {
   memoryAlarmService,
   memoryAlarmRepository,
   alarmController,
+  type Ring,
 } from "./alarms.ts";
 
 const alarm: Alarm = {
@@ -83,7 +84,7 @@ it("persists a replayed journal once and acknowledges only after successful stor
 it("recovers the active ring on resume and dismisses only its matching ID", async () => {
   const native = memoryAlarmService();
   const controller = alarmController(memoryAlarmRepository());
-  const ring = {
+  const ring: Ring = {
     id: "ring-1",
     alarm,
     startedAt: 1000,
@@ -113,7 +114,7 @@ it("recovers the active ring on resume and dismisses only its matching ID", asyn
 it("a dismissal with an awake check leaves it pending until its own answer passes it", async () => {
   const native = memoryAlarmService();
   const controller = alarmController(memoryAlarmRepository());
-  const ring = {
+  const ring: Ring = {
     id: "ring-1",
     alarm,
     startedAt: 1000,

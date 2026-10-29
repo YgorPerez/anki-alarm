@@ -1,12 +1,14 @@
 import { Context, Effect, Layer } from "effect";
 import { RING_POLICY, type Alarm, type AlarmPermissions, type ReliabilityKind } from "@app/core";
 
+/** Where native's active ring is: sounding, in its session, or silenced by a snooze. */
+export const RING_PHASES = ["ringing", "session", "snoozed"] as const;
+export type RingPhase = (typeof RING_PHASES)[number];
 export interface Ring {
   id: string;
   alarm: Alarm;
   startedAt: number;
-  /** `ringing`, `session` or `snoozed`. */
-  phase: string;
+  phase: RingPhase;
   /** Snoozes so far in this ring: each adds its cost to N. */
   snoozes: number;
   /** When a snoozed ring rings again (epoch ms); null when not snoozed. */
