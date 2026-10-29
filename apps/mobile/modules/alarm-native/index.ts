@@ -6,6 +6,8 @@ interface NativeAlarm {
   previewSound: (sound: string) => void;
   stopPreview: () => void;
   createId: () => string;
+  /** The phone's 12/24 h setting. */
+  is24HourFormat: () => boolean;
   setAlarms: (alarms: string, policy: string) => void;
   setAppearance: (colors: string, locale: string) => void;
   list: () => string;

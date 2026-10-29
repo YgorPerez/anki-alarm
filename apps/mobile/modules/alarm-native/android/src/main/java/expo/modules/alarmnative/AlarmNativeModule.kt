@@ -23,6 +23,8 @@ class AlarmNativeModule : Module() {
     Name("AlarmNative")
     Events("onChange")
     Function("createId") { AlarmStore.uuid7() }
+    // The phone's 12/24 h setting, which the locale alone doesn't tell.
+    Function("is24HourFormat") { android.text.format.DateFormat.is24HourFormat(context) }
     OnCreate { current = this@AlarmNativeModule; AlarmService.ensureChannel(context) }
     OnDestroy { current = null; picking?.second?.resolve(null); picking = null; Sounds.stopPreview(); ReadAloud.release() }
     // Resolves with the picked sound's JSON, or null when the picker is cancelled.
