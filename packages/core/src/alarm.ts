@@ -264,3 +264,26 @@ export function nextRing(rule: AlarmRule, now: number, zone: string): number | n
   }
   return null;
 }
+
+export interface NextAlarmRing {
+  alarmId: string;
+  at: number;
+  remainingMs: number;
+}
+
+/** Earliest future ring among enabled alarms. Ties keep the input order. */
+export function nextAlarmRing(
+  alarms: readonly Alarm[],
+  now: number,
+  zone: string,
+): NextAlarmRing | null {
+  let next: NextAlarmRing | null = null;
+  for (const alarm of alarms) {
+    if (!alarm.enabled) continue;
+    const at = nextRing(alarm.rule, now, zone);
+    if (at !== null && (next === null || at < next.at)) {
+      next = { alarmId: alarm.id, at, remainingMs: at - now };
+    }
+  }
+  return next;
+}

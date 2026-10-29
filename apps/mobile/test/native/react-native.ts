@@ -88,3 +88,24 @@ export const AppState = {
 export const useColorScheme = () => "light";
 
 export const useWindowDimensions = () => ({ width: 400, height: 800, scale: 2, fontScale: 1 });
+
+/** Virtualized list host: renders supplied rows and slots without native scrolling. */
+export function FlatList<T>({
+  data,
+  renderItem,
+  ListHeaderComponent,
+  ListFooterComponent,
+}: {
+  data: readonly T[];
+  renderItem: (info: { item: T; index: number }) => ReactNode;
+  ListHeaderComponent?: ReactNode;
+  ListFooterComponent?: ReactNode;
+}) {
+  return createElement(
+    "RCTScrollView",
+    {},
+    ListHeaderComponent,
+    ...data.map((item, index) => renderItem({ item, index })),
+    ListFooterComponent,
+  );
+}

@@ -1,3 +1,4 @@
+import { HomeScreen } from "./HomeScreen.tsx";
 import { AlarmSoundSettings } from "./AlarmSoundSettings.tsx";
 import { AlarmDeckSettings } from "./AlarmDeckSettings.tsx";
 import { AlarmSnoozeSettings } from "./AlarmSnoozeSettings.tsx";
@@ -40,23 +41,20 @@ import {
   type ReactNode,
 } from "react";
 import { ScreenActivity } from "./screen-activity.ts";
-import { useRouter, useIsFocused, useFocusEffect } from "expo-router";
+import { useRouter, useIsFocused, useLocalSearchParams } from "expo-router";
 import { NavigationGate } from "./NavigationGate.tsx";
 import { SettingsScreen } from "./SettingsScreen.tsx";
-import type { ListRenderItemInfo } from "react-native";
 import {
   Alert,
   AppState,
-  BackHandler,
   Pressable,
-  FlatList,
-  Switch,
+  ScrollView,
   Text,
   TextInput,
   View,
   useColorScheme,
 } from "react-native";
-import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { copy } from "./copy.ts";
 import { AlarmService, alarmController, type AwakeCheck, type Ring } from "./alarms.ts";
 import { androidAlarmService, native } from "./alarm-android.ts";
@@ -78,24 +76,21 @@ const repository = {
 
 const RuntimeContext = createContext<{
   alarms: ReactNode;
-  cancelEditing: (() => void) | null;
+  editor: (id: string) => ReactNode;
   reliability: (onExit: () => void) => ReactNode;
 } | null>(null);
 function RuntimeProvider({
   alarms,
-  cancelEditing,
+  editor,
   reliability,
   children,
 }: {
   alarms: ReactNode;
-  cancelEditing: (() => void) | null;
+  editor: (id: string) => ReactNode;
   reliability: (onExit: () => void) => ReactNode;
   children: ReactNode;
 }) {
-  const value = useMemo(
-    () => ({ alarms, cancelEditing, reliability }),
-    [alarms, cancelEditing, reliability],
-  );
+  const value = useMemo(() => ({ alarms, editor, reliability }), [alarms, editor, reliability]);
   return <RuntimeContext value={value}>{children}</RuntimeContext>;
 }
 function useRuntime() {
@@ -104,18 +99,11 @@ function useRuntime() {
   return runtime;
 }
 export function AlarmsRoute() {
-  const { alarms, cancelEditing } = useRuntime();
-  useFocusEffect(
-    useCallback(() => {
-      if (!cancelEditing) return undefined;
-      const back = BackHandler.addEventListener("hardwareBackPress", () => {
-        cancelEditing();
-        return true;
-      });
-      return () => back.remove();
-    }, [cancelEditing]),
-  );
-  return alarms;
+  return useRuntime().alarms;
+}
+export function AlarmEditorRoute() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  return useRuntime().editor(id);
 }
 export function ReliabilityRoute() {
   const router = useRouter();
@@ -199,14 +187,12 @@ function Home({ children }: { children: ReactNode }) {
   const confirmedSettings = new Set(confirmedList);
   const [ring, setRing] = useState<Ring | null>(null);
   const [awakeCheck, setAwakeCheck] = useState<AwakeCheck | null>(null);
-  const [editing, setEditing] = useState<Alarm | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
     void initializeTheme().catch(() => setError(copy(locale)("error")));
   }, [locale]);
   const [permissions, setPermissions] = useState(() => native.getPermissions());
   const t = copy(locale);
-  const insets = useSafeAreaInsets();
   const theme = useThemeChoice();
   useEffect(() => {
     const dark = themeFor(theme, "dark");
@@ -264,34 +250,28 @@ function Home({ children }: { children: ReactNode }) {
     void client.invalidateQueries({ queryKey: ["alarms"] }).finally(() => setRefreshing(false));
   }, [client]);
   const save = useCallback(
-    (alarm: Alarm) => {
+    (alarm: Alarm, onSuccess?: () => void) => {
       void run(controller.save(alarm))
         .then(() => {
           void client.invalidateQueries({ queryKey: ["alarms"] });
-          setEditing(null);
           setError("");
+          onSuccess?.();
         })
         .catch(() => setError(copy(locale)("alarmError")));
     },
-    [controller, locale, client, setEditing],
+    [controller, locale, client],
   );
   const remove = useCallback(
-    (alarmId: string) => {
+    (alarmId: string, onSuccess?: () => void) => {
       void run(controller.remove(alarmId))
         .then(() => {
           void client.invalidateQueries({ queryKey: ["alarms"] });
-          setEditing(null);
           setError("");
+          onSuccess?.();
         })
         .catch(() => setError(copy(locale)("alarmError")));
     },
-    [controller, locale, client, setEditing],
-  );
-  const renderAlarm = useCallback(
-    ({ item }: ListRenderItemInfo<Alarm>) => (
-      <AlarmRow alarm={item} locale={locale} onEdit={setEditing} onSave={save} />
-    ),
-    [locale, save, setEditing],
+    [controller, locale, client],
   );
   // After each alarm session and awake check: its reviews reach the other devices.
   const afterAlarm = () => {
@@ -341,63 +321,56 @@ function Home({ children }: { children: ReactNode }) {
     </ScopedTheme>
   ) : null;
 
+  const collectionQuery = useQuery({
+    queryKey: ["collection"],
+    queryFn: () => Effect.runPromise(localData((data) => data.collection)),
+  });
+  const [use24Hour, setUse24Hour] = useState(() => native.is24HourFormat());
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") setUse24Hour(native.is24HourFormat());
+    });
+    return () => subscription.remove();
+  }, []);
   const alarmsContent = (
-    <View className="flex-1 bg-background" style={{ paddingBottom: insets.bottom }}>
-      <FlatList
-        contentContainerStyle={{ padding: 24, gap: 20 }}
-        data={editing ? [] : alarms}
-        refreshing={refreshing}
-        onRefresh={pullToRefresh}
-        keyExtractor={(alarm) => alarm.id}
-        renderItem={renderAlarm}
-        ListHeaderComponent={
-          <View className="gap-4">
-            <Text className="text-title font-bold text-foreground">{t("alarms")}</Text>
-            {!reliabilityChecklist(permissions, confirmedSettings).ready && (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => router.push("/settings/reliability")}
-                className="min-h-12 flex-row items-center justify-between gap-4 rounded-lg bg-surface p-4"
-              >
-                <Text className="shrink text-body text-attention">
-                  {reliabilityCopy(locale)("atRisk")}
-                </Text>
-                <Text className="text-body font-bold text-primary-ink">
-                  {reliabilityCopy(locale)("fix")}
-                </Text>
-              </Pressable>
-            )}
-            {editing ? (
-              <AlarmEditor
-                alarm={editing}
-                locale={locale}
-                onSave={save}
-                onCancel={() => setEditing(null)}
-                saved={alarms.some((a) => a.id === editing.id)}
-                onDelete={remove}
-              />
-            ) : (
-              <>
-                <Pressable
-                  accessibilityRole="button"
-                  className="rounded-pill bg-primary p-4"
-                  onPress={() => setEditing(newAlarm(native.createId()))}
-                >
-                  <Text className="text-body text-primary-foreground">{t("add")}</Text>
-                </Pressable>
-              </>
-            )}
-          </View>
-        }
-        ListFooterComponent={
-          <View className="gap-4">
-            <Text accessibilityRole="alert" className="text-body text-attention">
-              {error || (alarmsQuery.isError ? t("alarmError") : "")}
+    <HomeScreen
+      alarms={alarms}
+      decks={(collectionQuery.data?.decks ?? []).map((deck) => ({
+        id: deck.id,
+        name: deck.fields.name.value,
+      }))}
+      locale={locale}
+      zone={new Intl.DateTimeFormat().resolvedOptions().timeZone}
+      use24Hour={use24Hour}
+      onEdit={(alarm) => router.push({ pathname: "/alarm/[id]", params: { id: alarm.id } })}
+      onAdd={() => router.push({ pathname: "/alarm/[id]", params: { id: "new" } })}
+      onToggle={save}
+      refreshing={refreshing}
+      onRefresh={pullToRefresh}
+      error={
+        error ||
+        (alarmsQuery.isError ? t("alarmError") : collectionQuery.isError ? t("loadError") : "")
+      }
+      banner={
+        !reliabilityChecklist(permissions, confirmedSettings).ready ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/settings/reliability")}
+            className="min-h-12 flex-row items-center justify-between gap-4 rounded-lg bg-surface p-4"
+          >
+            <Text className="shrink text-body text-attention">
+              {reliabilityCopy(locale)("atRisk")}
             </Text>
-          </View>
-        }
-      />
-    </View>
+            <Text className="text-body font-bold text-primary-ink">
+              {reliabilityCopy(locale)("fix")}
+            </Text>
+          </Pressable>
+        ) : null
+      }
+    />
+  );
+  const editor = (id: string) => (
+    <LegacyEditorRoute id={id} alarms={alarms} locale={locale} onSave={save} onDelete={remove} />
   );
 
   return (
@@ -407,7 +380,7 @@ function Home({ children }: { children: ReactNode }) {
       ) : (
         <RuntimeProvider
           alarms={alarmsContent}
-          cancelEditing={editing ? () => setEditing(null) : null}
+          editor={editor}
           reliability={(onExit) => reliability(onExit)}
         >
           {children}
@@ -416,30 +389,36 @@ function Home({ children }: { children: ReactNode }) {
     </NavigationGate>
   );
 }
-function AlarmRow({
-  alarm,
+/** Existing editor adapter until #76 replaces the screen; Home only pushes routes. */
+function LegacyEditorRoute({
+  id,
+  alarms,
   locale,
-  onEdit,
   onSave,
+  onDelete,
 }: {
-  alarm: Alarm;
+  id: string;
+  alarms: readonly Alarm[];
   locale: Locale;
-  onEdit: (alarm: Alarm) => void;
-  onSave: (alarm: Alarm) => void;
+  onSave: (alarm: Alarm, onSuccess?: () => void) => void;
+  onDelete: (id: string, onSuccess?: () => void) => void;
 }) {
-  const t = copy(locale);
+  const router = useRouter();
+  const [draft] = useState(() => newAlarm(native.createId()));
+  const alarm = id === "new" ? draft : alarms.find((item) => item.id === id);
+  if (!alarm) return <Text className="text-body text-foreground">{copy(locale)("loading")}</Text>;
   return (
-    <View className="flex-row items-center justify-between border-b border-border py-4">
-      <Pressable accessibilityRole="button" onPress={() => onEdit(alarm)}>
-        <Text className="text-title text-foreground">{`${String(alarm.rule.hour).padStart(2, "0")}:${String(alarm.rule.minute).padStart(2, "0")}`}</Text>
-        <Text className="text-body text-muted-foreground">{alarm.label}</Text>
-      </Pressable>
-      <Switch
-        accessibilityLabel={`${alarm.label}: ${t(alarm.enabled ? "enabled" : "disabled")}`}
-        value={alarm.enabled}
-        onValueChange={(enabled) => onSave({ ...alarm, enabled })}
+    <ScrollView className="flex-1 bg-background" contentContainerStyle={{ padding: 24 }}>
+      <AlarmEditor
+        key={alarm.id}
+        alarm={alarm}
+        locale={locale}
+        saved={id !== "new"}
+        onCancel={() => router.back()}
+        onSave={(value) => onSave(value, () => router.back())}
+        onDelete={(value) => onDelete(value, () => router.back())}
       />
-    </View>
+    </ScrollView>
   );
 }
 /**

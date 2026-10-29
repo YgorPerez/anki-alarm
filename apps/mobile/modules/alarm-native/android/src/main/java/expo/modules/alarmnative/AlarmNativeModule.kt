@@ -22,6 +22,7 @@ class AlarmNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("AlarmNative")
     Events("onChange")
+    Function("is24HourFormat") { android.text.format.DateFormat.is24HourFormat(context) }
     Function("createId") { AlarmStore.uuid7() }
     OnCreate { current = this@AlarmNativeModule; AlarmService.ensureChannel(context) }
     OnDestroy { current = null; picking?.second?.resolve(null); picking = null; Sounds.stopPreview(); ReadAloud.release() }

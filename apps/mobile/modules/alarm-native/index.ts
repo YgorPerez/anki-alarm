@@ -5,6 +5,7 @@ interface NativeAlarm {
   pickSound: (kind: "ringtone" | "file", currentUri: string | null) => Promise<string | null>;
   previewSound: (sound: string) => void;
   stopPreview: () => void;
+  is24HourFormat: () => boolean;
   createId: () => string;
   setAlarms: (alarms: string, policy: string) => void;
   setAppearance: (colors: string, locale: string) => void;
