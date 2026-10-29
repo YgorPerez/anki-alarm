@@ -94,7 +94,7 @@ export function cardMemory(
 ): MemoryState | undefined {
   const card = collection.cards.find((c) => c.id === cardId);
   const deck = collection.decks.find((d) => d.id === card?.fields.deckId.value);
-  const preset = collection.presets.find((p) => p.id === deck?.fields.presetId.value);
+  const preset = deck && deckPreset(collection, deck);
   return preset && replayCard(cardId, log, preset, now);
 }
 /**

@@ -1,5 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import {
+  cardMemory,
   Collection,
   replayCard,
   studyQueue,
@@ -248,4 +249,14 @@ test("the next card is the queue's head with its note and type, and an undone ca
     origin: "web",
   }));
   expect(nextStudyCard(state, log, deckId, now)).toBeUndefined();
+});
+
+test("a card's memory follows its deck's desired retention", () => {
+  const { state, cardId } = fixture();
+  const log: LogEntry[] = [
+    { kind: "review", id: "r", cardId, at: now, grade: 4, durationMs: 1, origin: "phone" },
+  ];
+  const atPreset = cardMemory(state, log, cardId, now)!.due.getTime();
+  state.decks[0]!.fields.desiredRetention.value = 0.99;
+  expect(cardMemory(state, log, cardId, now)!.due.getTime()).toBeLessThan(atPreset);
 });

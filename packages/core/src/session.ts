@@ -3,7 +3,7 @@ import { Rating, State, type Grade } from "ts-fsrs";
 import type { Alarm } from "./alarm.ts";
 import type { Card, CollectionState } from "./collection.ts";
 import { deckLanguage } from "./read-aloud.ts";
-import { newPosition, replayCard, type LogEntry } from "./study.ts";
+import { deckPreset, newPosition, replayCard, type LogEntry } from "./study.ts";
 
 /**
  * Fixed session timings and rules. `gradeDelaySeconds` keeps the grades hidden for a moment after
@@ -109,7 +109,7 @@ export function alarmSession({ collection, log, deckId, need, ringId, now }: Ala
     .filter((card) => !lastAnswer.has(card.id))
     .map((card) => {
       const deck = collection.decks.find((d) => d.id === card.fields.deckId.value);
-      const preset = collection.presets.find((p) => p.id === deck?.fields.presetId.value);
+      const preset = deck && deckPreset(collection, deck);
       if (!preset) throw new Error("Deck preset missing");
       return {
         card,
