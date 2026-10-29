@@ -14,6 +14,8 @@ import { appSync } from "./app-sync.ts";
 import {
   newAlarm,
   nextRing,
+  quickAlarm,
+  quickAlarmOptions,
   reliabilityChecklist,
   themeFor,
   type Alarm,
@@ -183,7 +185,13 @@ function Home({ children }: { children: ReactNode }) {
     queryFn: () => Effect.runPromise(controller.list),
   });
   const alarms = alarmsQuery.data ?? [];
-  const { locale, setLocale, confirmedSettings: confirmedList, confirmSetting } = useUI();
+  const {
+    locale,
+    setLocale,
+    confirmedSettings: confirmedList,
+    confirmSetting,
+    lastSavedAlarm,
+  } = useUI();
   const confirmedSettings = new Set(confirmedList);
   const [ring, setRing] = useState<Ring | null>(null);
   const [awakeCheck, setAwakeCheck] = useState<AwakeCheck | null>(null);
@@ -279,6 +287,8 @@ function Home({ children }: { children: ReactNode }) {
       .then((next) => {
         setRing(next.ring);
         setAwakeCheck(next.awakeCheck);
+        // A dismissed quick alarm deleted itself.
+        void client.invalidateQueries({ queryKey: ["alarms"] });
         // After each alarm session or awake check: its reviews reach the other devices, and
         // AnkiDroid when auto sync back is on. A failed sync back retries after the next one.
         appSync?.syncNow();
@@ -332,16 +342,31 @@ function Home({ children }: { children: ReactNode }) {
     });
     return () => subscription.remove();
   }, []);
+  const decks = (collectionQuery.data?.decks ?? []).map((deck) => ({
+    id: deck.id,
+    name: deck.fields.name.value,
+  }));
+  const zone = new Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const quickOptions = quickAlarmOptions({
+    alarms,
+    lastSavedId: lastSavedAlarm,
+    deckIds: decks.map((deck) => deck.id),
+  });
   const alarmsContent = (
     <HomeScreen
       alarms={alarms}
-      decks={(collectionQuery.data?.decks ?? []).map((deck) => ({
-        id: deck.id,
-        name: deck.fields.name.value,
-      }))}
+      decks={decks}
       locale={locale}
-      zone={new Intl.DateTimeFormat().resolvedOptions().timeZone}
+      zone={zone}
       use24Hour={use24Hour}
+      onQuickAlarm={
+        quickOptions
+          ? (minutes, onAdded) => {
+              const alarm = quickAlarm(native.createId(), minutes, quickOptions, Date.now(), zone);
+              save(alarm, () => onAdded(alarm));
+            }
+          : undefined
+      }
       onEdit={(alarm) => router.push({ pathname: "/alarm/[id]", params: { id: alarm.id } })}
       onAdd={() => router.push({ pathname: "/alarm/[id]", params: { id: "new" } })}
       onToggle={save}
@@ -404,6 +429,7 @@ function LegacyEditorRoute({
   onDelete: (id: string, onSuccess?: () => void) => void;
 }) {
   const router = useRouter();
+  const setLastSavedAlarm = useUI((state) => state.setLastSavedAlarm);
   const [draft] = useState(() => newAlarm(native.createId()));
   const alarm = id === "new" ? draft : alarms.find((item) => item.id === id);
   if (!alarm) return <Text className="text-body text-foreground">{copy(locale)("loading")}</Text>;
@@ -415,7 +441,12 @@ function LegacyEditorRoute({
         locale={locale}
         saved={id !== "new"}
         onCancel={() => router.back()}
-        onSave={(value) => onSave(value, () => router.back())}
+        onSave={(value) =>
+          onSave(value, () => {
+            setLastSavedAlarm(value.id);
+            router.back();
+          })
+        }
         onDelete={(value) => onDelete(value, () => router.back())}
       />
     </ScrollView>

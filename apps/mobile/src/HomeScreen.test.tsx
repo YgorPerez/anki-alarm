@@ -1,6 +1,6 @@
-import { act, fireEvent, render, screen } from "@testing-library/react-native/pure";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { newAlarm, type Alarm } from "@app/core";
+import { newAlarm, quickAlarm, type Alarm } from "@app/core";
 import { HomeScreen } from "./HomeScreen.tsx";
 
 afterEach(() => vi.useRealTimers());
@@ -89,4 +89,47 @@ test("Home keeps long labels and deck paths available on a small phone at large 
   } finally {
     dimensions.mockRestore();
   }
+});
+
+test("quick alarm chips add a marked one-off alarm and say when it rings", async () => {
+  vi.useFakeTimers();
+  // 06:00:40 UTC: +10 min rings at 06:10, 9 min 20 s away.
+  vi.setSystemTime(new Date("2026-10-29T06:00:40Z"));
+  const options = { deckId: "deck", need: 3, sound: newAlarm("a").sound };
+  const added: number[] = [];
+  const view = (alarms: Alarm[], locale: "pt-BR" | "en" = "pt-BR", quick = true) => (
+    <HomeScreen
+      alarms={alarms}
+      decks={[{ id: "deck", name: "Inglês" }]}
+      locale={locale}
+      zone="UTC"
+      use24Hour
+      onEdit={() => {}}
+      onAdd={() => {}}
+      onToggle={() => {}}
+      onQuickAlarm={
+        quick
+          ? (minutes, onAdded) => {
+              added.push(minutes);
+              onAdded(quickAlarm("q", minutes, options, Date.now(), "UTC"));
+            }
+          : undefined
+      }
+    />
+  );
+  const result = await render(view([]));
+  await fireEvent.press(screen.getByRole("button", { name: "Alarme daqui a 10 minutos" }));
+  expect(added).toEqual([10]);
+  await waitFor(() => expect(screen.getByText("Toca em 10 min")).toBeTruthy());
+  await result.rerender(view([quickAlarm("q", 10, options, Date.now(), "UTC")]));
+  expect(screen.getByText("Hoje · Rápido")).toBeTruthy();
+  await act(() => vi.advanceTimersByTime(5000));
+  expect(screen.queryByText("Toca em 10 min")).toBeNull();
+  await result.rerender(view([], "en"));
+  expect(screen.getByText("+30 min")).toBeTruthy();
+  await fireEvent.press(screen.getByRole("button", { name: "Alarm in 30 minutes" }));
+  await waitFor(() => expect(screen.getByText("Rings in 30 min")).toBeTruthy());
+  // With no saved alarm or no deck, App passes no handler and the chips go.
+  await result.rerender(view([], "en", false));
+  expect(screen.queryByText("+10 min")).toBeNull();
 });

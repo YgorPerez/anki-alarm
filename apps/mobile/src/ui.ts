@@ -11,6 +11,9 @@ export const useUI = create(
     /** Reliability settings the app can't read that the user marked as done. */
     confirmedSettings: ReliabilityKind[];
     confirmSetting: (kind: ReliabilityKind, done: boolean) => void;
+    /** The alarm saved last on this phone: a new alarm starts with its deck and N. */
+    lastSavedAlarm: string | null;
+    setLastSavedAlarm: (alarmId: string) => void;
   }>(
     (set) => ({
       locale: "pt-BR",
@@ -22,6 +25,8 @@ export const useUI = create(
             ? [...new Set([...confirmedSettings, kind])]
             : confirmedSettings.filter((k) => k !== kind),
         })),
+      lastSavedAlarm: null,
+      setLastSavedAlarm: (lastSavedAlarm) => set({ lastSavedAlarm }),
     }),
     {
       name: "preferences",

@@ -167,3 +167,35 @@ it("re-reads reliability after a settings change and retains onboarding completi
     ),
   ).toBe(true);
 });
+it("a quick alarm deletes itself once its ring is dismissed, and others stay", async () => {
+  const native = memoryAlarmService();
+  const controller = alarmController(memoryAlarmRepository());
+  const run = <A>(effect: Effect.Effect<A, Error, AlarmService>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(native.layer)));
+  const quick = { ...alarm, id: "q", quick: true };
+  await run(controller.save(alarm));
+  await run(controller.save(quick));
+  const event = (kind: string, id: string) => ({
+    id,
+    kind,
+    alarmId: quick.id,
+    ringId: "ring-1",
+    wallTime: 1000,
+    elapsedRealtime: 500,
+  });
+  const ring: Ring = {
+    id: "ring-1",
+    alarm: quick,
+    startedAt: 1000,
+    phase: "ringing",
+    snoozes: 0,
+    snoozedUntil: null,
+  };
+  native.deliver(event("ringStarted", "event-1"), ring);
+  await run(controller.resume);
+  expect(await Effect.runPromise(controller.list)).toEqual([alarm, quick]);
+  native.deliver(event("dismissed", "event-2"));
+  await run(controller.resume);
+  expect(await Effect.runPromise(controller.list)).toEqual([alarm]);
+  expect(await run(Effect.flatMap(AlarmService, (service) => service.list))).toEqual([alarm]);
+});

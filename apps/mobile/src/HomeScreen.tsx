@@ -1,4 +1,4 @@
-import { nextAlarmRing, type Alarm, type Locale } from "@app/core";
+import { nextAlarmRing, nextRing, QUICK_ALARM_MINUTES, type Alarm, type Locale } from "@app/core";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   AppState,
@@ -44,6 +44,11 @@ function timeText(at: number, locale: Locale, zone: string, use24Hour: boolean) 
     .map((part) => part.value)
     .join("")
     .replace(/\s+/g, " ");
+}
+/** Time left as Home says it, a part of a minute counting as a whole one: "7 h 12 min". */
+function leftText(ms: number) {
+  const minutes = Math.ceil(ms / 60000);
+  return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
 }
 function ruleTime(alarm: Alarm) {
   return Date.UTC(2000, 0, 1, alarm.rule.hour, alarm.rule.minute);
@@ -161,6 +166,7 @@ export function AlarmCard({
           </Text>
           <Text style={regular} className="text-label text-muted-foreground">
             {repeatSummary(alarm, now, locale, zone)}
+            {alarm.quick ? ` · ${t("quick")}` : null}
           </Text>
           {alarm.label ? (
             <Text style={regular} className="text-body text-foreground">
@@ -195,6 +201,7 @@ export function HomeScreen({
   error,
   refreshing,
   onRefresh,
+  onQuickAlarm,
 }: {
   alarms: readonly Alarm[];
   decks: readonly Deck[];
@@ -208,13 +215,25 @@ export function HomeScreen({
   error?: string;
   refreshing?: boolean;
   onRefresh?: () => void;
+  /** Adds a quick alarm that many minutes from now. Without it (no saved alarm or deck), no chips. */
+  onQuickAlarm?: (minutes: number, onAdded: (alarm: Alarm) => void) => void;
 }) {
   const now = useClock();
   const t = copy(locale);
   const next = nextAlarmRing(alarms, now, zone);
-  const minutes = next ? Math.ceil(next.remainingMs / 60000) : 0;
-  const left =
-    minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
+  // "Rings in …" after a chip adds its alarm, for a few seconds.
+  const [notice, setNotice] = useState<{ text: string; until: number }>();
+  const addQuickAlarm = (minutes: number) => {
+    onQuickAlarm?.(minutes, (alarm) => {
+      const at = Date.now();
+      const ring = nextRing(alarm.rule, at, zone);
+      if (ring !== null)
+        setNotice({
+          text: t("quickAlarmRingsIn", { left: leftText(ring - at) }),
+          until: at + 5000,
+        });
+    });
+  };
   return (
     <View className="flex-1 bg-background">
       <FlatList
@@ -228,9 +247,38 @@ export function HomeScreen({
             <HomeClock now={now} locale={locale} zone={zone} use24Hour={use24Hour} />
             <Text style={regular} className="text-body text-muted-foreground">
               {next
-                ? t("nextAlarm", { time: timeText(next.at, locale, zone, use24Hour), left })
+                ? t("nextAlarm", {
+                    time: timeText(next.at, locale, zone, use24Hour),
+                    left: leftText(next.remainingMs),
+                  })
                 : t("noEnabledAlarms")}
             </Text>
+            {onQuickAlarm ? (
+              <View className="flex-row flex-wrap gap-2">
+                {QUICK_ALARM_MINUTES.map((minutes) => (
+                  <Pressable
+                    key={minutes}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("quickAlarmLabel", { count: String(minutes) })}
+                    onPress={() => addQuickAlarm(minutes)}
+                    className="min-h-12 items-center justify-center rounded-pill bg-surface px-5"
+                  >
+                    <Text style={bold} className="text-body text-foreground">
+                      {t("quickAlarmChip", { count: String(minutes) })}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            {notice && now < notice.until ? (
+              <Text
+                accessibilityLiveRegion="polite"
+                style={regular}
+                className="text-body text-foreground"
+              >
+                {notice.text}
+              </Text>
+            ) : null}
             {banner}
             {error ? (
               <Text accessibilityRole="alert" className="text-body text-attention">
