@@ -1,13 +1,12 @@
 // `.apkg` import and export in the leader's database Worker, through Core's reader and writer.
-import type { ClientData, ImportSummary, MediaFiles } from "@app/client-data";
 import {
-  apkgFileName,
-  packageEntries,
-  readApkg,
-  writeApkg,
-  type AnkiDatabase,
-  type WritableDatabase,
-} from "@app/core";
+  ClientData,
+  exportApkg,
+  importApkg,
+  type ImportSummary,
+  type MediaFiles,
+} from "@app/client-data";
+import { packageEntries, type AnkiDatabase, type WritableDatabase } from "@app/core";
 import type sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import { Effect } from "effect";
 import { unzipSync, zipSync } from "fflate";
@@ -28,35 +27,32 @@ export interface ApkgExport {
   bytes: Uint8Array;
 }
 
-const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect);
-
+/** The shared flow of `@app/client-data`, with the Worker's zip and sqlite-wasm. */
 export function apkgOperations(data: ClientData["Service"], files: ApkgFiles) {
+  const run = <A, E>(effect: Effect.Effect<A, E, ClientData>) =>
+    Effect.runPromise(Effect.provideService(effect, ClientData, data));
   return {
-    /** Stores the package's media first, so no imported card points at a missing file. */
-    importApkg: async (bytes: Uint8Array): Promise<ImportSummary> => {
-      const zip = unzipSync(bytes);
-      const { package: source, media } = await readApkg({
-        ...packageEntries(zip),
-        decompressZstd: (compressed) => decompress(compressed),
-        openSqlite: files.sqlite.open,
-      });
-      await run(data.storeMedia(media));
-      return run(data.importAnki(source));
-    },
-    /** A deck with its subdecks, scheduling, history and media, as a zipped package. */
-    exportApkg: async (deckId: string): Promise<ApkgExport> => {
-      const [collection, log] = await run(Effect.all([data.collection, data.reviewLog]));
-      const deck = collection.decks.find((d) => d.id === deckId);
-      if (!deck) throw new Error("Deck missing");
-      const entries = await writeApkg(
-        {
-          createSqlite: files.sqlite.create,
-          media: async (name) => (await files.media.read(name)) ?? undefined,
-        },
-        { collection, log, deckId, now: Date.now() },
-      );
-      return { name: apkgFileName(deck.fields.name.value), bytes: zipSync(entries) };
-    },
+    importApkg: (bytes: Uint8Array): Promise<ImportSummary> =>
+      run(
+        Effect.suspend(() =>
+          importApkg({
+            ...packageEntries(unzipSync(bytes)),
+            decompressZstd: (compressed) => decompress(compressed),
+            openSqlite: files.sqlite.open,
+          }),
+        ),
+      ),
+    exportApkg: (deckId: string): Promise<ApkgExport> =>
+      run(
+        exportApkg(
+          deckId,
+          {
+            createSqlite: files.sqlite.create,
+            media: async (name) => (await files.media.read(name)) ?? undefined,
+          },
+          Date.now(),
+        ).pipe(Effect.map(({ name, entries }) => ({ name, bytes: zipSync(entries) }))),
+      ),
   };
 }
 

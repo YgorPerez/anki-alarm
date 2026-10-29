@@ -31,6 +31,7 @@ export {
   type AccountUser,
 } from "./account.ts";
 export { type ExecuteSql } from "./collection.ts";
+export { ApkgUnreadable, ApkgWriteFailed, DeckMissing, exportApkg, importApkg } from "./apkg.ts";
 import { openCollectionStore, type ExecuteSql } from "./collection.ts";
 import { migrationStatements } from "./migrations.ts";
 import { Context, Effect, Layer } from "effect";
