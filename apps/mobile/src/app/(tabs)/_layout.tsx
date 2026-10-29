@@ -1,0 +1,57 @@
+import { Tabs, useRouter } from "expo-router";
+import type { BottomTabBarProps } from "expo-router/tabs";
+import { useUI } from "../../ui.ts";
+import { SettingsButton, TabBar } from "../../navigation.tsx";
+import { useNavigationTheme } from "../../navigation-theme.ts";
+
+function SettingsGear() {
+  const router = useRouter();
+  const { locale } = useUI();
+  const theme = useNavigationTheme();
+  return (
+    <SettingsButton
+      locale={locale}
+      color={theme.foreground}
+      onPress={() => router.push("/settings")}
+    />
+  );
+}
+function AppTabBar({ state, emitter, navigateToTab, insets }: BottomTabBarProps) {
+  const colors = useNavigationTheme();
+  return (
+    <TabBar
+      colors={colors}
+      locale={useUI().locale}
+      active={state.routes[state.index]!.name}
+      bottom={insets.bottom}
+      onSelect={(name) => {
+        const route = state.routes.find((item) => item.name === name)!;
+        const event = emitter.emit({
+          type: "tabPress",
+          target: route.key,
+          canPreventDefault: true,
+        });
+        if (!event.defaultPrevented) navigateToTab(route.key);
+      }}
+    />
+  );
+}
+export default function TabLayout() {
+  const theme = useNavigationTheme();
+  return (
+    <Tabs
+      backBehavior="none"
+      screenOptions={{
+        title: "",
+        headerShadowVisible: false,
+        headerStyle: { backgroundColor: theme.background },
+        headerRight: SettingsGear,
+      }}
+      tabBar={AppTabBar}
+    >
+      <Tabs.Screen name="index" />
+      <Tabs.Screen name="decks" />
+      <Tabs.Screen name="stats" />
+    </Tabs>
+  );
+}

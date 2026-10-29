@@ -66,9 +66,18 @@ export function answerAlert(text: string) {
   if (!button) throw new Error(`No dialog button "${text}"`);
   button.onPress?.();
 }
-// No Back button in the tests yet: a test that needs one adds a way to press it here.
+const backListeners: (() => boolean | null | undefined)[] = [];
+export const pressBack = () => backListeners.toReversed().some((listener) => listener() === true);
 export const BackHandler = {
-  addEventListener: () => ({ remove: () => {} }),
+  addEventListener: (_event: string, listener: () => boolean | null | undefined) => {
+    backListeners.push(listener);
+    return {
+      remove: () => {
+        const index = backListeners.indexOf(listener);
+        if (index >= 0) backListeners.splice(index, 1);
+      },
+    };
+  },
 };
 // The app stays in the foreground during a test.
 export const AppState = {

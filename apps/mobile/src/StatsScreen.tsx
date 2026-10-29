@@ -26,7 +26,7 @@ export function StatsScreen({
   locale: Locale;
   /** The derived theme of the mode on screen, for chart paint. */
   theme: Theme;
-  onExit: () => void;
+  onExit?: () => void;
 }) {
   const t = statsCopy(locale);
   const insets = useSafeAreaInsets();
@@ -50,6 +50,7 @@ export function StatsScreen({
     }),
   });
   useEffect(() => {
+    if (!onExit) return undefined;
     const handler = BackHandler.addEventListener("hardwareBackPress", () => {
       onExit();
       return true;
@@ -66,7 +67,7 @@ export function StatsScreen({
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
       <ScrollView contentContainerClassName="gap-6 p-6">
-        <Chip label={t("back")} onPress={onExit} />
+        {onExit && <Chip label={t("back")} onPress={onExit} />}
         <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
           {t("stats")}
         </Text>
