@@ -23,6 +23,8 @@ export default defineConfig({
         "/settings/theme?lang=en",
         "/study",
         "/study?lang=en",
+        "/stats",
+        "/stats?lang=en",
       ].map((url) => ({ url, revision: String(Date.now()) })),
     }),
   ],

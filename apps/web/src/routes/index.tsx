@@ -1,4 +1,5 @@
 import type { Locale } from "@app/core";
+import { statsCopy } from "@app/stats-ui";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
@@ -39,6 +40,13 @@ function Home() {
           className="text-label text-primary-ink underline underline-offset-4"
         >
           {t("theme")}
+        </Link>
+        <Link
+          to="/stats"
+          search={lang === "en" ? { lang } : {}}
+          className="text-label text-primary-ink underline underline-offset-4"
+        >
+          {statsCopy(lang)("stats")}
         </Link>
       </nav>
     </main>

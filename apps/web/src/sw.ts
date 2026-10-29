@@ -35,7 +35,7 @@ const serwist = new Serwist({
       matcher: ({ request, url }) =>
         request.mode === "navigate" &&
         url.origin === self.location.origin &&
-        ["/", "/settings/theme", "/study"].includes(url.pathname),
+        ["/", "/settings/theme", "/study", "/stats"].includes(url.pathname),
       handler: async ({ request, url }) => {
         try {
           return await fetch(request);

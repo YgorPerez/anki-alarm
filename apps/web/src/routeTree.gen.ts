@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as StatsRouteImport } from './routes/stats'
 import { Route as StudyRouteImport } from './routes/study'
 import { Route as SettingsThemeRouteImport } from './routes/settings/theme'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StatsRoute = StatsRouteImport.update({
+  id: '/stats',
+  path: '/stats',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StudyRoute = StudyRouteImport.update({
@@ -31,30 +37,34 @@ const SettingsThemeRoute = SettingsThemeRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/stats': typeof StatsRoute
   '/study': typeof StudyRoute
   '/settings/theme': typeof SettingsThemeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/stats': typeof StatsRoute
   '/study': typeof StudyRoute
   '/settings/theme': typeof SettingsThemeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/stats': typeof StatsRoute
   '/study': typeof StudyRoute
   '/settings/theme': typeof SettingsThemeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/study' | '/settings/theme'
+  fullPaths: '/' | '/stats' | '/study' | '/settings/theme'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/study' | '/settings/theme'
-  id: '__root__' | '/' | '/study' | '/settings/theme'
+  to: '/' | '/stats' | '/study' | '/settings/theme'
+  id: '__root__' | '/' | '/stats' | '/study' | '/settings/theme'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  StatsRoute: typeof StatsRoute
   StudyRoute: typeof StudyRoute
   SettingsThemeRoute: typeof SettingsThemeRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/stats': {
+      id: '/stats'
+      path: '/stats'
+      fullPath: '/stats'
+      preLoaderRoute: typeof StatsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/study': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  StatsRoute: StatsRoute,
   StudyRoute: StudyRoute,
   SettingsThemeRoute: SettingsThemeRoute,
 }

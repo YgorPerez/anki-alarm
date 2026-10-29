@@ -5,7 +5,8 @@
   "description": "What the phone's and the web's stats screens share: copy, sections, wake-up tallies as text, and the TanStack Charts definitions each host draws.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./fixtures": "./src/fixtures.ts"
   },
   "scripts": {
     "test": "vp test run"
