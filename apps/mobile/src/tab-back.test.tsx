@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import fixture from "../../../packages/core/fixtures/ankidroid-deck.json" with { type: "json" };
 import { act, fireEvent, render, screen } from "@testing-library/react-native/pure";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { expect, test } from "vite-plus/test";
@@ -44,4 +46,35 @@ test("Back leaves from the Stats tab root", async () => {
     </QueryClientProvider>,
   );
   expect(pressBack()).toBe(false);
+});
+
+test("Back stays in AnkiDroid while a deck is being linked", async () => {
+  const api = memoryAnkiDroid({
+    installed: { versionCode: 22500300, permission: "granted" },
+    decks: fixture.decks,
+    sources: [fixture.source],
+  });
+  const gate = Promise.withResolvers<void>();
+  const readDeck = api.readDeck;
+  api.readDeck = (id) =>
+    Effect.promise(() => gate.promise).pipe(Effect.flatMap(() => readDeck(id)));
+  await render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <CollectionScreen locale="pt-BR" onTheme={() => {}} ankiDroid={api} />
+    </QueryClientProvider>,
+  );
+  await fireEvent.press(await screen.findByRole("button", { name: "Vincular do AnkiDroid" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Japonês" }));
+  await act(async () => {
+    expect(pressBack()).toBe(true);
+  });
+  expect(screen.queryByRole("button", { name: "Criar baralho" })).toBeNull();
+  gate.resolve();
+  expect(await screen.findByText(/Japonês foi vinculado/)).toBeTruthy();
+  await act(async () => {
+    expect(pressBack()).toBe(true);
+  });
+  expect(await screen.findByRole("button", { name: "Criar baralho" })).toBeTruthy();
 });

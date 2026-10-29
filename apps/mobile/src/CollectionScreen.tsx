@@ -84,11 +84,7 @@ export function CollectionScreen({
   const t = copy(locale);
   const insets = useSafeAreaInsets();
   const goBack = useCallback(() => {
-    if (studying) return false;
-    if (linking) {
-      setLinking(false);
-      return true;
-    }
+    if (studying || linking) return false;
     if (locked.current) return true;
     if (form) {
       Alert.alert(t("discardTitle"), t("discardBody"), [
