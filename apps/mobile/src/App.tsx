@@ -436,7 +436,7 @@ function Home({ children }: { children: ReactNode }) {
     </NavigationGate>
   );
 }
-/** The editor route: a saved alarm by id, or "new" with Core's defaults. Leaving discards it. */
+/** The editor route: a saved alarm by id, or "new" with Core's defaults. Leaving asks before discarding changes. */
 function EditorRoute({
   id,
   duplicate,

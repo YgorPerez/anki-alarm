@@ -47,7 +47,6 @@ test("a new alarm takes its time from the native picker, its days from the Repea
   const done = await openEditor(
     newAlarmFor("a", { alarms: [], lastSavedId: null, deckIds: ["inglês"] }),
   );
-  screen.getByRole("header", { name: "New alarm" });
   expect(StyleSheet.flatten(screen.getByText("07:00").props.style)).toMatchObject({
     fontFamily: "Inter_700Bold",
     fontVariant: ["tabular-nums"],
@@ -112,10 +111,9 @@ test("a one-off date comes from the calendar, and no days at all rings once at t
   expect(toasts.at(-1)).toBe("Rings in 7 h 42 min");
 });
 
-test("editing keeps the alarm's id, Back closes a sheet first, and leaving discards the changes", async () => {
+test("editing keeps the alarm's id, Back closes a sheet first, and leaving asks before discarding changes", async () => {
   const alarm: Alarm = { ...newAlarm("a"), deckId: "inglês", label: "Trabalho", enabled: false };
   const done = await openEditor(alarm, { saved: true, hour24: false });
-  screen.getByRole("header", { name: "Edit alarm" });
   screen.getByRole("button", { name: /^Time, 7:00\sAM$/ });
 
   await fireEvent.press(screen.getByRole("button", { name: "Label, Trabalho" }));
@@ -125,7 +123,9 @@ test("editing keeps the alarm's id, Back closes a sheet first, and leaving disca
   });
   expect(screen.queryByLabelText("Label")).toBeNull();
   screen.getByRole("button", { name: "Label, Folga" });
-  await fireEvent.press(screen.getByRole("button", { name: "Back" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Cancel" }));
+  expect(done.closed).toBe(0);
+  await act(() => answerAlert("Discard"));
   expect(done).toMatchObject({ saved: [], closed: 1 });
 
   const edited = await openEditor(alarm, { saved: true });
@@ -159,15 +159,13 @@ test("an alarm without a deck asks for one instead of saving", async () => {
   expect(done.saved).toEqual([]);
 });
 
-test("Delete sits in the ⋯ menu and asks first", async () => {
+test("Delete sits at the end of the editor and asks first", async () => {
   const done = await openEditor({ ...newAlarm("a"), deckId: "inglês" }, { saved: true });
-  await fireEvent.press(screen.getByRole("button", { name: "More options" }));
   await fireEvent.press(screen.getByRole("button", { name: "Delete alarm" }));
   expect(alerts.at(-1)?.title).toBe("Delete this alarm?");
   await act(() => answerAlert("Cancel"));
   expect(done.deleted).toEqual([]);
 
-  await fireEvent.press(screen.getByRole("button", { name: "More options" }));
   await fireEvent.press(screen.getByRole("button", { name: "Delete alarm" }));
   await act(() => answerAlert("Delete alarm"));
   expect(done).toMatchObject({ deleted: ["a"], saved: [], closed: 1 });
@@ -179,4 +177,75 @@ test("saving a skipped alarm reports the following occurrence and keeps the skip
   await fireEvent.press(screen.getByRole("button", { name: "Save" }));
   expect(done.saved[0]?.skip).toBe(skip);
   expect(toasts.at(-1)).toBe("Rings in 1 d 7 h 42 min");
+});
+
+test("Cancel leaves an unchanged editor immediately, without a top bar or prompt", async () => {
+  const done = await openEditor(newAlarm("a"));
+  const before = alerts.length;
+  expect(screen.queryByRole("header")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  await fireEvent.press(screen.getByRole("button", { name: "Cancel" }));
+  expect(done.closed).toBe(1);
+  expect(alerts).toHaveLength(before);
+});
+
+test("Cancel and Android Back ask before discarding changes, and restoring a value clears the prompt", async () => {
+  const done = await openEditor({ ...newAlarm("a"), deckId: "deck" });
+  await act(() => {
+    expect(pressBack()).toBe(true);
+  });
+  expect(done.closed).toBe(1);
+  await fireEvent.press(screen.getByRole("button", { name: "Label, None" }));
+  await fireEvent.changeText(screen.getByLabelText("Label"), "Work");
+  await act(() => {
+    expect(pressBack()).toBe(true);
+  });
+  // Back closes the sheet before asking to leave the editor.
+  const before = alerts.length;
+  await fireEvent.press(screen.getByRole("button", { name: "Cancel" }));
+  expect(alerts.at(-1)?.title).toBe("Discard changes?");
+  expect(done.closed).toBe(1);
+  await act(() => answerAlert("Cancel"));
+  await act(() => {
+    expect(pressBack()).toBe(true);
+  });
+  expect(alerts).toHaveLength(before + 2);
+  await act(() => answerAlert("Discard"));
+  expect(done).toMatchObject({ saved: [], closed: 2 });
+
+  await fireEvent.press(screen.getByRole("button", { name: "Label, Work" }));
+  await fireEvent.changeText(screen.getByLabelText("Label"), "");
+  await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+  const after = alerts.length;
+  await fireEvent.press(screen.getByRole("button", { name: "Cancel" }));
+  expect(alerts).toHaveLength(after);
+  expect(done.closed).toBe(3);
+});
+
+test("saved alarms offer Skip, Duplicate and Delete directly; new alarms offer none", async () => {
+  const alarm = { ...newAlarm("a"), deckId: "deck" };
+  const done = await openEditor(alarm, { saved: true, locale: "pt-BR" });
+  screen.getByRole("button", { name: "Duplicar alarme" });
+  screen.getByRole("button", { name: "Excluir alarme" });
+  await fireEvent.press(screen.getByRole("button", { name: "Pular o próximo" }));
+  screen.getByRole("button", { name: "Desfazer pulo" });
+  expect(done.saved).toEqual([]);
+  await fireEvent.press(screen.getByRole("button", { name: "Salvar" }));
+  expect(done.saved[0]?.skip).toBe(Date.parse("2026-10-29T10:00:00Z"));
+
+  await openEditor(alarm);
+  for (const name of ["Skip next", "Duplicate alarm", "Delete alarm"])
+    expect(screen.queryByRole("button", { name })).toBeNull();
+});
+
+test("reselecting the same repeat days leaves without a discard prompt", async () => {
+  const alarm = newAlarm("a");
+  const done = await openEditor({ ...alarm, rule: { ...alarm.rule, repeatDays: [5, 4, 3, 2, 1] } });
+  const before = alerts.length;
+  await fireEvent.press(screen.getByRole("button", { name: "Repeat, Weekdays" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Weekdays" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Cancel" }));
+  expect(done.closed).toBe(1);
+  expect(alerts).toHaveLength(before);
 });
