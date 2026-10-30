@@ -27,6 +27,7 @@ import {
   AtkinsonHyperlegible_700Bold,
   useFonts,
 } from "@expo-google-fonts/atkinson-hyperlegible";
+import { Inter_700Bold } from "@expo-google-fonts/inter/700Bold";
 import { CollectionScreen } from "./CollectionScreen.tsx";
 import { AnkiDroidScreen } from "./AnkiDroidScreen.tsx";
 import { pickAndImportApkg } from "./apkg.ts";
@@ -144,6 +145,7 @@ export function App({ children }: { children: ReactNode }) {
   const [fontsLoaded, fontError] = useFonts({
     AtkinsonHyperlegible_400Regular,
     AtkinsonHyperlegible_700Bold,
+    Inter_700Bold,
   });
   return (
     <QueryClientProvider client={queryClient}>

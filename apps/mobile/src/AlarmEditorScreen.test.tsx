@@ -1,3 +1,4 @@
+import { StyleSheet } from "react-native";
 /* oxlint-disable eslint/no-await-in-loop -- Presses land one after another, as a thumb does them. */
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react-native/pure";
 import { expect, test } from "vite-plus/test";
@@ -47,6 +48,10 @@ test("a new alarm takes its time from the native picker, its days from the Repea
     newAlarmFor("a", { alarms: [], lastSavedId: null, deckIds: ["inglês"] }),
   );
   screen.getByRole("header", { name: "New alarm" });
+  expect(StyleSheet.flatten(screen.getByText("07:00").props.style)).toMatchObject({
+    fontFamily: "Inter_700Bold",
+    fontVariant: ["tabular-nums"],
+  });
   expect(screen.queryByRole("button", { name: "More options" })).toBeNull();
 
   await fireEvent.press(screen.getByRole("button", { name: "Time, 07:00" }));
