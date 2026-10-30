@@ -19,6 +19,7 @@ export default defineConfig({
     alias: [
       ["react-native-webview", "webview.ts"],
       ["react-native-svg", "svg.ts"],
+      ["uniwind", "uniwind.ts"],
       ["react-native", "react-native.ts"],
       ["react-native-safe-area-context", "safe-area-context.ts"],
       ["expo-sqlite", "expo-sqlite.ts"],
@@ -31,8 +32,8 @@ export default defineConfig({
     name: "mobile",
     include: ["src/**/*.test.{ts,tsx}"],
     setupFiles: ["./test/setup.ts"],
-    // TanStack Charts goes through Vite so its react-native and react-native-svg imports reach
-    // the stand-ins.
-    server: { deps: { inline: [/@tanstack\/charts/] } },
+    // TanStack Charts and Lucide go through Vite so their react-native and react-native-svg imports
+    // reach the stand-ins.
+    server: { deps: { inline: [/@tanstack\/charts/, /lucide-react-native/] } },
   },
 });

@@ -72,6 +72,6 @@ test("returning from study refreshes the deck's remaining counts", async () => {
   await fireEvent.press(await screen.findByRole("button", { name: "Mostrar resposta" }));
   await fireEvent.press(screen.getByRole("button", { name: "Fácil" }));
   await screen.findByText("Nenhum cartão disponível agora. Os limites diários se aplicam.");
-  await fireEvent.press(screen.getByRole("button", { name: "‹ Count refresh" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Count refresh" }));
   expect(await screen.findByLabelText("0 novos")).toBeTruthy();
 });

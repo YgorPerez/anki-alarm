@@ -1,3 +1,5 @@
+import ChevronRight from "lucide-react-native/icons/chevron-right";
+import { ThemedIcon } from "./icons.tsx";
 import { PillChip } from "./PillChip.tsx";
 import { EVERY_DAY, WEEKDAYS, type AlarmRule, type Locale } from "@app/core";
 import { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
@@ -100,9 +102,13 @@ export function RepeatSheet({
         <Text style={regular} className="text-body text-foreground">
           {t("onceDate")}
         </Text>
-        <Text style={bold} className="text-body text-primary-ink">
-          {repeat.onceDate ? repeatSummary(repeat, { locale, now: now(), zone }) : "›"}
-        </Text>
+        {repeat.onceDate ? (
+          <Text style={bold} className="text-body text-primary-ink">
+            {repeatSummary(repeat, { locale, now: now(), zone })}
+          </Text>
+        ) : (
+          <ThemedIcon icon={ChevronRight} colorClassName="text-primary-ink" />
+        )}
       </Pressable>
     </Sheet>
   );
