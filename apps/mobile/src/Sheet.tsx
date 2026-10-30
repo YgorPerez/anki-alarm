@@ -1,6 +1,6 @@
 import type { Locale } from "@app/core";
 import type { ReactNode } from "react";
-import { Modal, Pressable, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "./controls.tsx";
 import { copy } from "./copy.ts";
@@ -43,6 +43,7 @@ export function Sheet({
           accessibilityViewIsModal
           className="gap-6 bg-background px-6 pt-6"
           style={{
+            maxHeight: "90%",
             borderTopLeftRadius: 16,
             borderTopRightRadius: 16,
             paddingBottom: insets.bottom + 24,
@@ -51,7 +52,9 @@ export function Sheet({
           <Text accessibilityRole="header" style={bold} className="text-body text-foreground">
             {title}
           </Text>
-          {children}
+          <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled">
+            {children}
+          </ScrollView>
           <Button label={copy(locale)("done")} onPress={onClose} />
         </View>
       </View>
