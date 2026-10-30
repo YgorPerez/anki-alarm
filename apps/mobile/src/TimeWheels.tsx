@@ -27,7 +27,11 @@ export function TimeWheels({
   onChange: (hour: number, minute: number) => void;
 }) {
   const { width, fontScale } = useWindowDimensions();
-  const fontSize = Math.min(68, (width - 80) / (3 * fontScale));
+  const periodWidth = hour24 ? 0 : Math.ceil(28 * fontScale * 1.9);
+  const colonWidth = Math.ceil(18 * fontScale);
+  const columnWidth = (width - 48 - periodWidth - colonWidth) / 2;
+  // Reserve two scaled digits plus side bearings, including on narrow phones in 12-hour mode.
+  const fontSize = Math.min(68, columnWidth / (1.55 * fontScale));
   const rowHeight = Math.ceil(76 * fontScale);
   const t = copy(locale);
   return (
@@ -42,7 +46,11 @@ export function TimeWheels({
         fontSize={fontSize}
         onChange={(value) => onChange(hour24 ? value : value + (hour >= 12 ? 12 : 0), minute)}
       />
-      <Text accessible={false} style={[clock, { fontSize }]} className="text-foreground">
+      <Text
+        accessible={false}
+        style={[clock, { fontSize, width: colonWidth, textAlign: "center" }]}
+        className="text-foreground"
+      >
         :
       </Text>
       <Wheel
@@ -58,6 +66,7 @@ export function TimeWheels({
         <Wheel
           key={`period-${rowHeight}`}
           label="AM/PM"
+          width={periodWidth}
           value={hour >= 12 ? 1 : 0}
           count={2}
           rowHeight={rowHeight}
@@ -80,6 +89,7 @@ function Wheel({
   rowHeight,
   fontSize,
   format = digits,
+  width,
   onChange,
 }: {
   label: string;
@@ -88,6 +98,7 @@ function Wheel({
   rowHeight: number;
   fontSize: number;
   format?: (value: number) => string;
+  width?: number;
   onChange: (value: number) => void;
 }) {
   const scroll = useRef<ScrollViewInstance>(null);
@@ -117,7 +128,7 @@ function Wheel({
         if (nativeEvent.actionName === "decrement") settle((value + count - 1) % count);
       }}
       className="flex-1"
-      style={{ height: rowHeight * 3 }}
+      style={{ height: rowHeight * 3, ...(width === undefined ? {} : { flex: 0, width }) }}
       contentContainerStyle={{ paddingVertical: rowHeight }}
       contentOffset={initialOffset}
       nestedScrollEnabled
