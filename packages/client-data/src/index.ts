@@ -39,7 +39,7 @@ import { memoryMediaFiles, type MediaFiles, type MediaStorageRefused } from "./m
 import {
   ankiDroidEngine,
   type AnkiDroidProvider,
-  type AnswerNotRecorded,
+  type WritebackNotRecorded,
   type DeckNotLinked,
   type PullSummary,
   type SyncBackSummary,
@@ -59,7 +59,7 @@ import {
 export { AccountMismatch, UnsafeMediaName, type MediaSyncResult, type SyncResult } from "./sync.ts";
 export { MediaStorageRefused, memoryMediaFiles, type MediaFiles } from "./media.ts";
 export {
-  AnswerNotRecorded,
+  WritebackNotRecorded,
   DeckNotLinked,
   type AnkiDroidProvider,
   type PullSummary,
@@ -151,12 +151,12 @@ interface Data extends Engine {
    */
   syncBackAnkiDroid: (
     provider: AnkiDroidProvider,
-  ) => Effect.Effect<SyncBackSummary, StorageFailed | AnswerNotRecorded | Error>;
+  ) => Effect.Effect<SyncBackSummary, StorageFailed | WritebackNotRecorded | Error>;
   /** Syncs back, then brings in the linked deck's new notes, edited fields and newer states. */
   pullAnkiDroid: (
     provider: AnkiDroidProvider,
     deckId: string,
-  ) => Effect.Effect<PullSummary, Rejectable | AnswerNotRecorded | DeckNotLinked | Error>;
+  ) => Effect.Effect<PullSummary, Rejectable | WritebackNotRecorded | DeckNotLinked | Error>;
   /** Whether sync back runs after each alarm session; on unless turned off. This phone only. */
   autoSyncBack: Effect.Effect<boolean, StorageFailed>;
   setAutoSyncBack: (on: boolean) => Effect.Effect<void, StorageFailed>;

@@ -1,3 +1,4 @@
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import { useQuery } from "@tanstack/react-query";
 import { MAX_NEED, type Alarm, type Locale } from "@app/core";
 import { Effect } from "effect";
@@ -9,7 +10,7 @@ import { localData } from "./database.ts";
 /** The decks an alarm can ring with, by name, as the editor lists them. */
 export function useAlarmDecks(locale: Locale) {
   return useQuery({
-    queryKey: ["collection"],
+    queryKey: COLLECTION_QUERY_KEY,
     networkMode: "always",
     queryFn: () => Effect.runPromise(localData((data) => data.collection)),
     select: (collection) =>

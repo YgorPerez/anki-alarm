@@ -1,3 +1,4 @@
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import { StudyScreen } from "./StudyScreen.tsx";
 import { RuntimeContext, useRuntime } from "./runtime.ts";
 import { useNow } from "./clock.tsx";
@@ -338,7 +339,7 @@ function Home({ children }: { children: ReactNode }) {
   ) : null;
 
   const collectionQuery = useQuery({
-    queryKey: ["collection"],
+    queryKey: COLLECTION_QUERY_KEY,
     queryFn: () => Effect.runPromise(localData((data) => data.collection)),
   });
   const decks = (collectionQuery.data?.decks ?? []).map((deck) => ({
@@ -384,7 +385,7 @@ function Home({ children }: { children: ReactNode }) {
           ? {
               onImport: async () => {
                 const summary = await pickAndImportApkg();
-                await client.invalidateQueries({ queryKey: ["collection"] });
+                await client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY });
                 return summary;
               },
               onLink: () => router.push("/ankidroid"),

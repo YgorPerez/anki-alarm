@@ -1,3 +1,4 @@
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 // The phone's one sync controller. After a sync that changed something, the screens' queries
 // refresh, the theme (and its native splash/alarm mirror) re-applies, and Home re-arms alarms.
 
@@ -12,7 +13,7 @@ export const appSync = phoneAccount ? createSync({ account: phoneAccount, data: 
 
 appSync?.onSynced(({ changed }) => {
   if (changed.length === 0) return;
-  void queryClient.invalidateQueries({ queryKey: ["collection"] });
+  void queryClient.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY });
   void queryClient.invalidateQueries({ queryKey: ["study"] });
   if (changed.includes("settings")) {
     void queryClient.invalidateQueries({ queryKey: ["settings"] }).then(initializeTheme);

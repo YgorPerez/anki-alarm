@@ -1,10 +1,9 @@
-import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import { intervalText } from "./interval-text.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
-import { buryItem, buryStudyCard } from "./study-actions.ts";
 import { StudyAnnotations } from "./StudyAnnotations.tsx";
-import { annotationItems } from "./study-annotations.ts";
-import { takeStudyAction, useUndoStack } from "./study-undo.ts";
+import { studyMenuItems, takeStudyAction, useStudyChange } from "./study-menu.ts";
+import { useUndoStack } from "./study-undo.ts";
 import { StudyCounts } from "./StudyCounts.tsx";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useContext, type ReactNode } from "react";
@@ -16,12 +15,10 @@ import {
   nextStudyCard,
   nextIntervals,
   studyCounts,
-  type Card,
   type Grade,
   type Locale,
   type RenderInput,
   type StudyAction,
-  type UndoStep,
 } from "@app/core";
 import { Effect } from "effect";
 import { useEffect, useRef, useState } from "react";
@@ -55,7 +52,7 @@ export function StudyScreen({
   const insets = useSafeAreaInsets();
   const dark = useColorScheme() === "dark";
   const study = useStudySession(deckId, onExit);
-  const { query, busy, error, canUndo, undo, card } = study;
+  const { query, busy, error, canUndo, undo } = study;
   const [editing, setEditing] = useState<string>();
   const deckName = query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value;
   const frame = { paddingTop: insets.top, paddingBottom: insets.bottom };
@@ -75,16 +72,13 @@ export function StudyScreen({
       <StudyNavigation
         annotations={<StudyAnnotations next={study.next} locale={locale} />}
         counts={study.counts}
-        items={
-          card
-            ? [
-                { id: "editNote", label: t("editNote"), onPress: () => setEditing(card.id) },
-                ...suspensionItems(locale, study.suspend),
-                buryItem(locale, study.bury),
-                ...annotationItems(study.next, locale, study.change),
-              ]
-            : []
-        }
+        items={studyMenuItems({
+          next: study.next,
+          locale,
+          edit: setEditing,
+          leave: study.leave,
+          change: study.change,
+        })}
         title={deckName ?? t("study")}
         busy={busy}
         locale={locale}
@@ -441,12 +435,7 @@ function useStudySession(deckId: string, onExit: () => void) {
     setBusy(false);
   }
   /** Flag or mark: the card stays, revealed or not. */
-  async function annotate(action: StudyAction) {
-    await guarded(async () => {
-      history.record(await takeStudyAction(action));
-      await Promise.all([refresh(), client.invalidateQueries({ queryKey: ["collection"] })]);
-    });
-  }
+  const change = useStudyChange(guarded, refresh, history.record);
   async function answer(grade: Grade) {
     if (!cardId || !revealed) return;
     await guarded(async () => {
@@ -466,10 +455,10 @@ function useStudySession(deckId: string, onExit: () => void) {
     });
   }
   /** Takes the current card out without an answer (suspend, bury); the next one comes. */
-  async function leaveCard(change: (target: Card) => Promise<UndoStep>) {
+  async function leave(action: StudyAction) {
     if (!card) return;
     await guarded(async () => {
-      history.record(await change(card));
+      history.record(await takeStudyAction(action, client));
       setRevealedId(undefined);
       setUndone(undefined);
       await refresh();
@@ -481,7 +470,7 @@ function useStudySession(deckId: string, onExit: () => void) {
     await guarded(async () => {
       setUndone(await history.undo());
       setRevealedId(undefined);
-      await Promise.all([refresh(), client.invalidateQueries({ queryKey: ["collection"] })]);
+      await Promise.all([refresh(), client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY })]);
     });
   }
   return {
@@ -502,13 +491,10 @@ function useStudySession(deckId: string, onExit: () => void) {
     revealed,
     reveal: () => setRevealedId(cardId),
     answer,
-    change: annotate,
-    suspend: (scope: SuspendScope) =>
-      leaveCard((target) => suspendStudyCard(target, scope, client)),
+    change,
+    leave,
     canUndo: history.canUndo,
     undo,
-    /** Buries the card until the next study day; the deck's counts change with it. */
-    bury: () => leaveCard((target) => buryStudyCard(target, client)),
     refresh,
   };
 }

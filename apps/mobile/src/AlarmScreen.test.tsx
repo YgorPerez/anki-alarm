@@ -507,8 +507,8 @@ test("an alarm without read aloud reads nothing", async () => {
   expect(reading(native.signals())).toEqual([]);
 });
 
-test.each(["Suspender card", "Suspender nota"])(
-  "%s replaces the alarm card without progress and retains empty-deck dismissal",
+test.each(["Suspender cartão", "Suspender nota"])(
+  "%s replaces the alarm card without progress and can't reach the no-cards dismissal",
   async (action) => {
     const { dismissed } = await ringing(`Suspend ${action}`, ["first", "second"], { need: 2 });
     await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
@@ -519,7 +519,14 @@ test.each(["Suspender card", "Suspender nota"])(
     await waitFor(() => expect(front()).not.toBe(before));
     await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
     await fireEvent.press(screen.getByRole("button", { name: action }));
-    await screen.findByRole("button", { name: "Desligar" });
+    // Nothing else left: a suspended card comes back, so suspending can't end the alarm.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Ações do cartão" }).props.accessibilityState?.disabled,
+      ).toBeFalsy(),
+    );
+    expect(screen.getByLabelText("Frente")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Desligar" })).toBeNull();
     expect(dismissed()).toBe(0);
     expect(screen.getByText(/0 de 2 certos/)).toBeTruthy();
   },

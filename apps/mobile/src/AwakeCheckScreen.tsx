@@ -1,18 +1,15 @@
-import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
-import { buryItem, buryStudyCard } from "./study-actions.ts";
 import { StudyAnnotations } from "./StudyAnnotations.tsx";
-import { annotationItems, useStudyAnnotationChange } from "./study-annotations.ts";
-import { undoItem } from "./study-undo.ts";
+import { studyMenuItems, takeStudyAction, useStudyChange } from "./study-menu.ts";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   awakeCheckSession,
   RING_POLICY,
-  type Card,
   type Grade,
   type Locale,
-  type UndoStep,
+  type StudyAction,
 } from "@app/core";
 import { Effect, type Layer } from "effect";
 import { useEffect, useRef, useState } from "react";
@@ -53,7 +50,9 @@ export function AwakeCheckScreen({
   const t = copy(locale);
   const now = useNow();
   const prompt = useAwakeCheck(check, layer, onPassed, gradeDelayMs);
-  const left = Math.max(0, (check.shownAt ?? now) + TIMEOUT_MS - now);
+  // `now` ticks, so a restart can be newer than it.
+  const elapsed = now - Math.max(check.shownAt ?? now, prompt.activeAt);
+  const left = Math.min(TIMEOUT_MS, Math.max(0, TIMEOUT_MS - elapsed));
   const next = prompt.session?.next;
   // The card whose note is open in the editor, over the card: Back returns to the card.
   const [editing, setEditing] = useState<string>();
@@ -65,6 +64,7 @@ export function AwakeCheckScreen({
           locale={locale}
           onSaved={prompt.refetch}
           onClose={() => setEditing(undefined)}
+          onActivity={prompt.activity}
         />
       </AlarmFrame>
     );
@@ -115,13 +115,17 @@ export function AwakeCheckScreen({
             </Text>
             <StudyAnnotations next={next} locale={locale} />
             <StudyMenu
-              items={[
-                undoItem(locale, prompt.canUndo, prompt.undo),
-                { id: "editNote", label: t("editNote"), onPress: () => setEditing(next.card.id) },
-                ...suspensionItems(locale, prompt.suspend),
-                buryItem(locale, prompt.bury),
-                ...annotationItems(next, locale, prompt.change),
-              ]}
+              items={studyMenuItems({
+                next,
+                locale,
+                undo: { canUndo: prompt.canUndo, run: prompt.undo },
+                edit: (cardId) => {
+                  prompt.activity();
+                  setEditing(cardId);
+                },
+                leave: prompt.leave,
+                change: prompt.change,
+              })}
               locale={locale}
               busy={prompt.busy}
             />
@@ -159,9 +163,21 @@ function useAwakeCheck(
   gradeDelayMs: number,
 ) {
   const client = useQueryClient();
-  const { busy, error, guarded } = useGuarded();
+  const { busy, error, setError, guarded } = useGuarded();
   const shownAt = useRef(0);
   const signal = signalWith(layer);
+  // When native last restarted the timeout. Typing sends at most one restart a second.
+  const [activeAt, setActiveAt] = useState(0);
+  const lastActivity = useRef(0);
+  const activity = () => {
+    const at = Date.now();
+    if (at - lastActivity.current < 1000) return;
+    lastActivity.current = at;
+    void signal((service) => service.awakeCheckActivity(check.id)).then(
+      () => setActiveAt(at),
+      () => setError(true),
+    );
+  };
   const { query, cardId, history, card } = useAlarmStudy(
     ["awakeCheck", check.id],
     async (undone) => {
@@ -185,11 +201,10 @@ function useAwakeCheck(
     if (cardId) shownAt.current = performance.now();
   }, [cardId]);
   /** Takes the current card out without an answer (suspend, bury): the check stays, with another card. */
-  const leaveCard = (change: (target: Card) => Promise<UndoStep>) =>
+  const leave = (action: StudyAction) =>
     guarded(async () => {
-      const target = session?.next?.card;
-      if (!target) return;
-      history.replaced(await change(target));
+      if (!session?.next) return;
+      history.replaced(await takeStudyAction(action, client));
       card.hide();
       await query.refetch();
     });
@@ -203,16 +218,17 @@ function useAwakeCheck(
     if (alreadyPassed) void guarded(pass);
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once the log says it passed.
   }, [alreadyPassed]);
-  const change = useStudyAnnotationChange(guarded, () => query.refetch(), history.record);
+  const change = useStudyChange(guarded, () => query.refetch(), history.record);
   return {
     session,
     busy,
     error: error || query.isError,
     card,
     pass: () => guarded(pass),
-    suspend: (scope: SuspendScope) =>
-      leaveCard((target) => suspendStudyCard(target, scope, client)),
+    leave,
     refetch: () => query.refetch(),
+    activity,
+    activeAt,
     change,
     canUndo: history.canUndo,
     /** Reverses the check's newest card-menu action; its card comes back. Answers pass the check. */
@@ -223,7 +239,7 @@ function useAwakeCheck(
         card.hide();
         await Promise.all([
           query.refetch(),
-          client.invalidateQueries({ queryKey: ["collection"] }),
+          client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY }),
         ]);
       }),
     answer: (grade: Grade) =>
@@ -235,7 +251,5 @@ function useAwakeCheck(
         );
         await pass();
       }),
-    /** Buries the card until the next study day; another card comes and the check goes on. */
-    bury: () => leaveCard((target) => buryStudyCard(target, client)),
   };
 }

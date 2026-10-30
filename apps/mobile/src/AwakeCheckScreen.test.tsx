@@ -9,6 +9,8 @@ import { AwakeCheckScreen } from "./AwakeCheckScreen.tsx";
 import { AlarmService, memoryAlarmService, type AwakeCheck, type Ring } from "./alarms.ts";
 
 const front = () => String(screen.getByLabelText("Frente").props.source.html);
+const menuEnabled = () =>
+  !screen.getByRole("button", { name: "Ações do cartão" }).props.accessibilityState?.disabled;
 /** Picks `item` from the card-action menu. */
 async function fromMenu(item: string) {
   await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
@@ -158,7 +160,7 @@ test("with no card to show, tapping I'm awake passes it", async () => {
   expect(native.awakeCheck()).toBeNull();
 });
 
-test.each(["Suspender card", "Suspender nota"])(
+test.each(["Suspender cartão", "Suspender nota"])(
   "%s replaces the awake-check card without passing it",
   async (action) => {
     const state = await Effect.runPromise(
@@ -181,10 +183,36 @@ test.each(["Suspender card", "Suspender nota"])(
     expect(passed()).toBe(0);
     await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
     await fireEvent.press(screen.getByRole("button", { name: action }));
-    await screen.findByRole("button", { name: "Estou acordado" });
+    // Nothing else left: a suspended card comes back, so suspending can't pass the check.
+    await waitFor(() => expect(menuEnabled()).toBe(true));
+    expect(screen.getByLabelText("Frente")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Estou acordado" })).toBeNull();
     expect(passed()).toBe(0);
   },
 );
+
+test("editing the note restarts the check's countdown, in native too", async () => {
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Editar a tempo");
+        c.addBasicNote(deck.id, "sol", "sun");
+      }),
+    ),
+  );
+  const deckId = state.decks.find((d) => d.fields.name.value === "Editar a tempo")!.id;
+  const { check, native } = await shownCheck("edit-in-time", deckId);
+  await show({ ...check, shownAt: Date.now() - 50_000 }, native.layer);
+  await screen.findByLabelText("Frente");
+  expect(screen.getByText(/· 1\d s/)).toBeTruthy();
+
+  await fromMenu("Editar nota");
+  await fireEvent.changeText(await screen.findByDisplayValue("sol"), "sol nascente");
+  expect(native.signals()).toContain(`awakeCheckActivity:${check.id}`);
+  pressBack();
+  await screen.findByLabelText("Frente");
+  expect(screen.getByText(/· (59|60) s/)).toBeTruthy();
+});
 
 test("Edit note returns to the same card, updated, and Back stays on the check", async () => {
   const state = await Effect.runPromise(

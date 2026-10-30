@@ -332,6 +332,12 @@ export interface SyncBackSuspension {
   noteId: number;
   ord: number;
 }
+/**
+ * Stands in what sync back sent for "AnkiDroid holds this card's suspension because we sent it".
+ * AnkiDroid's API can't unsuspend, so pull doesn't re-apply that suspension to a card unsuspended
+ * here; the key goes once AnkiDroid's queue for the card leaves suspended.
+ */
+export const sentSuspensionKey = (cardId: string) => `sent-suspension:${cardId}`;
 export function syncBackSuspensions(
   state: CollectionState,
   deviceId: string,

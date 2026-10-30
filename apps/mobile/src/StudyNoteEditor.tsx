@@ -1,3 +1,4 @@
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import type { Locale } from "@app/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Effect } from "effect";
@@ -33,7 +34,7 @@ export function StudyNoteEditor({
   const [error, setError] = useState(false);
   const lock = useRef(false);
   const query = useQuery({
-    queryKey: ["collection"],
+    queryKey: COLLECTION_QUERY_KEY,
     networkMode: "always",
     queryFn: () => Effect.runPromise(localData((data) => data.collection)),
   });
@@ -56,7 +57,9 @@ export function StudyNoteEditor({
     void Effect.runPromise(
       localData((data) => data.changeCollection((c) => c.editNote(noteId, values))),
     )
-      .then(() => Promise.all([client.invalidateQueries({ queryKey: ["collection"] }), onSaved()]))
+      .then(() =>
+        Promise.all([client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY }), onSaved()]),
+      )
       .then(onClose, () => setError(true))
       .finally(() => {
         lock.current = false;

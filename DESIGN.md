@@ -277,6 +277,9 @@ segments use `rounded-pill` (999px). Cards, fields, sheets, dialogs and banners 
 radius aliases, arbitrary values or dynamic class names. Inline `borderRadius` and corner radius
 properties accept only the numeric literals `16` and `999`.
 
+One recorded exception: Decks study's "Mostrar resposta" / "Show answer" bar is flat and full-width,
+with no radius. A user decision in #86.
+
 The web keeps its existing scale: pills for controls, `lg` 16px for sheets and dialogs, and `xl`
 20px for the today card. The shared radius tokens remain unchanged.
 

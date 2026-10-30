@@ -5,6 +5,7 @@ import {
   linkedAnkiDroidDecks,
   presetFromOptions,
   seenReps,
+  sentSuspensionKey,
   snapshotEntry,
   type AnkiDroidCard,
   type AnkiDroidSource,
@@ -145,6 +146,8 @@ export interface AnkiDroidLink {
   seen: [cardId: string, reps: number][];
   /** Decks this phone took over: their earlier reviews are not sent back from here. */
   claimed: string[];
+  /** Keys in what sync back sent for suspensions AnkiDroid no longer holds, to forget. */
+  released: string[];
   added: number;
   edited: number;
 }
@@ -620,16 +623,26 @@ export class Collection {
    * Records take ids from their Anki identities, so linking again updates instead of duplicating:
    * a note field takes AnkiDroid's value when the note's mod time is newer than the field's clock.
    * Pulling is linking again: new notes and cards come in, edited fields follow that rule, and
-   * suspension follows AnkiDroid. A card AnkiDroid reviewed since this phone last saw it (`seen`,
-   * see `seenReps`) comes with a snapshot of its state to append to the review log.
+   * suspension follows AnkiDroid, except a suspension sync back sent (`sent`, see
+   * `sentSuspensionKey`) on a card unsuspended here since. A card AnkiDroid reviewed since this
+   * phone last saw it (`seen`, see `seenReps`) comes with a snapshot of its state to append to the
+   * review log.
    */
   linkAnkiDroid(
     source: AnkiDroidSource,
     log: readonly LogEntry[] = [],
     seen: ReadonlyMap<string, number> = new Map(),
+    sent: ReadonlySet<string> = new Set(),
   ): AnkiDroidLink {
     const decks = linkedAnkiDroidDecks(source);
     const claimed: string[] = [];
+    // Notes that were in a linked deck before this link: their mark is already the app's.
+    const linkedDecks = new Set(this.state.decks.filter((d) => d.fields.linkedBy).map((d) => d.id));
+    const linkedNotes = new Set(
+      this.state.cards
+        .filter((c) => linkedDecks.has(c.fields.deckId.value))
+        .map((c) => c.fields.noteId.value),
+    );
     const deckIds = new Map(decks.map((d) => [d.id, importId("deck", d.id, d.name)]));
     if ([...deckIds.values()].some((id) => this.deleted("decks", id)))
       throw new Error("Linked deck was deleted");
@@ -691,12 +704,13 @@ export class Collection {
       const hasCard = source.cards.some((c) => c.noteId === ad.id && homeDeck(c));
       if (!noteTypeId || !hasCard || this.deleted("notes", id)) continue;
       noteIds.set(ad.id, id);
-      const merged = this.mergeAnkiNote(id, ad, noteTypeId);
+      const merged = this.mergeAnkiNote(id, ad, noteTypeId, !linkedNotes.has(id));
       if (merged === "added") added++;
       else if (merged === "edited") edited++;
     }
     const snapshots: LogEntry[] = [];
     const reps: [string, number][] = [];
+    const released: string[] = [];
     for (const ad of source.cards) {
       const noteId = noteIds.get(ad.noteId);
       const deckId = homeDeck(ad);
@@ -705,6 +719,8 @@ export class Collection {
       if (this.deleted("cards", id)) continue;
       // Queue -1 is suspended in Anki; buried cards (-2/-3) are not modelled.
       const suspended = ad.queue === -1;
+      const ours = sent.has(sentSuspensionKey(id));
+      if (ours && !suspended) released.push(sentSuspensionKey(id));
       const card = this.state.cards.find((c) => c.id === id);
       if (!card)
         this.state.cards.push({
@@ -714,16 +730,29 @@ export class Collection {
           ),
           anki: { id: ad.id },
         });
-      else if (card.fields.suspended.value !== suspended)
+      else if (card.fields.suspended.value !== suspended && !(suspended && ours))
         card.fields.suspended = { value: suspended, hlc: this.tick() };
       reps.push([id, ad.reps]);
       if (ad.reps <= seenReps(log, id, seen)) continue;
       const snapshot = snapshotEntry(ad, id, steps.get(deckId) ?? [], this.env.now());
       if (snapshot) snapshots.push(snapshot);
     }
-    return { deckId: deckIds.get(source.deckId)!, snapshots, seen: reps, claimed, added, edited };
+    return {
+      deckId: deckIds.get(source.deckId)!,
+      snapshots,
+      seen: reps,
+      claimed,
+      released,
+      added,
+      edited,
+    };
   }
-  private mergeAnkiNote(id: string, ad: AnkiDroidSource["notes"][number], noteTypeId: string) {
+  private mergeAnkiNote(
+    id: string,
+    ad: AnkiDroidSource["notes"][number],
+    noteTypeId: string,
+    firstLink: boolean,
+  ) {
     const values = ad.fields.split(SEPARATOR);
     let tags = ad.tags.split(" ").filter(Boolean);
     const note = this.state.notes.find((n) => n.id === id);
@@ -736,9 +765,12 @@ export class Collection {
       });
       return "added";
     }
-    // Mark is local to this app for linked notes, even when AnkiDroid edits other tags.
+    // A first link takes AnkiDroid's mark, whatever the clocks say. After that mark is local to
+    // this app, so an unmark here survives, even when AnkiDroid edits other tags.
+    const adopted = firstLink && tags.includes("marked");
+    const marked = note.fields.tags.value.includes("marked");
     tags = tags.filter((tag) => tag !== "marked");
-    if (note.fields.tags.value.includes("marked")) tags.push("marked");
+    if (marked || adopted) tags.push("marked");
     // Per field, the newer of the local clock and AnkiDroid's mod time wins (ADR 0001).
     const mod = ad.mod * 1000;
     let changed = false;
@@ -751,6 +783,9 @@ export class Collection {
     });
     if (note.fields.tags.value.join(" ") !== tags.join(" ") && mod > note.fields.tags.hlc.wallMs) {
       note.fields.tags = { value: tags, hlc: this.tick() };
+      changed = true;
+    } else if (adopted && !marked) {
+      note.fields.tags = { value: [...note.fields.tags.value, "marked"], hlc: this.tick() };
       changed = true;
     }
     return changed ? "edited" : undefined;
