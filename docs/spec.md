@@ -236,6 +236,12 @@ session** is a special mode of it on the phone.
   its day's short name. Tapping one updates the summary and the draft, and clears a one-off date.
   With no days and no date, the summary names the day it will ring once.
 - A name field sits on the page under the letters; it replaces the Name row and its sheet.
+- The cards block comes next: the deck name on up to two lines opens the deck choice, and a stepper
+  on the page sets N from 1 to Core's limit.
+- Two-line rows follow, name above current value: Som / Sound (no switch), Vibração / Vibration,
+  Adiar / Snooze, Teste de despertar / Awake check and Ler em voz alta / Read aloud. A switch flips
+  its setting without opening anything; a tap elsewhere on the row opens its sheet. The Sound sheet
+  no longer holds vibration, which has its own sheet.
 
 - No top bar. A fixed bottom bar holds neutral Cancelar / Cancel and solid Salvar / Save while the
   settings scroll above it. Saving turns the alarm on.

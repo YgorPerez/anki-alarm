@@ -4,6 +4,29 @@ import { AppState, Pressable, Switch, Text, View } from "react-native";
 import { native } from "./alarm-android.ts";
 import { copy } from "./copy.ts";
 
+/** The alarm editor's vibration: on or off. */
+export function AlarmVibrationSettings({
+  alarm,
+  locale,
+  onChange,
+}: {
+  alarm: Alarm;
+  locale: Locale;
+  onChange: (alarm: Alarm) => void;
+}) {
+  const t = copy(locale);
+  return (
+    <View className="flex-row items-center justify-between">
+      <Text className="text-body text-foreground">{t("vibration")}</Text>
+      <Switch
+        accessibilityLabel={t("vibration")}
+        value={alarm.vibrate}
+        onValueChange={(vibrate) => onChange({ ...alarm, vibrate })}
+      />
+    </View>
+  );
+}
+
 export function AlarmSoundSettings({
   alarm,
   locale,
@@ -108,14 +131,6 @@ export function AlarmSoundSettings({
       >
         <Text className="text-body text-foreground">{t("stopPreview")}</Text>
       </Pressable>
-      <View className="flex-row items-center justify-between">
-        <Text className="text-body text-foreground">{t("vibration")}</Text>
-        <Switch
-          accessibilityLabel={t("vibration")}
-          value={alarm.vibrate}
-          onValueChange={(vibrate) => onChange({ ...alarm, vibrate })}
-        />
-      </View>
       <Text className="text-body font-bold text-foreground">{t("ramp")}</Text>
       <View className="flex-row flex-wrap gap-2">
         {RAMP_CHOICES.map((rampSeconds) => (
