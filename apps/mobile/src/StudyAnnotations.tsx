@@ -2,7 +2,7 @@ import type { Locale } from "@app/core";
 import Svg, { Path } from "react-native-svg";
 import { View } from "react-native";
 import { copy } from "./copy.ts";
-import { flagLabel, flags, type Current } from "./study-annotations.ts";
+import { flagLabel, flags, type Current } from "./study-menu.ts";
 
 /** The current card's flag and its note's star, for the top bar (never inside the card HTML). */
 export function StudyAnnotations({ next, locale }: { next: Current; locale: Locale }) {

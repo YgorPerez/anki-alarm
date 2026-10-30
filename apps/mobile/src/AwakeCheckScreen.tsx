@@ -1,18 +1,14 @@
-import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
-import { buryItem, buryStudyCard } from "./study-actions.ts";
 import { StudyAnnotations } from "./StudyAnnotations.tsx";
-import { annotationItems, useStudyAnnotationChange } from "./study-annotations.ts";
-import { undoItem } from "./study-undo.ts";
+import { studyMenuItems, takeStudyAction, useStudyChange } from "./study-menu.ts";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   awakeCheckSession,
   RING_POLICY,
-  type Card,
   type Grade,
   type Locale,
-  type UndoStep,
+  type StudyAction,
 } from "@app/core";
 import { Effect, type Layer } from "effect";
 import { useEffect, useRef, useState } from "react";
@@ -118,20 +114,17 @@ export function AwakeCheckScreen({
             </Text>
             <StudyAnnotations next={next} locale={locale} />
             <StudyMenu
-              items={[
-                undoItem(locale, prompt.canUndo, prompt.undo),
-                {
-                  id: "editNote",
-                  label: t("editNote"),
-                  onPress: () => {
-                    prompt.activity();
-                    setEditing(next.card.id);
-                  },
+              items={studyMenuItems({
+                next,
+                locale,
+                undo: { canUndo: prompt.canUndo, run: prompt.undo },
+                edit: (cardId) => {
+                  prompt.activity();
+                  setEditing(cardId);
                 },
-                ...suspensionItems(locale, prompt.suspend),
-                buryItem(locale, prompt.bury),
-                ...annotationItems(next, locale, prompt.change),
-              ]}
+                leave: prompt.leave,
+                change: prompt.change,
+              })}
               locale={locale}
               busy={prompt.busy}
             />
@@ -207,11 +200,10 @@ function useAwakeCheck(
     if (cardId) shownAt.current = performance.now();
   }, [cardId]);
   /** Takes the current card out without an answer (suspend, bury): the check stays, with another card. */
-  const leaveCard = (change: (target: Card) => Promise<UndoStep>) =>
+  const leave = (action: StudyAction) =>
     guarded(async () => {
-      const target = session?.next?.card;
-      if (!target) return;
-      history.replaced(await change(target));
+      if (!session?.next) return;
+      history.replaced(await takeStudyAction(action, client));
       card.hide();
       await query.refetch();
     });
@@ -225,15 +217,14 @@ function useAwakeCheck(
     if (alreadyPassed) void guarded(pass);
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once the log says it passed.
   }, [alreadyPassed]);
-  const change = useStudyAnnotationChange(guarded, () => query.refetch(), history.record);
+  const change = useStudyChange(guarded, () => query.refetch(), history.record);
   return {
     session,
     busy,
     error: error || query.isError,
     card,
     pass: () => guarded(pass),
-    suspend: (scope: SuspendScope) =>
-      leaveCard((target) => suspendStudyCard(target, scope, client)),
+    leave,
     refetch: () => query.refetch(),
     activity,
     activeAt,
@@ -259,7 +250,5 @@ function useAwakeCheck(
         );
         await pass();
       }),
-    /** Buries the card until the next study day; another card comes and the check goes on. */
-    bury: () => leaveCard((target) => buryStudyCard(target, client)),
   };
 }

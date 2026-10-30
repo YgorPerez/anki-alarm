@@ -1,9 +1,6 @@
-import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
-import { buryItem, buryStudyCard } from "./study-actions.ts";
 import { StudyAnnotations } from "./StudyAnnotations.tsx";
-import { annotationItems, useStudyAnnotationChange } from "./study-annotations.ts";
-import { undoItem } from "./study-undo.ts";
+import { studyMenuItems, takeStudyAction, useStudyChange } from "./study-menu.ts";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -17,6 +14,7 @@ import {
   type Grade,
   type Locale,
   type ReadAloud,
+  type StudyAction,
   type UndoStep,
 } from "@app/core";
 import { Effect, type Layer } from "effect";
@@ -180,13 +178,14 @@ function CardStage({
           )}
           <StudyAnnotations next={next} locale={locale} />
           <StudyMenu
-            items={[
-              undoItem(locale, alarm.canUndo, alarm.undo),
-              { id: "editNote", label: t("editNote"), onPress: () => setEditing(next.card.id) },
-              ...suspensionItems(locale, alarm.suspend),
-              buryItem(locale, alarm.bury),
-              ...annotationItems(next, locale, alarm.change),
-            ]}
+            items={studyMenuItems({
+              next,
+              locale,
+              undo: { canUndo: alarm.canUndo, run: alarm.undo },
+              edit: setEditing,
+              leave: alarm.leave,
+              change: alarm.change,
+            })}
             locale={locale}
             busy={alarm.busy}
           />
@@ -487,10 +486,10 @@ function useAlarmSession(
    * Takes the current card out of the session without an answer (suspend, bury): progress stays
    * and the next card comes, read aloud.
    */
-  const leaveCard = (change: (target: Card) => Promise<UndoStep>) =>
-    replaceCard((target) => {
+  const leave = (action: StudyAction) =>
+    replaceCard(() => {
       stopReading();
-      return change(target);
+      return takeStudyAction(action, client);
     });
   /** A deck with no cards can't give the awake check a card, so that dismissal skips it. */
   const finish = async (awakeCheck = true) => {
@@ -498,7 +497,7 @@ function useAlarmSession(
     await signal((service) => service.dismiss(ring.id, after));
     onDismissed();
   };
-  const change = useStudyAnnotationChange(guarded, () => query.refetch(), history.record);
+  const change = useStudyChange(guarded, () => query.refetch(), history.record);
   return {
     session,
     started,
@@ -533,8 +532,7 @@ function useAlarmSession(
       card.reveal();
       activity();
     },
-    suspend: (scope: SuspendScope) =>
-      leaveCard((target) => suspendStudyCard(target, scope, client)),
+    leave,
     activity,
     refetch: () => query.refetch(),
     change,
@@ -565,8 +563,6 @@ function useAlarmSession(
         read(data?.next);
         await client.invalidateQueries({ queryKey: ["collection"] });
       }),
-    /** Buries the card until the next study day: another comes, and it doesn't count toward N. */
-    bury: () => leaveCard((target) => buryStudyCard(target, client)),
     dismiss: () => guarded(() => finish(false)),
   };
 }

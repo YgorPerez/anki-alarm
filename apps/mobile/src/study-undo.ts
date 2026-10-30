@@ -1,20 +1,7 @@
-import {
-  popUndo,
-  pushUndo,
-  type Locale,
-  type StudyAction,
-  type UndoStack,
-  type UndoStep,
-} from "@app/core";
+import { popUndo, pushUndo, type UndoStack, type UndoStep } from "@app/core";
 import { Effect } from "effect";
 import { useRef, useState } from "react";
 import { localData } from "./database.ts";
-import { editingCopy } from "./editing-copy.ts";
-import type { StudyMenuItem } from "./StudyMenu.tsx";
-
-/** Takes a card-menu action and resolves with the step that undoes it. */
-export const takeStudyAction = (action: StudyAction) =>
-  Effect.runPromise(localData((data) => data.studyAction(action)));
 
 /**
  * A study screen's undo history, as in AnkiDroid: every answer and card-menu action pushes its
@@ -58,17 +45,3 @@ export function useSessionUndo() {
     },
   };
 }
-
-/** Undo in the alarm's and awake check's card menu; Decks study has it in its top bar. */
-export const undoItem = (
-  locale: Locale,
-  canUndo: boolean,
-  undo: () => Promise<void>,
-): StudyMenuItem => ({
-  id: "undo",
-  label: editingCopy(locale)("undo"),
-  disabled: !canUndo,
-  onPress: () => {
-    void undo();
-  },
-});
