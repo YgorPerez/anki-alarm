@@ -1,8 +1,9 @@
 import { StudyMenu } from "./StudyMenu.tsx";
+import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useQuery } from "@tanstack/react-query";
 import { awakeCheckSession, RING_POLICY, type Grade, type Locale } from "@app/core";
 import { Effect, type Layer } from "effect";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import type { AlarmService, AwakeCheck } from "./alarms.ts";
 import {
@@ -49,6 +50,19 @@ export function AwakeCheckScreen({
   const prompt = useAwakeCheck(check, layer, onPassed, gradeDelayMs);
   const left = Math.max(0, (check.shownAt ?? now) + TIMEOUT_MS - now);
   const next = prompt.session?.next;
+  // The card whose note is open in the editor, over the card: Back returns to the card.
+  const [editing, setEditing] = useState<string>();
+  if (next && editing)
+    return (
+      <AlarmFrame studying top={null}>
+        <StudyNoteEditor
+          cardId={editing}
+          locale={locale}
+          onSaved={prompt.refetch}
+          onClose={() => setEditing(undefined)}
+        />
+      </AlarmFrame>
+    );
   const top = (
     <>
       <Clock at={now} locale={locale} zone={zone} use24Hour={use24Hour} />
@@ -94,7 +108,13 @@ export function AwakeCheckScreen({
               {timeText(now, locale, zone, use24Hour)} ·{" "}
               {t("awakeCardProgress", { seconds: String(Math.ceil(left / 1000)) })}
             </Text>
-            <StudyMenu items={[]} locale={locale} busy={prompt.busy} />
+            <StudyMenu
+              items={[
+                { id: "editNote", label: t("editNote"), onPress: () => setEditing(next.card.id) },
+              ]}
+              locale={locale}
+              busy={prompt.busy}
+            />
             {prompt.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
           </View>
         ) : (
@@ -171,6 +191,7 @@ function useAwakeCheck(
     error: error || query.isError,
     card,
     pass: () => guarded(pass),
+    refetch: () => query.refetch(),
     answer: (grade: Grade) =>
       guarded(async () => {
         if (!cardId || !card.revealed) return;

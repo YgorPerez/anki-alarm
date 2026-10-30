@@ -1,6 +1,7 @@
 import { intervalText } from "./interval-text.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
 import { StudyCounts } from "./StudyCounts.tsx";
+import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useContext } from "react";
 import { ScreenActivity } from "./screen-activity.ts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -46,13 +47,23 @@ export function StudyScreen({
   const insets = useSafeAreaInsets();
   const dark = useColorScheme() === "dark";
   const study = useStudySession(deckId, onExit);
-  const { query, busy, error, canUndo, undo } = study;
+  const { query, busy, error, canUndo, undo, card } = study;
+  const [editing, setEditing] = useState<string>();
   const deckName = query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value;
+  const frame = { paddingTop: insets.top, paddingBottom: insets.bottom };
+  if (editing)
+    return (
+      <View className="flex-1 bg-background" style={frame}>
+        <StudyNoteEditor
+          cardId={editing}
+          locale={locale}
+          onSaved={study.refresh}
+          onClose={() => setEditing(undefined)}
+        />
+      </View>
+    );
   return (
-    <View
-      className="flex-1 bg-background"
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
-    >
+    <View className="flex-1 bg-background" style={frame}>
       <StudyNavigation
         counts={study.counts}
         title={deckName ?? t("study")}
@@ -60,6 +71,7 @@ export function StudyScreen({
         locale={locale}
         onExit={onExit}
         onUndo={canUndo ? undo : undefined}
+        onEdit={card ? () => setEditing(card.id) : undefined}
       />
       <StudyFeedback
         locale={locale}
@@ -160,6 +172,7 @@ function StudyNavigation({
   locale,
   onExit,
   onUndo,
+  onEdit,
 }: {
   counts: ReturnType<typeof studyCounts> | undefined;
   title: string;
@@ -167,7 +180,9 @@ function StudyNavigation({
   locale: Locale;
   onExit: () => void;
   onUndo: (() => Promise<void>) | undefined;
+  onEdit: (() => void) | undefined;
 }) {
+  const t = copy(locale);
   return (
     <View className="flex-row items-center justify-between px-4">
       <Pressable
@@ -192,7 +207,11 @@ function StudyNavigation({
       >
         <Text className="text-body text-foreground">↶</Text>
       </Pressable>
-      <StudyMenu items={[]} locale={locale} busy={busy} />
+      <StudyMenu
+        items={onEdit ? [{ id: "editNote", label: t("editNote"), onPress: onEdit }] : []}
+        locale={locale}
+        busy={busy}
+      />
     </View>
   );
 }
@@ -453,5 +472,6 @@ function useStudySession(deckId: string, onExit: () => void) {
     answer,
     canUndo: answers.length > 0,
     undo,
+    refresh,
   };
 }

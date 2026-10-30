@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
+import { pressBack } from "../test/native/react-native.ts";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
 import { expect, test, vi } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Effect } from "effect";
@@ -125,4 +126,38 @@ test("with no card to show, tapping I'm awake passes it", async () => {
   await fireEvent.press(await screen.findByRole("button", { name: "Estou acordado" }));
   await waitFor(() => expect(passed()).toBe(1));
   expect(native.awakeCheck()).toBeNull();
+});
+
+test("Edit note returns to the same card, updated, and Back stays on the check", async () => {
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        c.addBasicNote(c.createDeck("Editar na checagem").id, "sol", "sun");
+      }),
+    ),
+  );
+  const deckId = state.decks.find((d) => d.fields.name.value === "Editar na checagem")!.id;
+  const { native, check } = await shownCheck("ring-edit", deckId);
+  const passed = await show(check, native.layer);
+  await fireEvent(await screen.findByLabelText("Frente"), "accessibilityAction", {
+    nativeEvent: { actionName: "activate" },
+  });
+  await screen.findByRole("button", { name: "Bom" });
+
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Editar nota" }));
+  await act(async () => {
+    expect(pressBack()).toBe(true);
+  });
+  expect(String((await screen.findByLabelText("Verso")).props.source.html)).toContain("sun");
+
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Editar nota" }));
+  await fireEvent.changeText(await screen.findByLabelText("Verso"), "sun (star)");
+  await fireEvent.press(screen.getByRole("button", { name: "Salvar" }));
+  await waitFor(() =>
+    expect(String(screen.getByLabelText("Verso").props.source?.html)).toContain("sun (star)"),
+  );
+  expect(passed()).toBe(0);
+  expect(native.awakeCheck()).not.toBeNull();
 });
