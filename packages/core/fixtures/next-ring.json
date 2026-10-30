@@ -64,5 +64,53 @@
     "now": "2026-10-28T23:59:00Z",
     "zone": "UTC",
     "expected": "2026-10-29T00:05:00Z"
+  },
+  {
+    "name": "skip the next daily ring",
+    "rule": {
+      "hour": 7,
+      "minute": 30,
+      "repeatDays": [1, 2, 3, 4, 5, 6, 7]
+    },
+    "skip": "2026-10-29T10:30:00Z",
+    "now": "2026-10-28T12:00:00Z",
+    "zone": "America/Sao_Paulo",
+    "expected": "2026-10-30T10:30:00Z"
+  },
+  {
+    "name": "skip the only weekly ring",
+    "rule": {
+      "hour": 7,
+      "minute": 30,
+      "repeatDays": [4]
+    },
+    "skip": "2026-10-29T10:30:00Z",
+    "now": "2026-10-28T12:00:00Z",
+    "zone": "America/Sao_Paulo",
+    "expected": "2026-11-05T10:30:00Z"
+  },
+  {
+    "name": "a skip that has passed",
+    "rule": {
+      "hour": 7,
+      "minute": 30,
+      "repeatDays": [1, 2, 3, 4, 5, 6, 7]
+    },
+    "skip": "2026-10-28T10:30:00Z",
+    "now": "2026-10-28T12:00:00Z",
+    "zone": "America/Sao_Paulo",
+    "expected": "2026-10-29T10:30:00Z"
+  },
+  {
+    "name": "a skip the rule no longer rings at",
+    "rule": {
+      "hour": 7,
+      "minute": 30,
+      "repeatDays": [1, 2, 3, 4, 5, 6, 7]
+    },
+    "skip": "2026-10-29T10:00:00Z",
+    "now": "2026-10-28T12:00:00Z",
+    "zone": "America/Sao_Paulo",
+    "expected": "2026-10-29T10:30:00Z"
   }
 ]

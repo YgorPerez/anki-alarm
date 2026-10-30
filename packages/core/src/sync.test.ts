@@ -178,6 +178,35 @@ describe("alarm records", () => {
     });
   });
 
+  test("a skip merges like any property: one phone skips while another relabels, then undoes", () => {
+    const base = stampAlarm(undefined, newAlarm("alarm"), env);
+    const skipped = stampAlarm(
+      base,
+      { ...alarmFromRecord(base), skip: 1_800_000_000_000 },
+      { ...env, now: () => 2000 },
+    );
+    const renamed = stampAlarm(
+      base,
+      { ...alarmFromRecord(base), label: "Gym" },
+      { ...env, deviceId: "tablet", now: () => 3000 },
+    );
+    const merged = mergeRecord(skipped, renamed);
+    expect(alarmFromRecord(merged)).toMatchObject({ skip: 1_800_000_000_000, label: "Gym" });
+    const undone = stampAlarm(
+      merged,
+      { ...alarmFromRecord(merged), skip: null },
+      { ...env, deviceId: "tablet", now: () => 4000 },
+    );
+    expect(alarmFromRecord(mergeRecord(skipped, undone))).toMatchObject({
+      skip: null,
+      label: "Gym",
+    });
+    // A record synced by a version from before skips has no skip property.
+    const older = { ...base, fields: { ...base.fields } };
+    Reflect.deleteProperty(older.fields, "skip");
+    expect(alarmFromRecord(older).skip).toBeNull();
+  });
+
   test("a synced sound this phone can't read falls back to the default sound", () => {
     const stamped = stampAlarm(undefined, newAlarm("alarm"), env);
     const synced = {

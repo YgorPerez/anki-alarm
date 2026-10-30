@@ -28,6 +28,8 @@ const alarm = Schema.Struct({
   awakeCheckMinutes: Schema.optional(Schema.Unknown),
   // Alarms saved before #48 don't read aloud.
   readAloud: Schema.optional(Schema.Unknown),
+  // Nor any before #78 a skipped ring.
+  skip: Schema.optional(Schema.Unknown),
   // Nor any before #80 is a quick alarm.
   quick: Schema.optional(Schema.Unknown),
 });

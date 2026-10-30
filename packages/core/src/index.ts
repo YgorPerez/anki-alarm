@@ -60,6 +60,10 @@ export type {
 export {
   nextRing,
   nextAlarmRing,
+  skipNextRing,
+  skipOffer,
+  undoSkip,
+  upcomingRing,
   newAlarm,
   RING_POLICY,
   RAMP_CHOICES,

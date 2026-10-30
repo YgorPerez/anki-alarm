@@ -20,7 +20,6 @@ export const TextInput = host("TextInput");
 export const ScrollView = host("RCTScrollView");
 export const Switch = host("RCTSwitch");
 export const KeyboardAvoidingView = View;
-
 /** A View that answers presses, as React Native's Pressable renders one. */
 export function Pressable({ children, disabled, ...props }: Props) {
   return createElement(
