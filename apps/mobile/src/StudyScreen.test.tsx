@@ -166,8 +166,8 @@ test("Undo restores the front; the back link and system Back leave study", async
 });
 
 test.each([
-  { fontScale: 1, height: 64 },
-  { fontScale: 2, height: 196 },
+  { fontScale: 1, height: 88 },
+  { fontScale: 2, height: 220 },
 ])(
   "the control strip reserves $height pixels on both sides at font scale $fontScale",
   async ({ fontScale, height }) => {
@@ -207,8 +207,8 @@ const controls = (revealed: boolean, gradesShown = true) => (
 );
 
 test.each([
-  { fontScale: 1, height: 56 },
-  { fontScale: 2, height: 196 },
+  { fontScale: 1, height: 80 },
+  { fontScale: 2, height: 220 },
 ])("Decks reveal bar and grades reserve $height pixels", async ({ fontScale, height }) => {
   const native = await import("react-native");
   const dimensions = vi

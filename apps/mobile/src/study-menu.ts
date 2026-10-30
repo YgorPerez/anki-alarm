@@ -1,5 +1,6 @@
 import CalendarClock from "lucide-react-native/icons/calendar-clock";
 import CirclePause from "lucide-react-native/icons/circle-pause";
+import StickyNoteMinus from "lucide-react-native/icons/sticky-note-minus";
 import Pencil from "lucide-react-native/icons/pencil";
 import Star from "lucide-react-native/icons/star";
 import Undo2 from "lucide-react-native/icons/undo-2";
@@ -93,7 +94,7 @@ export function studyMenuItems({
     menuItem("suspend-card", t("suspendCard"), CirclePause, () =>
       leave({ kind: "suspendCard", cardId }),
     ),
-    menuItem("suspend-note", t("suspendNote"), CirclePause, () =>
+    menuItem("suspend-note", t("suspendNote"), StickyNoteMinus, () =>
       leave({ kind: "suspendNote", cardId }),
     ),
   ];

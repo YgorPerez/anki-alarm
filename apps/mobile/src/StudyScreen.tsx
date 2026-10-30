@@ -331,7 +331,8 @@ export function AnswerControls({
   const dimensions = useWindowDimensions();
   const rows = gradeRows(dimensions);
   const rowHeight = Math.max(gradeHeight, 42 * dimensions.fontScale + 8);
-  const height = rows.length * rowHeight + (rows.length - 1) * 12;
+  // 12 above and below, so the pills clear the card and the bottom of the screen.
+  const height = rows.length * rowHeight + (rows.length - 1) * 12 + 2 * 12;
   if (!revealed || !gradesShown)
     return (
       <View style={{ height }} className="items-center justify-center">
@@ -355,7 +356,7 @@ export function AnswerControls({
       </View>
     );
   return (
-    <View style={{ height }} className="gap-3 px-4">
+    <View style={{ height }} className="gap-3 px-4 py-3">
       {rows.map((row) => (
         <View key={row.join()} className="flex-row gap-3">
           {row.map((grade) => (
