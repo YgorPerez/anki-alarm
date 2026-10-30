@@ -2,7 +2,7 @@ import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-su
 import { StudyMenu } from "./StudyMenu.tsx";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { awakeCheckSession, RING_POLICY, type Grade, type Locale } from "@app/core";
+import { awakeCheckSession, RING_POLICY, type Card, type Grade, type Locale } from "@app/core";
 import { Effect, type Layer } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
@@ -178,6 +178,15 @@ function useAwakeCheck(
     // When the card appeared, on the monotonic clock: the answer's time taken.
     if (cardId) shownAt.current = performance.now();
   }, [cardId]);
+  /** Takes the current card out without an answer (suspend, bury): the check stays, with another card. */
+  const leaveCard = (change: (target: Card) => Promise<void>) =>
+    guarded(async () => {
+      const target = session?.next?.card;
+      if (!target) return;
+      await change(target);
+      card.hide();
+      await query.refetch();
+    });
   const pass = async () => {
     await signal((service) => service.awakeCheckPassed(check.id));
     onPassed();
@@ -195,13 +204,7 @@ function useAwakeCheck(
     card,
     pass: () => guarded(pass),
     suspend: (scope: SuspendScope) =>
-      guarded(async () => {
-        const currentCard = session?.next?.card;
-        if (!currentCard) return;
-        await suspendStudyCard(currentCard, scope, client);
-        card.hide();
-        await query.refetch();
-      }),
+      leaveCard((target) => suspendStudyCard(target, scope, client)),
     refetch: () => query.refetch(),
     answer: (grade: Grade) =>
       guarded(async () => {

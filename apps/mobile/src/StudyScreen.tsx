@@ -11,6 +11,7 @@ import {
   nextStudyCard,
   nextIntervals,
   studyCounts,
+  type Card,
   type Grade,
   type Locale,
   type LogEntry,
@@ -438,13 +439,14 @@ function useStudySession(deckId: string, onExit: () => void) {
     lock.current = false;
     setBusy(false);
   }
-  async function suspend(scope: SuspendScope) {
+  /** Takes the current card out without an answer (suspend, bury); the next one comes. */
+  async function leaveCard(change: (target: Card) => Promise<void>) {
     if (!card || lock.current) return;
     lock.current = true;
     setBusy(true);
     setError(false);
     try {
-      await suspendStudyCard(card, scope, client);
+      await change(card);
       setRevealedId(undefined);
       setUndone(undefined);
       await refresh();
@@ -489,7 +491,8 @@ function useStudySession(deckId: string, onExit: () => void) {
     revealed,
     reveal: () => setRevealedId(cardId),
     answer,
-    suspend,
+    suspend: (scope: SuspendScope) =>
+      leaveCard((target) => suspendStudyCard(target, scope, client)),
     canUndo: answers.length > 0,
     undo,
     refresh,

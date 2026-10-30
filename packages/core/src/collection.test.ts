@@ -13,7 +13,7 @@ test("card ids use the note namespace and decimal ordinal (UUIDv5)", () => {
   );
 });
 
-import { Collection } from "./index.ts";
+import { Collection, mergeRecord } from "./index.ts";
 const environment = () => {
   let n = 0;
   return {
@@ -146,4 +146,21 @@ test("suspend note includes siblings across decks and undo preserves an already 
   expect(c.snapshot().cards.every((card) => card.fields.suspended.value)).toBe(true);
   c.restoreSuspension(previous);
   expect(c.snapshot().cards.map((card) => card.fields.suspended.value)).toEqual([false, true]);
+});
+
+test("a suspension from one device merges with another device's move of the same card", () => {
+  const phone = new Collection(environment());
+  const deck = phone.createDeck("Words");
+  const note = phone.addBasicNote(deck.id, "front", "back");
+  const shared = phone.snapshot();
+  const web = new Collection({ ...environment(), deviceId: "web" }, structuredClone(shared));
+  const other = web.createDeck("Other");
+  web.moveCards([cardId(note.id, 0)], other.id);
+  phone.suspendNote(note.id);
+  const onPhone = phone.snapshot().cards[0]!;
+  const onWeb = web.snapshot().cards[0]!;
+  for (const merged of [mergeRecord(onPhone, onWeb), mergeRecord(onWeb, onPhone)]) {
+    expect(merged.fields.suspended.value).toBe(true);
+    expect(merged.fields.deckId.value).toBe(other.id);
+  }
 });

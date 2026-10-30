@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   alarmSession,
   awakeCheckAfter,
+  type Card,
   readAloudFor,
   ringNeed,
   snoozeOffer,
@@ -466,6 +467,22 @@ function useAlarmSession(
   const activity = () => {
     void signal((service) => service.activity(ring.id)).catch(() => setError(true));
   };
+  /**
+   * Takes the current card out of the session without an answer (suspend, bury): progress stays
+   * and the next card comes, read aloud.
+   */
+  const leaveCard = (change: (target: Card) => Promise<void>) =>
+    guarded(async () => {
+      const target = session?.next?.card;
+      if (!target) return;
+      await signal((service) => service.activity(ring.id));
+      stopReading();
+      await change(target);
+      card.hide();
+      const { data } = await query.refetch();
+      shownAt.current = performance.now();
+      read(data?.next);
+    });
   const finish = async (awakeCheck = true) => {
     const after = awakeCheck ? awakeCheckAfter(ring.alarm) : null;
     await signal((service) => service.dismiss(ring.id, after));
@@ -506,17 +523,7 @@ function useAlarmSession(
       activity();
     },
     suspend: (scope: SuspendScope) =>
-      guarded(async () => {
-        const currentCard = session?.next?.card;
-        if (!currentCard) return;
-        await signal((service) => service.activity(ring.id));
-        stopReading();
-        await suspendStudyCard(currentCard, scope, client);
-        card.hide();
-        const { data } = await query.refetch();
-        shownAt.current = performance.now();
-        read(data?.next);
-      }),
+      leaveCard((target) => suspendStudyCard(target, scope, client)),
     activity,
     refetch: () => query.refetch(),
     answer: (grade: Grade) =>
