@@ -3,13 +3,23 @@ import { StyleSheet } from "react-native";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react-native/pure";
 import { expect, test, vi } from "vite-plus/test";
 import { newAlarm, newAlarmFor, type Alarm, type Locale } from "@app/core";
-import { alerts, answerAlert, pressBack, toasts } from "../test/native/react-native.ts";
+import {
+  alerts,
+  answerAlert,
+  pressBack,
+  toasts,
+  windowDimensions,
+} from "../test/native/react-native.ts";
 import { answerPicker, pickers } from "../test/native/datetimepicker.ts";
 import { AlarmEditorScreen } from "./AlarmEditorScreen.tsx";
 
 const zone = "America/Sao_Paulo";
 // Wednesday 2026-10-28, 23:18 in São Paulo.
 const now = () => Date.parse("2026-10-29T02:18:00Z");
+
+/** The native scroll view behind a wheel; TalkBack only reaches the control around it. */
+const wheelScroll = (name: string) =>
+  screen.getByTestId(`time-wheel-${name}`, { includeHiddenElements: true });
 
 /** The editor on its route: what it saved or deleted, and whether it left. */
 async function openEditor(
@@ -55,11 +65,13 @@ test("a new alarm takes its time from inline wheels, its days from the Repeat sh
       });
   expect(screen.queryByRole("button", { name: "More options" })).toBeNull();
 
-  const hours = screen.getByRole("adjustable", { name: "Hours" });
-  const minutes = screen.getByRole("adjustable", { name: "Minutes" });
   // The native scroll offset is in points; rows are 76 points at the default font scale.
-  await fireEvent(hours, "momentumScrollEnd", { nativeEvent: { contentOffset: { y: 6 * 76 } } });
-  await fireEvent(minutes, "momentumScrollEnd", { nativeEvent: { contentOffset: { y: 30 * 76 } } });
+  await fireEvent(wheelScroll("Hours"), "momentumScrollEnd", {
+    nativeEvent: { contentOffset: { y: 6 * 76 } },
+  });
+  await fireEvent(wheelScroll("Minutes"), "momentumScrollEnd", {
+    nativeEvent: { contentOffset: { y: 30 * 76 } },
+  });
   expect(screen.getByRole("adjustable", { name: "Hours" }).props.accessibilityValue.text).toBe(
     "06",
   );
@@ -137,10 +149,10 @@ test("editing keeps the alarm's id, Back closes a sheet first, and leaving asks 
   expect(done).toMatchObject({ saved: [], closed: 1 });
 
   const edited = await openEditor(alarm, { saved: true });
-  await fireEvent(screen.getByRole("adjustable", { name: "Hours" }), "momentumScrollEnd", {
+  await fireEvent(wheelScroll("Hours"), "momentumScrollEnd", {
     nativeEvent: { contentOffset: { y: 23 * 76 } },
   });
-  await fireEvent(screen.getByRole("adjustable", { name: "Minutes" }), "momentumScrollEnd", {
+  await fireEvent(wheelScroll("Minutes"), "momentumScrollEnd", {
     nativeEvent: { contentOffset: { y: 48 * 76 } },
   });
   await fireEvent.press(screen.getByRole("button", { name: "Save" }));
@@ -300,10 +312,10 @@ test("24-hour scrolling wraps and rounds to whole minutes, and Save uses the cur
   };
   const done = await openEditor(alarm, { locale: "pt-BR" });
   expect(screen.queryByRole("adjustable", { name: "AM/PM" })).toBeNull();
-  await fireEvent(screen.getByRole("adjustable", { name: "Horas" }), "scroll", {
+  await fireEvent(wheelScroll("Hours"), "scroll", {
     nativeEvent: { contentOffset: { y: 72 * 76 } },
   });
-  await fireEvent(screen.getByRole("adjustable", { name: "Minutos" }), "scroll", {
+  await fireEvent(wheelScroll("Minutes"), "scroll", {
     nativeEvent: { contentOffset: { y: 193.7 * 76 } },
   });
   expect(screen.getByRole("adjustable", { name: "Horas" }).props.accessibilityValue.text).toBe(
@@ -320,10 +332,10 @@ test("a slow drag settles without momentum and keeps a subsequent change to the 
   vi.useFakeTimers();
   try {
     const done = await openEditor({ ...newAlarm("a"), deckId: "deck" });
-    await fireEvent(screen.getByRole("adjustable", { name: "Hours" }), "scrollEndDrag", {
+    await fireEvent(wheelScroll("Hours"), "scrollEndDrag", {
       nativeEvent: { contentOffset: { y: 8 * 76 } },
     });
-    await fireEvent(screen.getByRole("adjustable", { name: "Minutes" }), "momentumScrollEnd", {
+    await fireEvent(wheelScroll("Minutes"), "momentumScrollEnd", {
       nativeEvent: { contentOffset: { y: 20 * 76 } },
     });
     await act(() => vi.advanceTimersByTimeAsync(150));
@@ -331,5 +343,31 @@ test("a slow drag settles without momentum and keeps a subsequent change to the 
     expect(done.saved[0]?.rule).toEqual({ hour: 8, minute: 20, repeatDays: [1, 2, 3, 4, 5] });
   } finally {
     vi.useRealTimers();
+  }
+});
+
+test("TalkBack's adjustable control sits outside the wheel's scroll view, which Android keeps from it", async () => {
+  await openEditor({ ...newAlarm("a"), deckId: "deck" }, { hour24: false });
+  for (const name of ["Hours", "Minutes", "AM/PM"]) {
+    const control = screen.getByRole("adjustable", { name });
+    expect(control.type).not.toBe("RCTScrollView");
+    expect(wheelScroll(name).props).toMatchObject({
+      accessible: false,
+      importantForAccessibility: "no-hide-descendants",
+    });
+  }
+});
+
+test("at 1.3x font a wheel's scaled line fits its row, so the digits stay centered", async () => {
+  windowDimensions.fontScale = 1.3;
+  try {
+    await openEditor({ ...newAlarm("a"), deckId: "deck" });
+    for (const row of screen.getAllByText("07", { includeHiddenElements: true })) {
+      const { lineHeight, height } = StyleSheet.flatten(row.props.style);
+      // Android scales lineHeight with the font but not height.
+      expect(Number(lineHeight) * 1.3).toBeLessThanOrEqual(Number(height));
+    }
+  } finally {
+    windowDimensions.fontScale = 1;
   }
 });

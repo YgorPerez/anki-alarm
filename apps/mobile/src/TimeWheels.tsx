@@ -39,10 +39,12 @@ export function TimeWheels({
       <Wheel
         key={`hours-${hour24}-${rowHeight}`}
         label={t("hours")}
+        testName="Hours"
         value={hour24 ? hour : hour % 12}
         count={hour24 ? 24 : 12}
         format={hour24 ? undefined : (value) => String(value || 12).padStart(2, "0")}
         rowHeight={rowHeight}
+        fontScale={fontScale}
         fontSize={fontSize}
         onChange={(value) => onChange(hour24 ? value : value + (hour >= 12 ? 12 : 0), minute)}
       />
@@ -56,9 +58,11 @@ export function TimeWheels({
       <Wheel
         key={`minutes-${rowHeight}`}
         label={t("wheelMinutes")}
+        testName="Minutes"
         value={minute}
         count={60}
         rowHeight={rowHeight}
+        fontScale={fontScale}
         fontSize={fontSize}
         onChange={(value) => onChange(hour, value)}
       />
@@ -66,10 +70,12 @@ export function TimeWheels({
         <Wheel
           key={`period-${rowHeight}`}
           label="AM/PM"
+          testName="AM/PM"
           width={periodWidth}
           value={hour >= 12 ? 1 : 0}
           count={2}
           rowHeight={rowHeight}
+          fontScale={fontScale}
           fontSize={Math.min(fontSize, 28)}
           format={(value) => (value === 0 ? "AM" : "PM")}
           onChange={(value) => onChange((hour % 12) + value * 12, minute)}
@@ -84,18 +90,22 @@ const digits = (value: number) => String(value).padStart(2, "0");
 /** Five copies keep either end outside normal gestures; settling returns to the middle copy. */
 function Wheel({
   label,
+  testName,
   value,
   count,
   rowHeight,
+  fontScale,
   fontSize,
   format = digits,
   width,
   onChange,
 }: {
   label: string;
+  testName: string;
   value: number;
   count: number;
   rowHeight: number;
+  fontScale: number;
   fontSize: number;
   format?: (value: number) => string;
   width?: number;
@@ -116,8 +126,9 @@ function Wheel({
     recenter(next);
   };
   return (
-    <ScrollView
-      ref={scroll}
+    // Android gives a ScrollView its own accessibility delegate and then ignores role, value and
+    // actions set on it, so TalkBack's control has to be this View around it.
+    <View
       accessible
       accessibilityRole="adjustable"
       accessibilityLabel={label}
@@ -129,46 +140,54 @@ function Wheel({
       }}
       className="flex-1"
       style={{ height: rowHeight * 3, ...(width === undefined ? {} : { flex: 0, width }) }}
-      contentContainerStyle={{ paddingVertical: rowHeight }}
-      contentOffset={initialOffset}
-      nestedScrollEnabled
-      showsVerticalScrollIndicator={false}
-      snapToInterval={rowHeight}
-      decelerationRate="fast"
-      scrollEventThrottle={16}
-      onScroll={(event) => onChange(indexAt(event))}
-      onScrollBeginDrag={() => clearTimeout(idle.current)}
-      onMomentumScrollBegin={() => clearTimeout(idle.current)}
-      onScrollEndDrag={(event) => {
-        const next = indexAt(event);
-        onChange(next);
-        // Delay only the native repositioning, never a draft update with captured values.
-        idle.current = setTimeout(() => recenter(next), 150);
-      }}
-      onMomentumScrollEnd={(event) => settle(indexAt(event))}
     >
-      <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-        {Array.from({ length: count * 5 }, (_, index) => (
-          <Text
-            key={index}
-            style={[
-              clock,
-              {
-                height: rowHeight,
-                lineHeight: rowHeight,
-                fontSize,
-              },
-            ]}
-            className={
-              index % count === value
-                ? "text-center text-foreground"
-                : "text-center text-muted-foreground"
-            }
-          >
-            {format(index % count)}
-          </Text>
-        ))}
-      </View>
-    </ScrollView>
+      <ScrollView
+        ref={scroll}
+        testID={`time-wheel-${testName}`}
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
+        contentContainerStyle={{ paddingVertical: rowHeight }}
+        contentOffset={initialOffset}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
+        snapToInterval={rowHeight}
+        decelerationRate="fast"
+        scrollEventThrottle={16}
+        onScroll={(event) => onChange(indexAt(event))}
+        onScrollBeginDrag={() => clearTimeout(idle.current)}
+        onMomentumScrollBegin={() => clearTimeout(idle.current)}
+        onScrollEndDrag={(event) => {
+          const next = indexAt(event);
+          onChange(next);
+          // Delay only the native repositioning, never a draft update with captured values.
+          idle.current = setTimeout(() => recenter(next), 150);
+        }}
+        onMomentumScrollEnd={(event) => settle(indexAt(event))}
+      >
+        <View>
+          {Array.from({ length: count * 5 }, (_, index) => (
+            <Text
+              key={index}
+              style={[
+                clock,
+                {
+                  height: rowHeight,
+                  // Android scales lineHeight by the font scale itself, but not height.
+                  lineHeight: rowHeight / fontScale,
+                  fontSize,
+                },
+              ]}
+              className={
+                index % count === value
+                  ? "text-center text-foreground"
+                  : "text-center text-muted-foreground"
+              }
+            >
+              {format(index % count)}
+            </Text>
+          ))}
+        </View>
+      </ScrollView>
+    </View>
   );
 }
