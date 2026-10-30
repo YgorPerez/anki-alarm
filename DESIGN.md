@@ -54,7 +54,7 @@ colors:
   destructive-dark: "#ff6b6b"
 typography:
   clock:
-    fontFamily: "Inter"
+    fontFamily: "Inter" # Phone only; the web's clock stays Atkinson Hyperlegible. See Typography.
     fontSize: "68px"
     fontWeight: 700
     lineHeight: "76px"
@@ -207,12 +207,17 @@ does none of these is a neutral.
 ## Typography
 
 Atkinson Hyperlegible regular and bold is bundled with both apps for general text. It was drawn
-for low vision: I, l and 1 differ, 0 is slashed, and letters keep open shapes.
+for low vision: I, l and 1 differ, 0 is slashed, and letters keep open shapes. That is the "half
+asleep, no glasses" case.
 
-On the phone, clock times use bundled Inter bold with tabular figures and an unslashed zero:
-Home's alarm cards, the editor's time, and the large times on ringing, snoozed and native
-lock-screen screens. Other text, including progress counts and AM/PM beside the large clock,
-stays Atkinson. The web keeps Atkinson. Decided in #94; implemented in #95.
+On the phone, every time uses bundled Inter bold with tabular figures and an unslashed zero: on Home
+(alarm cards and the next ring's time under the countdown), in the editor, and the large times on
+ringing, snoozed and native lock-screen screens. Other text, including progress counts, stays
+Atkinson. The web keeps Atkinson. Decided in #94; implemented in #95.
+
+AM/PM follows what it sits beside. Next to a time you read (the large clock, Home's cards) it's
+Atkinson Body in `muted-foreground`. Inline in a sentence (under Home's countdown) it's part of the
+time. In the editor it's a wheel you set like the others, so it stays Inter.
 
 Sizes on the phone are in sp and follow the system font size; layouts must hold at 1.3×. The
 native lock-screen font resource requires an APK rebuild; an OTA update alone cannot install it.
@@ -268,8 +273,9 @@ web, popovers and dialogs may take one soft shadow.
 ## Shapes
 
 The phone uses two radii: **pill to press, 16px to contain**. Buttons, grades, chips, toggles and
-segments use `rounded-pill` (999px). Cards, fields, sheets, dialogs and banners use `rounded-lg`
-(16px), including containers that open a screen when tapped. Hairlines are 1px.
+segments use `rounded-pill` (999px). Cards, boxed fields, sheets, dialogs and banners use
+`rounded-lg` (16px), including containers that open a screen when tapped. The alarm editor's name
+field has no box, so no radius: it's text on a hairline. Hairlines are 1px.
 
 `vp lint apps/mobile` enforces this scale with zero violations. Use these two classes rather than
 radius aliases, arbitrary values or dynamic class names. Inline `borderRadius` and corner radius
@@ -311,11 +317,13 @@ atingido"), then three tabular counts: new in `easy-ink`, learning in `again-ink
 
 A centered Title countdown replaces the live clock, with the next ring's day and time in muted
 Body below it. With nothing enabled, the same space says "Nenhum alarme ativo" / "No active
-alarms". Days, hours and minutes appear only when nonzero; a partial minute rounds up.
+alarms". Days, hours and minutes appear only when nonzero; a partial minute rounds up. Minutes
+beside hours drop their unit and read as on a clock ("7 h 30", "7 h 05"); otherwise they keep it
+("45 min", "1 d 30 min").
 
 Cards use a 16px surface, a large Inter time (44sp, reduced as needed on narrow screens), seven
-Caption day letters with selected days bold, and one ellipsized Label line: name or deck, then
-the card count. A one-off shows its date instead of day letters. The full summary, including a
+Caption day letters, Sunday first, with selected days in bold `foreground` (they aren't pressable,
+so not lilac), and one ellipsized Label line: name or deck, then the card count. A one-off shows its date instead of day letters. The full summary, including a
 skip, stays in the card's accessibility label. The switch sits beside the content and remains independent.
 Disabled times and day letters use muted ink; the card keeps full opacity. A skipped ring keeps
 its peach marker until that occurrence passes, even when disabled.
@@ -338,7 +346,7 @@ values are quieter. Rows grow with system font scale and snap to whole values. E
 adjustable accessibility control with a spoken value and increment/decrement actions.
 
 Under the wheels, on the ground with no box: the repeat summary in Body with a muted calendar icon,
-seven day letters, and the name field. Letters are 48dp pills, Sunday first; a selected one is
+seven day letters, and the name field, Body text on a hairline. Letters are 48dp pills, Sunday first; a selected one is
 `primary-ink` bold on `primary-tint`, the rest are foreground with no fill. Their row runs 12dp past
 the 24dp margin so seven targets fit a 360dp phone, and wraps on anything narrower.
 

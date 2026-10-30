@@ -250,7 +250,8 @@ session** is a special mode of it on the phone.
   in the editor; discarding leaves without saving. Back closes an open settings sheet first.
 - Saved alarms show Pular o próximo / Skip next, Duplicar alarme / Duplicate alarm and Excluir
   alarme / Delete alarm at the end of the scroll. New alarms show none of these actions. Skip is
-  available for enabled repeating alarms, can be undone, and is saved with the draft. Delete
+  available for enabled repeating alarms, can be undone (also once the alarm is off), and is saved
+  with the draft. Delete
   still asks for confirmation; Duplicate opens a new draft with the current settings.
 
 ### Ringing
@@ -360,13 +361,13 @@ reviews (ADR 0001), so the web shows them too.
 
 ### Phone alarm Home
 
-Home shows a countdown to the earliest enabled alarm ("Alarme em 7 h 30 min" / "Alarm in
-7 h 30 min"), with its day and time underneath. It counts days, hours and minutes, rounding a
-partial minute up. With no upcoming enabled alarm it says "Nenhum alarme ativo" / "No active
+Home shows a countdown to the earliest enabled alarm ("Alarme em 7 h 30" / "Alarm in 7 h 30"), with
+its day and time underneath. It counts days, hours and minutes, rounding a partial minute up.
+Minutes beside hours drop their unit ("7 h 05"); otherwise they keep it ("45 min", "1 d 30 min"). With no upcoming enabled alarm it says "Nenhum alarme ativo" / "No active
 alarms". The countdown refreshes while Home is open and when the app resumes.
 
-Compact cards show a large Inter time, seven day letters with selected days emphasized (a date
-for a one-off), one line with the name or deck followed by the card count, and an independent
+Compact cards show a large Inter time, seven day letters, Sunday first, with selected days
+emphasized (a date for a one-off), one line with the name or deck followed by the card count, and an independent
 switch. Skipped occurrences remain marked, on screen and in the card's TalkBack label, including on
 disabled cards; disabled times use muted
 text without dimming the entire card. Long-press opens Skip next (or Undo skip), Duplicate and

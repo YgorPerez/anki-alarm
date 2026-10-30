@@ -30,11 +30,15 @@ test("Home shows localized alarm details, edits, adds and refreshes next ring af
   );
   const result = await render(view());
   expect(screen.queryByText("23:18")).toBeNull();
-  expect(StyleSheet.flatten(screen.getByText("06:30").props.style)).toMatchObject({
-    fontFamily: "Inter_700Bold",
-    fontVariant: ["tabular-nums"],
-  });
-  expect(screen.getByText("Alarme em 7 h 12 min")).toBeTruthy();
+  // The card's time and the one under the headline.
+  const times = screen.getAllByText("06:30");
+  expect(times).toHaveLength(2);
+  for (const time of times)
+    expect(StyleSheet.flatten(time.props.style)).toMatchObject({
+      fontFamily: "Inter_700Bold",
+      fontVariant: ["tabular-nums"],
+    });
+  expect(screen.getByText("Alarme em 7 h 12")).toBeTruthy();
   expect(screen.getByText("sex., 30 de out. · 06:30")).toBeTruthy();
   expect(screen.getByText("Trabalho · 3 cartões")).toBeTruthy();
   await fireEvent.press(screen.getByRole("button", { name: /Trabalho/ }));
@@ -48,15 +52,28 @@ test("Home shows localized alarm details, edits, adds and refreshes next ring af
   );
   expect(screen.queryByText("11:18")).toBeNull();
   expect(screen.getByText("Oct 30, 2026")).toBeTruthy();
-  expect(screen.getByText("Alarm in 7 h 42 min")).toBeTruthy();
+  expect(screen.getByText("Alarm in 7 h 42")).toBeTruthy();
   await act(() => vi.advanceTimersByTime(60000));
   expect(screen.queryByText("11:19")).toBeNull();
-  expect(screen.getByText("Alarm in 7 h 41 min")).toBeTruthy();
+  expect(screen.getByText("Alarm in 7 h 41")).toBeTruthy();
   // Past a day, the wait counts days, as the editor's "Rings in" does.
   await result.rerender(
     view([{ ...alarm, rule: { hour: 8, minute: 0, repeatDays: [6] } }], "pt-BR"),
   );
-  expect(screen.getByText("Alarme em 1 d 8 h 41 min")).toBeTruthy();
+  expect(screen.getByText("Alarme em 1 d 8 h 41")).toBeTruthy();
+  // Minutes under ten read as on a clock; with no hours beside them they keep their unit.
+  await result.rerender(
+    view([{ ...alarm, rule: { hour: 0, minute: 24, onceDate: "2026-10-30" } }]),
+  );
+  expect(screen.getByText("Alarme em 1 h 05")).toBeTruthy();
+  await result.rerender(
+    view([{ ...alarm, rule: { hour: 23, minute: 49, onceDate: "2026-10-30" } }]),
+  );
+  expect(screen.getByText("Alarme em 1 d 30 min")).toBeTruthy();
+  await result.rerender(
+    view([{ ...alarm, rule: { hour: 7, minute: 19, onceDate: "2026-10-30" } }]),
+  );
+  expect(screen.getByText("Alarme em 8 h")).toBeTruthy();
   await result.rerender(
     view([{ ...alarm, label: "", rule: { hour: 23, minute: 20, onceDate: "2026-10-29" } }]),
   );
@@ -100,7 +117,7 @@ test("Home keeps long labels and deck paths available on a small phone at large 
     expect(screen.getByRole("button", { name: new RegExp(label) })).toBeTruthy();
 
     expect(screen.getByRole("button", { name: /Seg, Qua/ })).toBeTruthy();
-    const cardTime = screen.getByText("06:30");
+    const cardTime = screen.getAllByText("06:30").at(-1)!;
     expect(StyleSheet.flatten(cardTime.props.style).fontSize * 1.3).toBeLessThan(50);
     expect(screen.getByRole("button", { name: "Novo alarme" })).toBeTruthy();
   } finally {
@@ -146,7 +163,7 @@ test("the card menu skips the next ring of a repeating alarm, shows the ring aft
 
   await result.rerender(view([saved.at(-1)!]));
   expect(screen.getByText("Pulado · toca seg., 2 de nov.")).toBeTruthy();
-  expect(screen.getByText("Alarme em 3 d 7 h 12 min")).toBeTruthy();
+  expect(screen.getByText("Alarme em 3 d 7 h 12")).toBeTruthy();
   await fireEvent(screen.getByRole("button", { name: /^06:30, Trabalho/ }), "longPress");
   await fireEvent.press(screen.getByRole("button", { name: "Desfazer pulo" }));
   expect(saved.at(-1)?.skip).toBeNull();
@@ -162,13 +179,17 @@ test("the card menu skips the next ring of a repeating alarm, shows the ring aft
   await result.rerender(view([{ ...saved[0]!, enabled: false }]));
   expect(screen.getByText("Pulado · toca seg., 2 de nov.")).toBeTruthy();
   expect(screen.getByText("Nenhum alarme ativo")).toBeTruthy();
+  // A skip marked on a disabled alarm can still be undone.
+  await fireEvent(screen.getByRole("button", { name: /^06:30, Trabalho/ }), "longPress");
+  await fireEvent.press(screen.getByRole("button", { name: "Desfazer pulo" }));
+  expect(saved.at(-1)).toMatchObject({ enabled: false, skip: null });
 
   // Once the skipped Friday ring has passed, the skip clears itself.
   await result.rerender(view([saved[0]!]));
   await act(() => vi.setSystemTime(new Date("2026-10-30T07:00:00Z")));
   await act(() => vi.advanceTimersByTime(1000));
   expect(screen.queryByText(/Pulado/)).toBeNull();
-  expect(screen.getByText("Alarme em 2 d 23 h 30 min")).toBeTruthy();
+  expect(screen.getByText("Alarme em 2 d 23 h 30")).toBeTruthy();
 });
 
 test.each(["Desligado", "Uma vez"])(
@@ -308,6 +329,51 @@ test("the quick alarm hint shows when asked for, and reports being dismissed or 
   // Without quick alarms on offer, the hint would describe something + can't do.
   await result.rerender(view({ quick: false }));
   expect(screen.queryByText(text)).toBeNull();
+});
+
+test("a card's day letters start on Sunday, and selected ones are bold ink, not lilac", async () => {
+  await render(
+    <HomeScreen
+      alarms={[
+        { ...newAlarm("a"), label: "Trabalho", rule: { hour: 6, minute: 30, repeatDays: [7] } },
+      ]}
+      decks={[]}
+      locale="pt-BR"
+      zone="UTC"
+      use24Hour
+      onEdit={() => {}}
+      onAdd={() => {}}
+      onToggle={() => {}}
+    />,
+  );
+  const letters = screen.getAllByText(/^[DSTQ]$/);
+  expect(letters.map((letter) => letter.props.children).join("")).toBe("DSTQQSS");
+  const [sunday, monday] = letters;
+  expect(sunday!.props.className).toBe("text-caption text-foreground");
+  expect(StyleSheet.flatten(sunday!.props.style).fontFamily).toBe("AtkinsonHyperlegible_700Bold");
+  expect(monday!.props.className).toBe("text-caption text-muted-foreground");
+});
+
+test("a 12-hour card sets AM/PM in Atkinson beside the Inter figures, as the big clock does", async () => {
+  await render(
+    <HomeScreen
+      alarms={[{ ...newAlarm("a"), label: "Trabalho", enabled: false }]}
+      decks={[]}
+      locale="en"
+      zone="UTC"
+      use24Hour={false}
+      onEdit={() => {}}
+      onAdd={() => {}}
+      onToggle={() => {}}
+    />,
+  );
+  const figures = screen.getByText(/^\d+:\d\d$/);
+  expect(StyleSheet.flatten(figures.props.style).fontFamily).toBe("Inter_700Bold");
+  expect(figures.props.className).toBe("text-muted-foreground");
+  expect(StyleSheet.flatten(screen.getByText("AM").props.style).fontFamily).toBe(
+    "AtkinsonHyperlegible_400Regular",
+  );
+  expect(screen.getByRole("button", { name: /^7:00 AM, Trabalho/ })).toBeTruthy();
 });
 
 test("a card's TalkBack label says it is skipped, without a separate stop for its day letters", async () => {

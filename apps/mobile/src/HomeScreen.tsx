@@ -5,25 +5,37 @@ import { Button } from "./controls.tsx";
 import { LongPressMenu } from "./LongPressMenu.tsx";
 import {
   nextAlarmRing,
+  ringAfterSkip,
   skipNextRing,
   skipOffer,
   undoSkip,
-  upcomingRing,
   timeLeft,
   QUICK_ALARM_MINUTES,
-  EVERY_DAY,
   type Alarm,
   type Locale,
 } from "@app/core";
 import { useRef, type ReactNode } from "react";
 import { FlatList, Pressable, Switch, Text, View, useWindowDimensions } from "react-native";
-import { useNow } from "./clock.tsx";
-import { clockText, durationText, repeatSummary, timeText, weekdayName } from "./alarm-text.ts";
-import { bold, clock, regular } from "./fonts.ts";
+import { ClockFigures, useNow } from "./clock.tsx";
+import {
+  clockParts,
+  clockText,
+  countdownText,
+  needText,
+  onceDateText,
+  repeatSummary,
+  timeText,
+  WEEK_FROM_SUNDAY,
+  weekdayLetter,
+} from "./alarm-text.ts";
+import { bold, CLOCK_EMS, clock, fittedClockSize, regular } from "./fonts.ts";
 import { copy } from "./copy.ts";
 import { HomeEmptyState, type DeckSetup } from "./HomeEmptyState.tsx";
 
 type Deck = { id: string; name: string };
+
+// The page and card padding, the gap and the switch beside a card's time.
+const CARD_CHROME_WIDTH = 156;
 
 function dayText(at: number, locale: Locale, zone: string) {
   return new Intl.DateTimeFormat(locale, {
@@ -67,17 +79,14 @@ function alarmMenuItems(
 }
 
 function AlarmCardDetails({
-  alarm,
-  deckName,
-  locale,
+  title,
+  need,
   skipped,
 }: {
-  alarm: Alarm;
-  deckName?: string;
-  locale: Locale;
+  title: string;
+  need: string;
   skipped: string | null;
 }) {
-  const t = copy(locale);
   return (
     <>
       {skipped !== null && (
@@ -86,8 +95,7 @@ function AlarmCardDetails({
         </Text>
       )}
       <Text style={regular} numberOfLines={1} className="text-label text-muted-foreground">
-        {alarm.label || deckName || t("chooseDeck")} ·{" "}
-        {alarm.need === 1 ? t("oneCard") : t("needCount", { count: String(alarm.need) })}
+        {title} · {need}
       </Text>
     </>
   );
@@ -122,20 +130,19 @@ function AlarmCard({
   const { width, fontScale } = useWindowDimensions();
   const time = clockText(alarm.rule.hour, alarm.rule.minute, use24Hour, locale);
   const offer = skipOffer(alarm, now, zone);
-  const ringsAfterSkip =
-    skipOffer({ ...alarm, enabled: true }, now, zone) === "undo"
-      ? upcomingRing({ ...alarm, enabled: true }, now, zone)
-      : null;
+  const ringsAfterSkip = ringAfterSkip(alarm, now, zone);
   const skipped =
     ringsAfterSkip === null
       ? null
       : t("skippedUntil", { date: dayText(ringsAfterSkip, locale, zone) });
-  const accessibilityName = [
+  const title = alarm.label || deckName || t("chooseDeck");
+  const need = needText(alarm.need, locale);
+  const accessibilityLabel = [
     time,
-    alarm.label || deckName || t("chooseDeck"),
+    title,
     repeatSummary(alarm.rule, { locale, now, zone }),
     skipped,
-    alarm.need === 1 ? t("oneCard") : t("needCount", { count: String(alarm.need) }),
+    need,
   ]
     .filter(Boolean)
     .join(", ");
@@ -143,47 +150,41 @@ function AlarmCard({
     <View className="rounded-lg bg-surface p-4">
       <View className="flex-row items-center gap-3">
         <LongPressMenu
-          name={accessibilityName}
+          accessibilityLabel={accessibilityLabel}
           actionLabel={t("moreOptions")}
           actionHint={t("moreOptionsHint")}
           className="min-h-12 min-w-0 flex-1 gap-1"
           items={alarmMenuItems(alarm, { offer, locale, now, zone, onSkip, onDuplicate, onDelete })}
           onPress={() => onEdit(alarm)}
         >
-          <Text
+          <ClockFigures
+            parts={clockParts(alarm.rule.hour, alarm.rule.minute, use24Hour, locale)}
             className={alarm.enabled ? "text-foreground" : "text-muted-foreground"}
-            style={{
-              ...clock,
-              fontSize: Math.min(44, (width - 156) / ((use24Hour ? 3.3 : 5.5) * fontScale)),
-            }}
-          >
-            {time}
-          </Text>
+            fontSize={fittedClockSize(width - CARD_CHROME_WIDTH, CLOCK_EMS.card, fontScale, 44)}
+          />
           {alarm.rule.onceDate ? (
             <Text style={regular} className="text-label text-muted-foreground">
-              {new Intl.DateTimeFormat(locale, { timeZone: "UTC", dateStyle: "medium" }).format(
-                Date.parse(alarm.rule.onceDate + "T12:00:00Z"),
-              )}
+              {onceDateText(alarm.rule.onceDate, locale)}
               {alarm.quick ? ` · ${t("quick")}` : null}
             </Text>
           ) : (
             <View className="flex-row flex-wrap gap-2">
-              {EVERY_DAY.map((day) => (
+              {WEEK_FROM_SUNDAY.map((day) => (
                 <Text
                   key={day}
                   style={alarm.rule.repeatDays?.includes(day) ? bold : regular}
                   className={
                     alarm.rule.repeatDays?.includes(day) && alarm.enabled
-                      ? "text-caption text-primary-ink"
+                      ? "text-caption text-foreground"
                       : "text-caption text-muted-foreground"
                   }
                 >
-                  {weekdayName(day, locale).slice(0, 1)}
+                  {weekdayLetter(day, locale)}
                 </Text>
               ))}
             </View>
           )}
-          <AlarmCardDetails alarm={alarm} deckName={deckName} locale={locale} skipped={skipped} />
+          <AlarmCardDetails title={title} need={need} skipped={skipped} />
         </LongPressMenu>
         <Switch
           accessibilityLabel={`${alarm.label || time}: ${t(alarm.enabled ? "enabled" : "disabled")}`}
@@ -269,12 +270,13 @@ export function HomeScreen({
                 className="text-title text-foreground text-center"
               >
                 {next
-                  ? t("alarmCountdown", { time: durationText(timeLeft(next.remainingMs), locale) })
+                  ? t("alarmCountdown", { time: countdownText(timeLeft(next.remainingMs), locale) })
                   : t("noEnabledAlarms")}
               </Text>
               {next && (
                 <Text style={regular} className="text-body text-muted-foreground text-center">
-                  {dayText(next.at, locale, zone)} · {timeText(next.at, locale, zone, use24Hour)}
+                  {dayText(next.at, locale, zone)} ·{" "}
+                  <Text style={clock}>{timeText(next.at, locale, zone, use24Hour)}</Text>
                 </Text>
               )}
             </View>
@@ -379,7 +381,7 @@ export function HomeScreen({
         )}
       </View>
       <LongPressMenu
-        name={t("add")}
+        accessibilityLabel={t("add")}
         actionLabel={t("quickAlarms")}
         actionHint={t("quickAlarmsHint")}
         onOpen={onQuickHintSeen}

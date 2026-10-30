@@ -28,6 +28,7 @@ async function editor(locale: Locale = "en") {
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
       <AlarmEditorScreen
+        iconColor="#8c8c8c"
         alarm={{ ...newAlarm("rows"), deckId }}
         saved
         locale={locale}
@@ -67,7 +68,7 @@ test("the card stepper stops at Core's limits", async () => {
   const fewer = await screen.findByRole("button", { name: "Fewer cards" });
   const more = screen.getByRole("button", { name: "More cards" });
   for (let i = 0; i < 5; i++) await fireEvent.press(fewer);
-  screen.getByLabelText("1 cards");
+  screen.getByLabelText("1 card");
   screen.getByRole("button", { name: "Fewer cards", disabled: true });
   for (let i = 0; i < MAX_NEED + 5; i++) await fireEvent.press(more);
   screen.getByLabelText(`${MAX_NEED} cards`);

@@ -180,9 +180,9 @@ export function StepperControl({
   onChange,
 }: StepperControlProps) {
   const step = (delta: number) => onChange(Math.min(max, Math.max(min, value + delta)));
-  const button = onSurface
-    ? "min-h-12 min-w-12 items-center justify-center rounded-pill bg-background disabled:opacity-40"
-    : "min-h-12 min-w-12 items-center justify-center rounded-pill bg-surface disabled:opacity-40";
+  const buttonClassName = onSurface
+    ? "min-h-12 min-w-12 items-center justify-center rounded-pill bg-background"
+    : "min-h-12 min-w-12 items-center justify-center rounded-pill bg-surface";
   return (
     <View className="flex-row items-center gap-4">
       <Pressable
@@ -191,7 +191,7 @@ export function StepperControl({
         accessibilityState={{ disabled: value <= min }}
         disabled={value <= min}
         onPress={() => step(-1)}
-        className={button}
+        className={buttonClassName}
       >
         <Text className="text-title text-foreground">−</Text>
       </Pressable>
@@ -204,7 +204,7 @@ export function StepperControl({
         accessibilityState={{ disabled: value >= max }}
         disabled={value >= max}
         onPress={() => step(1)}
-        className={button}
+        className={buttonClassName}
       >
         <Text className="text-title text-foreground">+</Text>
       </Pressable>

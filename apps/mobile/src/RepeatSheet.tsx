@@ -2,7 +2,14 @@ import { PillChip } from "./PillChip.tsx";
 import { EVERY_DAY, WEEKDAYS, type AlarmRule, type Locale } from "@app/core";
 import { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import { Pressable, Text, View } from "react-native";
-import { repeatLine, sameDays, startOfToday, weekdayLetter, weekdayName } from "./alarm-text.ts";
+import {
+  repeatLine,
+  sameDays,
+  startOfToday,
+  WEEK_FROM_SUNDAY,
+  weekdayLetter,
+  weekdayName,
+} from "./alarm-text.ts";
 import { copy } from "./copy.ts";
 import { bold, regular } from "./fonts.ts";
 import { Sheet } from "./Sheet.tsx";
@@ -10,8 +17,6 @@ import { Sheet } from "./Sheet.tsx";
 type Repeat = Pick<AlarmRule, "repeatDays" | "onceDate">;
 
 const pad = (value: number) => String(value).padStart(2, "0");
-
-const WEEK_FROM_SUNDAY = [7, 1, 2, 3, 4, 5, 6] as const;
 
 /** Tappable day letters, Sunday first. Picking a day clears a one-off date. */
 export function DayLetters({

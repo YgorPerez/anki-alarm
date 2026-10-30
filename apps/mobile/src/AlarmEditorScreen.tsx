@@ -1,4 +1,5 @@
 import {
+  sameAlarmValues,
   savedRule,
   skipNextRing,
   skipOffer,
@@ -45,7 +46,7 @@ export function AlarmEditorScreen({
   onDuplicate,
   onClose,
   options,
-  iconColor = "currentColor",
+  iconColor,
   now = Date.now,
   zone = deviceZone(),
 }: {
@@ -61,7 +62,7 @@ export function AlarmEditorScreen({
   onClose: () => void;
   options?: (alarm: Alarm, onChange: (alarm: Alarm) => void) => ReactNode;
   /** The theme's color for the summary's calendar icon; SVG can't take a class name. */
-  iconColor?: string;
+  iconColor: string;
   now?: () => number;
   zone?: string;
 }) {
@@ -71,8 +72,7 @@ export function AlarmEditorScreen({
   const [repeatOpen, setRepeatOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  // Compare values rather than object identity: sheets may return the original values in a new object.
-  const dirty = JSON.stringify(draft, sortedKeys) !== JSON.stringify(alarm, sortedKeys);
+  const dirty = !sameAlarmValues(draft, alarm);
   const leave = useCallback(() => {
     if (busy) return;
     if (!dirty) return onClose();
@@ -172,7 +172,7 @@ export function AlarmEditorScreen({
           value={draft.label}
           onChangeText={(label) => setDraft((current) => ({ ...current, label }))}
           style={regular}
-          className="min-h-12 rounded-lg border border-border bg-surface p-4 text-body text-foreground"
+          className="min-h-12 border-b border-border py-3 text-body text-foreground"
         />
         {options?.(draft, setDraft)}
         {saved && (
@@ -297,13 +297,4 @@ export function EditorRow({
       )}
     </View>
   );
-}
-
-/** Stable property order for the editor's plain-data draft, including nested rule and sound. */
-function sortedKeys(key: string, value: unknown): unknown {
-  if (key === "repeatDays" && Array.isArray(value))
-    return value.toSorted((a, b) => Number(a) - Number(b));
-  if (value && typeof value === "object" && !Array.isArray(value))
-    return Object.fromEntries(Object.entries(value).toSorted(([a], [b]) => a.localeCompare(b)));
-  return value;
 }

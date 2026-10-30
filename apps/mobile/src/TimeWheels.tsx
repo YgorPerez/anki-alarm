@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import type { Locale } from "@app/core";
 import { copy } from "./copy.ts";
-import { clock } from "./fonts.ts";
+import { CLOCK_EMS, clock, fittedClockSize } from "./fonts.ts";
 
 /** Inline wall time. Each column wraps independently; minutes never carry into hours. */
 export function TimeWheels({
@@ -30,8 +30,8 @@ export function TimeWheels({
   const periodWidth = hour24 ? 0 : Math.ceil(28 * fontScale * 1.9);
   const colonWidth = Math.ceil(18 * fontScale);
   const columnWidth = (width - 48 - periodWidth - colonWidth) / 2;
-  // Reserve two scaled digits plus side bearings, including on narrow phones in 12-hour mode.
-  const fontSize = Math.min(68, columnWidth / (1.55 * fontScale));
+  // Reserve two scaled digits, including on narrow phones in 12-hour mode.
+  const fontSize = fittedClockSize(columnWidth, CLOCK_EMS.wheelDigits, fontScale, 68);
   const rowHeight = Math.ceil(76 * fontScale);
   const t = copy(locale);
   return (
@@ -39,7 +39,6 @@ export function TimeWheels({
       <Wheel
         key={`hours-${hour24}-${rowHeight}`}
         label={t("hours")}
-        testName="Hours"
         value={hour24 ? hour : hour % 12}
         count={hour24 ? 24 : 12}
         format={hour24 ? undefined : (value) => String(value || 12).padStart(2, "0")}
@@ -58,7 +57,6 @@ export function TimeWheels({
       <Wheel
         key={`minutes-${rowHeight}`}
         label={t("wheelMinutes")}
-        testName="Minutes"
         value={minute}
         count={60}
         rowHeight={rowHeight}
@@ -70,7 +68,6 @@ export function TimeWheels({
         <Wheel
           key={`period-${rowHeight}`}
           label="AM/PM"
-          testName="AM/PM"
           width={periodWidth}
           value={hour >= 12 ? 1 : 0}
           count={2}
@@ -90,7 +87,6 @@ const digits = (value: number) => String(value).padStart(2, "0");
 /** Five copies keep either end outside normal gestures; settling returns to the middle copy. */
 function Wheel({
   label,
-  testName,
   value,
   count,
   rowHeight,
@@ -101,7 +97,6 @@ function Wheel({
   onChange,
 }: {
   label: string;
-  testName: string;
   value: number;
   count: number;
   rowHeight: number;
@@ -143,7 +138,6 @@ function Wheel({
     >
       <ScrollView
         ref={scroll}
-        testID={`time-wheel-${testName}`}
         accessible={false}
         importantForAccessibility="no-hide-descendants"
         contentContainerStyle={{ paddingVertical: rowHeight }}

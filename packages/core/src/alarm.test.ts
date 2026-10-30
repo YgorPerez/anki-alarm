@@ -7,6 +7,7 @@ import {
   parseAlarmSound,
   readAlarm,
   clearExpiredSkip,
+  ringAfterSkip,
   skipNextRing,
   skipOffer,
   undoSkip,
@@ -171,10 +172,21 @@ describe("skip the next ring", () => {
     expect(skipOffer(skipped, now, "UTC")).toBe("undo");
     expect(upcomingRing(skipped, now, "UTC")).toBe(Date.parse("2026-10-30T06:30:00Z"));
     expect(skipOffer({ ...daily, enabled: false }, now, "UTC")).toBeNull();
-    expect(skipOffer({ ...skipped, enabled: false }, now, "UTC")).toBeNull();
     const once = { ...daily, rule: { hour: 6, minute: 30, onceDate: "2026-10-29" } };
     expect(skipOffer(once, now, "UTC")).toBeNull();
     expect(skipNextRing(once, now, "UTC")).toEqual(once);
+  });
+
+  it("keeps a skip on a disabled alarm undoable, and says when the alarm rings after it", () => {
+    const skipped = { ...skipNextRing(daily, now, "UTC"), enabled: false };
+    expect(skipOffer(skipped, now, "UTC")).toBe("undo");
+    expect(ringAfterSkip(skipped, now, "UTC")).toBe(Date.parse("2026-10-30T06:30:00Z"));
+    expect(skipOffer(undoSkip(skipped), now, "UTC")).toBeNull();
+    expect(ringAfterSkip(undoSkip(skipped), now, "UTC")).toBeNull();
+    // Past the skipped occurrence there is nothing left to mark or undo.
+    const later = Date.parse("2026-10-29T12:00:00Z");
+    expect(ringAfterSkip(skipped, later, "UTC")).toBeNull();
+    expect(skipOffer(skipped, later, "UTC")).toBeNull();
   });
 
   it("clears itself once the skipped occurrence has passed", () => {

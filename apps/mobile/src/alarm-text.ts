@@ -8,17 +8,6 @@ import {
 } from "@app/core";
 import { copy } from "./copy.ts";
 
-/** An alarm's time as the phone shows it: "06:30" on a 24 h phone, "6:30 AM" on a 12 h one. */
-export const clockText = (hour: number, minute: number, use24Hour: boolean, locale: Locale) =>
-  new Intl.DateTimeFormat(locale, {
-    hour: use24Hour ? "2-digit" : "numeric",
-    minute: "2-digit",
-    hour12: !use24Hour,
-    timeZone: "UTC",
-  })
-    .format(Date.UTC(2000, 0, 1, hour, minute))
-    .replace(/\s+/g, " ");
-
 export function timeParts(at: number, locale: Locale, zone: string, use24Hour: boolean) {
   return new Intl.DateTimeFormat(locale, {
     timeZone: zone,
@@ -36,6 +25,14 @@ export function timeText(at: number, locale: Locale, zone: string, use24Hour: bo
     .replace(/\s+/g, " ");
 }
 
+/** The parts of an alarm's wall time, which has no date or zone of its own. */
+export const clockParts = (hour: number, minute: number, use24Hour: boolean, locale: Locale) =>
+  timeParts(Date.UTC(2000, 0, 1, hour, minute), locale, "UTC", use24Hour);
+
+/** An alarm's time as the phone shows it: "06:30" on a 24 h phone, "6:30 AM" on a 12 h one. */
+export const clockText = (hour: number, minute: number, use24Hour: boolean, locale: Locale) =>
+  timeText(Date.UTC(2000, 0, 1, hour, minute), locale, "UTC", use24Hour);
+
 const weekdayNames = {
   "pt-BR": ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"],
   en: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
@@ -49,6 +46,21 @@ const weekdayLetters = {
 } as const;
 /** A weekday's one letter ("M", "S"), ISO numbering. Letters repeat, so speak `weekdayName`. */
 export const weekdayLetter = (day: number, locale: Locale) => weekdayLetters[locale][day - 1]!;
+
+/** The order day letters read in, on Home and in the editor. */
+export const WEEK_FROM_SUNDAY = [7, 1, 2, 3, 4, 5, 6] as const;
+
+/** How many cards an alarm asks for: "1 card", "3 cards". */
+export const needText = (need: number, locale: Locale) => {
+  const t = copy(locale);
+  return need === 1 ? t("oneCard") : t("needCount", { count: String(need) });
+};
+
+/** A one-off's date in the locale's medium style, "Oct 30, 2026". */
+export const onceDateText = (date: string, locale: Locale) =>
+  new Intl.DateTimeFormat(locale, { timeZone: "UTC", dateStyle: "medium" }).format(
+    Date.parse(`${date}T12:00:00Z`),
+  );
 
 /** The civil date `at` falls on in `zone`, as YYYY-MM-DD. */
 const civilDate = (at: number, zone: string) =>
@@ -113,10 +125,7 @@ export function repeatSummary(
   const t = copy(locale);
   if (rule.onceDate) {
     const near = nearDay(rule.onceDate, now, zone);
-    if (near) return t(near);
-    return new Intl.DateTimeFormat(locale, { timeZone: "UTC", dateStyle: "medium" }).format(
-      Date.parse(`${rule.onceDate}T12:00:00Z`),
-    );
+    return near ? t(near) : onceDateText(rule.onceDate, locale);
   }
   const days = rule.repeatDays ?? [];
   if (days.length === 0) return t("repeatOnce");
@@ -139,6 +148,16 @@ export function durationText({ days, hours, minutes }: RingsIn, locale: Locale) 
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+/**
+ * Home's shorter wait: "7 h 30", "1 d 8 h 05". Minutes beside hours read as on a clock, so they drop
+ * their unit; alone, or beside days only, they keep it: "45 min", "1 d 30 min".
+ */
+export function countdownText(left: RingsIn, locale: Locale) {
+  if (!left.hours || !left.minutes) return durationText(left, locale);
+  const wholeHours = durationText({ ...left, minutes: 0 }, locale);
+  return `${wholeHours} ${String(left.minutes).padStart(2, "0")}`;
 }
 
 /** "Rings in 7 h 12 min": the notice after saving an alarm. */
