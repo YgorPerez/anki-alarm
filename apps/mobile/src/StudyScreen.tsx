@@ -2,14 +2,17 @@ import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-su
 import { intervalText } from "./interval-text.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
 import { buryItem, buryStudyCard } from "./study-actions.ts";
+import { StudyAnnotations } from "./StudyAnnotations.tsx";
+import { annotationItems } from "./study-annotations.ts";
 import { StudyCounts } from "./StudyCounts.tsx";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
-import { useContext } from "react";
+import { useContext, type ReactNode } from "react";
 import { ScreenActivity } from "./screen-activity.ts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   renderCard,
   nextStudyCard,
+  type Collection,
   nextIntervals,
   studyCounts,
   type Card,
@@ -68,6 +71,7 @@ export function StudyScreen({
   return (
     <View className="flex-1 bg-background" style={frame}>
       <StudyNavigation
+        annotations={<StudyAnnotations next={study.next} locale={locale} />}
         counts={study.counts}
         items={
           card
@@ -75,6 +79,7 @@ export function StudyScreen({
                 { id: "editNote", label: t("editNote"), onPress: () => setEditing(card.id) },
                 ...suspensionItems(locale, study.suspend),
                 buryItem(locale, study.bury),
+                ...annotationItems(study.next, locale, study.change),
               ]
             : []
         }
@@ -177,6 +182,7 @@ function StudyFeedback({
 }
 
 function StudyNavigation({
+  annotations,
   counts,
   items,
   title,
@@ -185,6 +191,7 @@ function StudyNavigation({
   onExit,
   onUndo,
 }: {
+  annotations: ReactNode;
   counts: ReturnType<typeof studyCounts> | undefined;
   items: Parameters<typeof StudyMenu>[0]["items"];
   title: string;
@@ -217,6 +224,7 @@ function StudyNavigation({
       >
         <Text className="text-body text-foreground">↶</Text>
       </Pressable>
+      {annotations}
       <StudyMenu items={items} locale={locale} busy={busy} />
     </View>
   );
@@ -430,6 +438,13 @@ function useStudySession(deckId: string, onExit: () => void) {
     lock.current = false;
     setBusy(false);
   }
+  /** Flag or mark: the card stays, revealed or not. */
+  async function annotate(command: (c: Collection) => void) {
+    await guarded(async () => {
+      await Effect.runPromise(localData((data) => data.changeCollection(command)));
+      await Promise.all([refresh(), client.invalidateQueries({ queryKey: ["collection"] })]);
+    });
+  }
   async function answer(grade: Grade) {
     if (!cardId || !revealed) return;
     await guarded(async () => {
@@ -478,6 +493,7 @@ function useStudySession(deckId: string, onExit: () => void) {
       ? studyCounts(query.data.collection, query.data.log, deckId, query.data.now)
       : undefined,
     query,
+    next,
     card,
     note: next?.note,
     type: next?.type,
@@ -486,6 +502,7 @@ function useStudySession(deckId: string, onExit: () => void) {
     revealed,
     reveal: () => setRevealedId(cardId),
     answer,
+    change: annotate,
     suspend: (scope: SuspendScope) =>
       leaveCard((target) => suspendStudyCard(target, scope, client)),
     canUndo: answers.length > 0,

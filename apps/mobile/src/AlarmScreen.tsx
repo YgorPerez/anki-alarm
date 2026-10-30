@@ -1,6 +1,8 @@
 import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
 import { buryItem, buryStudyCard } from "./study-actions.ts";
+import { StudyAnnotations } from "./StudyAnnotations.tsx";
+import { annotationItems, useStudyAnnotationChange } from "./study-annotations.ts";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -180,11 +182,13 @@ function CardStage({
               onPress={alarm.snooze}
             />
           )}
+          <StudyAnnotations next={next} locale={locale} />
           <StudyMenu
             items={[
               { id: "editNote", label: t("editNote"), onPress: () => setEditing(next.card.id) },
               ...suspensionItems(locale, alarm.suspend),
               buryItem(locale, alarm.bury),
+              ...annotationItems(next, locale, alarm.change),
             ]}
             locale={locale}
             busy={alarm.busy}
@@ -499,6 +503,7 @@ function useAlarmSession(
     await signal((service) => service.dismiss(ring.id, after));
     onDismissed();
   };
+  const change = useStudyAnnotationChange(guarded, () => query.refetch());
   return {
     session,
     started,
@@ -537,6 +542,7 @@ function useAlarmSession(
       leaveCard((target) => suspendStudyCard(target, scope, client)),
     activity,
     refetch: () => query.refetch(),
+    change,
     answer: async (grade: Grade) => {
       if (!card.revealed) return;
       await replaceCard((target) => {

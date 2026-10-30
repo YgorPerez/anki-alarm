@@ -1,6 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import {
   Collection,
+  browseCards,
   ankiDroidAccess,
   cardId,
   cardsStayInApp,
@@ -439,4 +440,27 @@ test("linking reports the decks this phone took over, so their earlier reviews a
   const other = new Collection(environment("phone-b"), state);
   expect(other.linkAnkiDroid(source()).claimed).toEqual(state.decks.map((d) => d.id));
   expect(new Collection(environment(), state).linkAnkiDroid(source()).claimed).toEqual([]);
+});
+
+test("a newer AnkiDroid pull preserves local flag and mark choices", () => {
+  const c = new Collection(environment());
+  c.linkAnkiDroid(source());
+  const state = c.snapshot();
+  const localCard = state.cards[0]!;
+  const note = state.notes[0]!;
+  c.setCardFlag(localCard.id, 5);
+  c.setNoteMarked(note.id, true);
+  expect(c.snapshot().cards[1]!.fields.flag.value).toBe(0);
+  expect(browseCards(c.snapshot(), "is:marked", Date.now())).toHaveLength(2);
+  const update = source();
+  update.notes[0]!.mod = now / 1000 + 60;
+  update.notes[0]!.tags = "updated";
+  c.linkAnkiDroid(update, []);
+  expect(c.snapshot().cards[0]!.fields.flag.value).toBe(5);
+  expect(c.snapshot().notes[0]!.fields.tags.value).toEqual(["updated", "marked"]);
+  c.setNoteMarked(note.id, false);
+  update.notes[0]!.mod += 60;
+  update.notes[0]!.tags = "updated marked";
+  c.linkAnkiDroid(update, []);
+  expect(c.snapshot().notes[0]!.fields.tags.value).toEqual(["updated"]);
 });

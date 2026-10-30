@@ -548,3 +548,18 @@ test("Edit note opens only after Start and Back returns to the same card, not ou
   screen.getByText(/ · 0 de 1 certos · faltam 1/);
   expect(dismissed()).toBe(0);
 });
+
+test("the active alarm card can be flagged and marked without counting an answer", async () => {
+  await ringing("Alarm annotations", ["word"], { need: 1 });
+  await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+  await screen.findByLabelText("Frente");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Bandeira 1: Vermelha" }));
+  await screen.findByLabelText("Bandeira 1: Vermelha");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Marcar nota" }));
+  await screen.findByLabelText("Nota marcada");
+  expect(front()).toContain("word");
+  expect(front()).not.toContain("★");
+  expect(screen.getByText(/0 de 1 certos/)).toBeTruthy();
+});

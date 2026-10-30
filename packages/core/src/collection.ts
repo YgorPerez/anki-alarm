@@ -111,6 +111,7 @@ export type Card = RecordFields<{
   suspended: boolean;
   /** Buried until this time, the start of a study day; a past time or null means not buried. */
   buriedUntil: number | null;
+  flag: number;
 }> &
   AnkiIdentity;
 export type RecordKind = "decks" | "presets" | "noteTypes" | "notes" | "cards";
@@ -212,6 +213,7 @@ export function parseCollection(stored: StoredCollection): CollectionState {
   for (const card of state.cards) {
     card.fields.suspended ??= { value: false, hlc: card.fields.ordinal.hlc };
     card.fields.buriedUntil ??= { value: null, hlc: card.fields.ordinal.hlc };
+    card.fields.flag ??= { value: 0, hlc: card.fields.ordinal.hlc };
   }
   for (const type of state.noteTypes) {
     const old = legacy(type.fields);
@@ -409,7 +411,7 @@ export class Collection {
     for (const ordinal of ordinalsFor(type, values))
       this.state.cards.push(
         this.record(
-          { noteId: note.id, deckId, ordinal, suspended: false, buriedUntil: null },
+          { noteId: note.id, deckId, ordinal, suspended: false, buriedUntil: null, flag: 0 },
           cardId(note.id, ordinal),
           hlc,
         ),
@@ -432,6 +434,28 @@ export class Collection {
       for (const ordinal of ordinalsFor(type, values))
         if (!have.has(ordinal)) this.addCard(id, ordinal, deckId);
   }
+  /** Sets Anki's flag (0 clears it), returning the previous value for undo. */
+  setCardFlag(id: string, flag: number): number {
+    if (!Number.isInteger(flag) || flag < 0 || flag > 7) throw new Error("Invalid flag");
+    const card = this.state.cards.find((c) => c.id === id);
+    if (!card) throw new Error("Invalid card");
+    const previous = card.fields.flag.value;
+    if (previous !== flag) card.fields.flag = { value: flag, hlc: this.tick() };
+    return previous;
+  }
+  /** Sets the note's marked tag without changing its other tags; returns the previous mark. */
+  setNoteMarked(id: string, marked: boolean): boolean {
+    const note = this.state.notes.find((n) => n.id === id);
+    if (!note) throw new Error("Invalid note");
+    const tags = note.fields.tags.value;
+    const previous = tags.includes("marked");
+    if (previous !== marked)
+      note.fields.tags = {
+        value: marked ? [...tags, "marked"] : tags.filter((t) => t !== "marked"),
+        hlc: this.tick(),
+      };
+    return previous;
+  }
   /** A note's cards, by ordinal. */
   private cardsOf(noteId: string) {
     return this.state.cards
@@ -444,7 +468,11 @@ export class Collection {
     if (this.state.cards.some((c) => c.id === id) || this.deleted("cards", id))
       id = uuid7(this.env.now(), this.env.random());
     this.state.cards.push(
-      this.record({ noteId, deckId, ordinal, suspended: false, buriedUntil: null }, id, hlc),
+      this.record(
+        { noteId, deckId, ordinal, suspended: false, buriedUntil: null, flag: 0 },
+        id,
+        hlc,
+      ),
     );
   }
   /**
@@ -674,7 +702,10 @@ export class Collection {
       const card = this.state.cards.find((c) => c.id === id);
       if (!card)
         this.state.cards.push({
-          ...this.record({ noteId, deckId, ordinal: ad.ord, suspended, buriedUntil: null }, id),
+          ...this.record(
+            { noteId, deckId, ordinal: ad.ord, suspended, buriedUntil: null, flag: 0 },
+            id,
+          ),
           anki: { id: ad.id },
         });
       else if (card.fields.suspended.value !== suspended)
@@ -688,7 +719,7 @@ export class Collection {
   }
   private mergeAnkiNote(id: string, ad: AnkiDroidSource["notes"][number], noteTypeId: string) {
     const values = ad.fields.split(SEPARATOR);
-    const tags = ad.tags.split(" ").filter(Boolean);
+    let tags = ad.tags.split(" ").filter(Boolean);
     const note = this.state.notes.find((n) => n.id === id);
     if (!note) {
       const hlc = this.tick();
@@ -699,6 +730,9 @@ export class Collection {
       });
       return "added";
     }
+    // Mark is local to this app for linked notes, even when AnkiDroid edits other tags.
+    tags = tags.filter((tag) => tag !== "marked");
+    if (note.fields.tags.value.includes("marked")) tags.push("marked");
     // Per field, the newer of the local clock and AnkiDroid's mod time wins (ADR 0001).
     const mod = ad.mod * 1000;
     let changed = false;
@@ -859,6 +893,7 @@ export class Collection {
           suspended: c.suspended,
           // Anki unburies at the first study day after the card's last change.
           buriedUntil: c.buried ? dueInDays(1, c.mtime) : null,
+          flag: c.flag ?? 0,
         };
         const merged = {
           id: cardId(id, c.ordinal),

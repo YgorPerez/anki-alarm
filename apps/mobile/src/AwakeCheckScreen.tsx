@@ -1,6 +1,8 @@
 import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
 import { buryItem, buryStudyCard } from "./study-actions.ts";
+import { StudyAnnotations } from "./StudyAnnotations.tsx";
+import { annotationItems, useStudyAnnotationChange } from "./study-annotations.ts";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { awakeCheckSession, RING_POLICY, type Card, type Grade, type Locale } from "@app/core";
@@ -110,11 +112,13 @@ export function AwakeCheckScreen({
               {timeText(now, locale, zone, use24Hour)} ·{" "}
               {t("awakeCardProgress", { seconds: String(Math.ceil(left / 1000)) })}
             </Text>
+            <StudyAnnotations next={next} locale={locale} />
             <StudyMenu
               items={[
                 { id: "editNote", label: t("editNote"), onPress: () => setEditing(next.card.id) },
                 ...suspensionItems(locale, prompt.suspend),
                 buryItem(locale, prompt.bury),
+                ...annotationItems(next, locale, prompt.change),
               ]}
               locale={locale}
               busy={prompt.busy}
@@ -199,6 +203,7 @@ function useAwakeCheck(
     if (alreadyPassed) void guarded(pass);
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once the log says it passed.
   }, [alreadyPassed]);
+  const change = useStudyAnnotationChange(guarded, () => query.refetch());
   return {
     session,
     busy,
@@ -208,6 +213,7 @@ function useAwakeCheck(
     suspend: (scope: SuspendScope) =>
       leaveCard((target) => suspendStudyCard(target, scope, client)),
     refetch: () => query.refetch(),
+    change,
     answer: (grade: Grade) =>
       guarded(async () => {
         if (!cardId || !card.revealed) return;

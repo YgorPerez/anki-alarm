@@ -512,3 +512,33 @@ test("an alarm restored by a normal save survives an already pushed delete", asy
   expect(await phone.run(phone.data.alarms)).toEqual([{ ...alarm, id: "restored" }]);
   expect(await web.run(web.data.alarms)).toEqual([{ ...alarm, id: "restored" }]);
 });
+
+test("flag and mark sync independently from card moves and note field edits", async () => {
+  const { phone, web, sync, note } = await pair();
+  const cardId = (await phone.run(phone.data.collection)).cards[0]!.id;
+  phone.clock.now = 2000;
+  web.clock.now = 3000;
+  await phone.run(
+    phone.data.changeCollection((c) => {
+      c.setCardFlag(cardId, 6);
+      c.setNoteMarked(note.id, true);
+    }),
+  );
+  await web.run(
+    web.data.changeCollection((c) => {
+      c.editNote(note.id, ["casa", "home"]);
+      const deck = c.createDeck("Moved");
+      c.moveCards([cardId], deck.id);
+    }),
+  );
+  await sync(phone, web, phone);
+  for (const side of [phone, web]) {
+    const state = await side.run(side.data.collection);
+    expect(state.cards[0]!.fields.flag.value).toBe(6);
+    expect(state.notes[0]!.fields.tags.value).toEqual(["marked"]);
+    expect(state.notes[0]!.values[1]!.value).toBe("home");
+    expect(state.cards[0]!.fields.deckId.value).toBe(
+      state.decks.find((d) => d.fields.name.value === "Moved")!.id,
+    );
+  }
+});

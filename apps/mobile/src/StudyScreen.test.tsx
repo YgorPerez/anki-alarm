@@ -319,9 +319,19 @@ test("Bury from the card menu skips the card until tomorrow without answering it
   await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
   expect(
     screen
-      .getAllByText(/^(Editar nota|Suspender card|Suspender nota|Enterrar até amanhã)$/)
+      .getAllByText(
+        /^(Editar nota|Suspender card|Suspender nota|Enterrar até amanhã|Bandeira \d: .+|Remover bandeira|Marcar nota)$/,
+      )
       .map((item) => item.props.children),
-  ).toEqual(["Editar nota", "Suspender card", "Suspender nota", "Enterrar até amanhã"]);
+  ).toEqual([
+    "Editar nota",
+    "Suspender card",
+    "Suspender nota",
+    "Enterrar até amanhã",
+    ...[1, 2, 3, 4, 5, 6, 7].map((n) => expect.stringMatching(new RegExp(`^Bandeira ${n}: `))),
+    "Remover bandeira",
+    "Marcar nota",
+  ]);
   await fireEvent.press(screen.getByRole("button", { name: "Enterrar até amanhã" }));
   await waitFor(() => expect(screen.getByLabelText("Frente").props.source.html).toContain(other));
   expect(screen.getByLabelText("1 novos")).toBeTruthy();
@@ -330,4 +340,34 @@ test("Bury from the card menu skips the card until tomorrow without answering it
   const card = after.cards.find((c) => c.fields.noteId.value === note.id)!;
   expect(card.fields.buriedUntil.value).toBeGreaterThan(Date.now());
   expect(await Effect.runPromise(localData((data) => data.reviewLog))).toEqual(logBefore);
+});
+
+test("flag and mark stay in the top bar and can be cleared without answering", async () => {
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Annotations");
+        c.addBasicNote(deck.id, "word", "meaning");
+      }),
+    ),
+  );
+  await render(
+    <QueryClientProvider client={new QueryClient()}>
+      <StudyScreen deckId={state.decks.at(-1)!.id} locale="pt-BR" onExit={() => {}} />
+    </QueryClientProvider>,
+  );
+  await screen.findByLabelText("Frente");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Bandeira 5: Rosa" }));
+  await screen.findByLabelText("Bandeira 5: Rosa");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Marcar nota" }));
+  await screen.findByLabelText("Nota marcada");
+  expect(screen.getByLabelText("Frente").props.source.html).not.toContain("★");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Desmarcar nota" }));
+  await waitFor(() => expect(screen.queryByLabelText("Nota marcada")).toBeNull());
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Remover bandeira" }));
+  await waitFor(() => expect(screen.queryByLabelText("Bandeira 5: Rosa")).toBeNull());
 });

@@ -212,3 +212,26 @@ test("Edit note returns to the same card, updated, and Back stays on the check",
   expect(passed()).toBe(0);
   expect(native.awakeCheck()).not.toBeNull();
 });
+
+test("flagging and marking the awake check card keeps the check open", async () => {
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Check annotations");
+        c.addBasicNote(deck.id, "star", "estrela");
+      }),
+    ),
+  );
+  const deckId = state.decks.find((d) => d.fields.name.value === "Check annotations")!.id;
+  const { native, check } = await shownCheck("check-annotations", deckId);
+  const passed = await show(check, native.layer);
+  await screen.findByLabelText("Frente");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Bandeira 7: Roxa" }));
+  await screen.findByLabelText("Bandeira 7: Roxa");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Marcar nota" }));
+  await screen.findByLabelText("Nota marcada");
+  expect(passed()).toBe(0);
+  expect(native.awakeCheck()).not.toBeNull();
+});
