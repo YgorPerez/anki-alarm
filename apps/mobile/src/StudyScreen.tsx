@@ -1,5 +1,6 @@
+import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { intervalText } from "./interval-text.ts";
-import { StudyMenu, type StudyMenuItem } from "./StudyMenu.tsx";
+import { StudyMenu } from "./StudyMenu.tsx";
 import { StudyAnnotations } from "./StudyAnnotations.tsx";
 import { annotationItems } from "./study-annotations.ts";
 import { StudyCounts } from "./StudyCounts.tsx";
@@ -13,6 +14,7 @@ import {
   type Collection,
   nextIntervals,
   studyCounts,
+  type Card,
   type Grade,
   type Locale,
   type LogEntry,
@@ -69,13 +71,16 @@ export function StudyScreen({
     <View className="flex-1 bg-background" style={frame}>
       <StudyNavigation
         annotations={<StudyAnnotations next={study.next} locale={locale} />}
-        menu={[
-          ...(card
-            ? [{ id: "editNote", label: t("editNote"), onPress: () => setEditing(card.id) }]
-            : []),
-          ...annotationItems(study.next, locale, study.change),
-        ]}
         counts={study.counts}
+        items={
+          card
+            ? [
+                { id: "editNote", label: t("editNote"), onPress: () => setEditing(card.id) },
+                ...suspensionItems(locale, study.suspend),
+                ...annotationItems(study.next, locale, study.change),
+              ]
+            : []
+        }
         title={deckName ?? t("study")}
         busy={busy}
         locale={locale}
@@ -176,8 +181,8 @@ function StudyFeedback({
 
 function StudyNavigation({
   annotations,
-  menu,
   counts,
+  items,
   title,
   busy,
   locale,
@@ -185,8 +190,8 @@ function StudyNavigation({
   onUndo,
 }: {
   annotations: ReactNode;
-  menu: readonly StudyMenuItem[];
   counts: ReturnType<typeof studyCounts> | undefined;
+  items: Parameters<typeof StudyMenu>[0]["items"];
   title: string;
   busy: boolean;
   locale: Locale;
@@ -218,7 +223,7 @@ function StudyNavigation({
         <Text className="text-body text-foreground">↶</Text>
       </Pressable>
       {annotations}
-      <StudyMenu items={menu} locale={locale} busy={busy} />
+      <StudyMenu items={items} locale={locale} busy={busy} />
     </View>
   );
 }
@@ -417,7 +422,8 @@ function useStudySession(deckId: string, onExit: () => void) {
       client.invalidateQueries({ queryKey: ["reviewLog"] }),
     ]);
   }
-  async function change(command: (c: Collection) => void) {
+  /** Flag or mark: the card stays, revealed or not. */
+  async function annotate(command: (c: Collection) => void) {
     if (lock.current) return;
     lock.current = true;
     setBusy(true);
@@ -449,6 +455,23 @@ function useStudySession(deckId: string, onExit: () => void) {
       setAnswers((list) => [...list, entry]);
       setUndone(undefined);
       setRevealedId(undefined);
+      await refresh();
+    } catch {
+      setError(true);
+    }
+    lock.current = false;
+    setBusy(false);
+  }
+  /** Takes the current card out without an answer (suspend, bury); the next one comes. */
+  async function leaveCard(change: (target: Card) => Promise<void>) {
+    if (!card || lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setError(false);
+    try {
+      await change(card);
+      setRevealedId(undefined);
+      setUndone(undefined);
       await refresh();
     } catch {
       setError(true);
@@ -492,7 +515,9 @@ function useStudySession(deckId: string, onExit: () => void) {
     revealed,
     reveal: () => setRevealedId(cardId),
     answer,
-    change,
+    change: annotate,
+    suspend: (scope: SuspendScope) =>
+      leaveCard((target) => suspendStudyCard(target, scope, client)),
     canUndo: answers.length > 0,
     undo,
     refresh,

@@ -481,20 +481,23 @@ test("an alarm without read aloud reads nothing", async () => {
   expect(reading(native.signals())).toEqual([]);
 });
 
-test("the active alarm card can be flagged and marked without counting an answer", async () => {
-  await ringing("Alarm annotations", ["word"], { need: 1 });
-  await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
-  await screen.findByLabelText("Frente");
-  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
-  await fireEvent.press(screen.getByRole("button", { name: "Bandeira 1: Vermelha" }));
-  await screen.findByLabelText("Bandeira 1: Vermelha");
-  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
-  await fireEvent.press(screen.getByRole("button", { name: "Marcar nota" }));
-  await screen.findByLabelText("Nota marcada");
-  expect(front()).toContain("word");
-  expect(front()).not.toContain("★");
-  expect(screen.getByText(/0 de 1 certos/)).toBeTruthy();
-});
+test.each(["Suspender card", "Suspender nota"])(
+  "%s replaces the alarm card without progress and retains empty-deck dismissal",
+  async (action) => {
+    const { dismissed } = await ringing(`Suspend ${action}`, ["first", "second"], { need: 2 });
+    await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+    await screen.findByLabelText("Frente");
+    const before = front();
+    await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+    await fireEvent.press(screen.getByRole("button", { name: action }));
+    await waitFor(() => expect(front()).not.toBe(before));
+    await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+    await fireEvent.press(screen.getByRole("button", { name: action }));
+    await screen.findByRole("button", { name: "Desligar" });
+    expect(dismissed()).toBe(0);
+    expect(screen.getByText(/0 de 2 certos/)).toBeTruthy();
+  },
+);
 
 test("Edit note opens only after Start and Back returns to the same card, not out of the alarm", async () => {
   const { native, dismissed } = await ringing("Editar no alarme", ["lua"], { need: 1 });
@@ -524,4 +527,19 @@ test("Edit note opens only after Start and Back returns to the same card, not ou
   await waitFor(() => expect(front()).toContain("lua cheia"));
   screen.getByText(/ · 0 de 1 certos · faltam 1/);
   expect(dismissed()).toBe(0);
+});
+
+test("the active alarm card can be flagged and marked without counting an answer", async () => {
+  await ringing("Alarm annotations", ["word"], { need: 1 });
+  await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+  await screen.findByLabelText("Frente");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Bandeira 1: Vermelha" }));
+  await screen.findByLabelText("Bandeira 1: Vermelha");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Marcar nota" }));
+  await screen.findByLabelText("Nota marcada");
+  expect(front()).toContain("word");
+  expect(front()).not.toContain("★");
+  expect(screen.getByText(/0 de 1 certos/)).toBeTruthy();
 });

@@ -3,6 +3,8 @@ const messages = {
   "pt-BR": {
     study: "Estudar",
     studyActions: "Ações do cartão",
+    suspendCard: "Suspender card",
+    suspendNote: "Suspender nota",
     studyNew: "{count} novos",
     studyLearning: "{count} aprendendo",
     studyReview: "{count} revisões",
@@ -182,6 +184,8 @@ const messages = {
   en: {
     study: "Study",
     studyActions: "Card actions",
+    suspendCard: "Suspend card",
+    suspendNote: "Suspend note",
     studyNew: "{count} new",
     studyLearning: "{count} learning",
     studyReview: "{count} reviews",

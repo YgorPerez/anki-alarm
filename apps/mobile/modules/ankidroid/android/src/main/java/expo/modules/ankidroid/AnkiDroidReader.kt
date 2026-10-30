@@ -133,6 +133,18 @@ class AnkiDroidReader(private val resolver: ContentResolver, authority: String =
     return (0 until cards.length()).map { cards.getJSONObject(it) }.firstOrNull { it.getInt("ord") == ord }
   }
 
+  /** FlashCardsContract.ReviewInfo.SUSPEND is a write-only integer on /schedule. */
+  fun suspendCard(noteId: Long, ord: Int): JSONObject? {
+    val values = ContentValues().apply {
+      put("note_id", noteId)
+      put("ord", ord)
+      put("suspended", 1)
+    }
+    resolver.update(Uri.withAppendedPath(base, "schedule"), values, null, null)
+    val cards = cards(listOf(noteId))
+    return (0 until cards.length()).map { cards.getJSONObject(it) }.firstOrNull { it.getInt("ord") == ord }
+  }
+
   private fun card(c: Cursor) = JSONObject()
     .put("id", c.getLong(0))
     .put("noteId", c.getLong(1))

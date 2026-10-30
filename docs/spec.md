@@ -198,6 +198,12 @@ session** is a special mode of it on the phone.
   card and survive `.apkg` import/export; mark syncs through note tags. Browser search accepts
   `flag:1` through `flag:7` and `is:marked`, including negation. On linked AnkiDroid decks,
   these choices stay in the app; pulling preserves them while updating other tags.
+- The card menu in Decks study, alarm sessions and awake checks suspends the current card or all
+  cards of its note, including siblings in other decks. Suspension syncs and takes effect immediately
+  without an answer or progress toward N. The alarm and awake check show another card, keeping
+  their existing empty-deck actions if none remain. Linked cards are suspended in AnkiDroid on the
+  next sync back, after pending answers; failed writes retry. Suspension undo can restore the app's
+  previous values, but AnkiDroid's API has no unsuspend operation.
 - On the phone, alarm sessions, awake checks and Decks study give the card the width and remaining
   height of the screen, without a frame. The compact header shows time and progress on an alarm,
   with Snooze at the end; the awake check shows time, one-card progress and seconds remaining.

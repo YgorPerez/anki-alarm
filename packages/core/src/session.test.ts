@@ -301,3 +301,39 @@ describe("stored alarms", () => {
     expect(readAlarm({ ...legacy, deckId: 4, need: 0 })).toMatchObject({ deckId: null, need: 1 });
   });
 });
+
+test("suspending the current card replaces it without counting an answer or passing an awake check", () => {
+  const setup = deckWithEveryKind();
+  const c = new Collection(
+    { deviceId: "a", now: () => now, random: () => new Uint8Array(16) },
+    setup.state,
+  );
+  const first = session(setup, []).next!.card.id;
+  c.setCardsSuspended([first], true);
+  setup.state = c.snapshot();
+  expect(session(setup, [])).toMatchObject({ right: 0, done: false });
+  expect(session(setup, []).next?.card.id).not.toBe(first);
+  expect(
+    awakeCheckSession({
+      collection: setup.state,
+      log: setup.log,
+      deckId: setup.deckId,
+      checkId: "check",
+      now,
+    }),
+  ).toMatchObject({ passed: false });
+  c.setCardsSuspended(
+    setup.state.cards.map((x) => x.id),
+    true,
+  );
+  expect(
+    alarmSession({
+      collection: c.snapshot(),
+      log: [],
+      deckId: setup.deckId,
+      ringId: "ring",
+      need: 1,
+      now,
+    }),
+  ).toMatchObject({ right: 0, done: false, next: null });
+});
