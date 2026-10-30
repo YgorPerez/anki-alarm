@@ -167,3 +167,11 @@ test("Delete sits in the ⋯ menu and asks first", async () => {
   await act(() => answerAlert("Delete alarm"));
   expect(done).toMatchObject({ deleted: ["a"], saved: [], closed: 1 });
 });
+
+test("saving a skipped alarm reports the following occurrence and keeps the skip", async () => {
+  const skip = Date.parse("2026-10-29T10:00:00Z");
+  const done = await openEditor({ ...newAlarm("a"), deckId: "deck", skip }, { saved: true });
+  await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+  expect(done.saved[0]?.skip).toBe(skip);
+  expect(toasts.at(-1)).toBe("Rings in 1 d 7 h 42 min");
+});

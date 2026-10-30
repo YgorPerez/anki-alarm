@@ -378,6 +378,7 @@ function Home({ children }: { children: ReactNode }) {
       onEdit={(alarm) => router.push({ pathname: "/alarm/[id]", params: { id: alarm.id } })}
       onAdd={() => router.push({ pathname: "/alarm/[id]", params: { id: "new" } })}
       onToggle={toggle}
+      onSkip={toggle}
       refreshing={refreshing}
       onRefresh={pullToRefresh}
       setup={

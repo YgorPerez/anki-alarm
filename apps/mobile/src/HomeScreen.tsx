@@ -1,5 +1,9 @@
 import {
   nextAlarmRing,
+  skipNextRing,
+  skipOffer,
+  undoSkip,
+  upcomingRing,
   ringsIn,
   timeLeft,
   QUICK_ALARM_MINUTES,
@@ -7,7 +11,7 @@ import {
   type Locale,
 } from "@app/core";
 import { useRef, useState, type ReactNode } from "react";
-import { FlatList, Pressable, Switch, Text, View } from "react-native";
+import { FlatList, Modal, Pressable, Switch, Text, View } from "react-native";
 import { Clock, useNow } from "./clock.tsx";
 import { clockText, durationText, repeatSummary, ringsInText, timeText } from "./alarm-text.ts";
 import { bold, regular } from "./fonts.ts";
@@ -15,6 +19,70 @@ import { copy } from "./copy.ts";
 import { HomeEmptyState, type DeckSetup } from "./HomeEmptyState.tsx";
 
 type Deck = { id: string; name: string };
+
+function dayText(at: number, locale: Locale, zone: string) {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: zone,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(at);
+}
+
+/** The card's "⋯" menu: skip the next ring of a repeating alarm, or undo the skip. */
+function SkipMenu({
+  alarm,
+  name,
+  locale,
+  now,
+  zone,
+  onSkip,
+}: {
+  alarm: Alarm;
+  name: string;
+  locale: Locale;
+  now: number;
+  zone: string;
+  onSkip: (alarm: Alarm) => void;
+}) {
+  const t = copy(locale);
+  const [open, setOpen] = useState(false);
+  const offer = skipOffer(alarm, now, zone);
+  if (!offer) return null;
+  const choose = () => {
+    setOpen(false);
+    onSkip(offer === "skip" ? skipNextRing(alarm, now, zone) : undoSkip(alarm));
+  };
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("alarmMoreOptions", { alarm: name })}
+        onPress={() => setOpen(true)}
+        className="min-h-12 min-w-12 items-center justify-center rounded-pill"
+      >
+        <Text style={bold} className="text-body text-muted-foreground">
+          ⋯
+        </Text>
+      </Pressable>
+      <Modal transparent animationType="fade" visible={open} onRequestClose={() => setOpen(false)}>
+        <Pressable className="flex-1 justify-end bg-black/50 p-4" onPress={() => setOpen(false)}>
+          <View className="rounded-lg bg-surface p-2">
+            <Pressable
+              accessibilityRole="button"
+              onPress={choose}
+              className="min-h-12 justify-center rounded-pill px-4"
+            >
+              <Text style={regular} className="text-body text-foreground">
+                {t(offer === "skip" ? "skipNext" : "undoSkip")}
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
 
 export function AlarmCard({
   alarm,
@@ -25,6 +93,7 @@ export function AlarmCard({
   use24Hour,
   onEdit,
   onToggle,
+  onSkip,
 }: {
   alarm: Alarm;
   deckName?: string;
@@ -34,9 +103,12 @@ export function AlarmCard({
   use24Hour: boolean;
   onEdit: (alarm: Alarm) => void;
   onToggle: (alarm: Alarm) => void;
+  onSkip?: (alarm: Alarm) => void;
 }) {
   const t = copy(locale);
   const time = clockText(alarm.rule.hour, alarm.rule.minute, use24Hour, locale);
+  const ringsAfterSkip =
+    skipOffer(alarm, now, zone) === "undo" ? upcomingRing(alarm, now, zone) : null;
   return (
     <View
       className={
@@ -60,6 +132,11 @@ export function AlarmCard({
             {repeatSummary(alarm.rule, { locale, now, zone })}
             {alarm.quick ? ` · ${t("quick")}` : null}
           </Text>
+          {ringsAfterSkip !== null && (
+            <Text style={regular} className="text-label text-attention">
+              {t("skippedUntil", { date: dayText(ringsAfterSkip, locale, zone) })}
+            </Text>
+          )}
           {alarm.label ? (
             <Text style={regular} className="text-body text-foreground">
               {alarm.label}
@@ -70,6 +147,16 @@ export function AlarmCard({
             {alarm.need === 1 ? t("oneCard") : t("needCount", { count: String(alarm.need) })}
           </Text>
         </Pressable>
+        {onSkip && (
+          <SkipMenu
+            alarm={alarm}
+            name={alarm.label || time}
+            locale={locale}
+            now={now}
+            zone={zone}
+            onSkip={onSkip}
+          />
+        )}
         <Switch
           accessibilityLabel={`${alarm.label || time}: ${t(alarm.enabled ? "enabled" : "disabled")}`}
           value={alarm.enabled}
@@ -89,6 +176,7 @@ export function HomeScreen({
   onEdit,
   onAdd,
   onToggle,
+  onSkip,
   banner,
   error,
   refreshing,
@@ -104,6 +192,8 @@ export function HomeScreen({
   onEdit: (alarm: Alarm) => void;
   onAdd: () => void;
   onToggle: (alarm: Alarm) => void;
+  /** Saves the alarm with its next ring skipped, or the skip undone. */
+  onSkip?: (alarm: Alarm) => void;
   banner?: ReactNode;
   error?: string;
   refreshing?: boolean;
@@ -203,6 +293,7 @@ export function HomeScreen({
             use24Hour={use24Hour}
             onEdit={onEdit}
             onToggle={onToggle}
+            onSkip={onSkip}
           />
         )}
       />

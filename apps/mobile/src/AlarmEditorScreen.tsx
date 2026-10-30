@@ -1,4 +1,12 @@
-import { onceRule, ringsIn, type Alarm, type AlarmRule, type Locale } from "@app/core";
+import {
+  onceRule,
+  ringsIn,
+  timeLeft,
+  upcomingRing,
+  type Alarm,
+  type AlarmRule,
+  type Locale,
+} from "@app/core";
 import { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import { useState, type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, ToastAndroid, View } from "react-native";
@@ -83,10 +91,11 @@ export function AlarmEditorScreen({
     const next = savedRule(rule, at, zone);
     if (!draft.deckId) return setError(t("chooseDeck"));
     if (!next) return setError(t("datePassed"));
-    const left = ringsIn(next, at, zone)!;
+    const savedAlarm = { ...draft, enabled: true, rule: next };
+    const left = timeLeft(upcomingRing(savedAlarm, at, zone)! - at);
     setBusy(true);
     // Saving turns the alarm on, so the notice is true.
-    onSave({ ...draft, enabled: true, rule: next }).then(
+    onSave(savedAlarm).then(
       () => {
         ToastAndroid.show(ringsInText(left, locale), ToastAndroid.SHORT);
         onClose();
