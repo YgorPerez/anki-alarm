@@ -1,91 +1,12 @@
-import { translator, type Card, type Note, type Locale, type Collection } from "@app/core";
+import { translator, type Locale } from "@app/core";
 import Svg, { Path } from "react-native-svg";
 import { View } from "react-native";
-import type { StudyMenuItem } from "./StudyMenu.tsx";
-
-const messages = {
-  "pt-BR": {
-    flag: "Bandeira",
-    clear: "Remover bandeira",
-    mark: "Marcar nota",
-    unmark: "Desmarcar nota",
-    marked: "Nota marcada",
-    red: "Vermelha",
-    orange: "Laranja",
-    green: "Verde",
-    blue: "Azul",
-    pink: "Rosa",
-    turquoise: "Turquesa",
-    purple: "Roxa",
-  },
-  en: {
-    flag: "Flag",
-    clear: "Clear flag",
-    mark: "Mark note",
-    unmark: "Unmark note",
-    marked: "Marked note",
-    red: "Red",
-    orange: "Orange",
-    green: "Green",
-    blue: "Blue",
-    pink: "Pink",
-    turquoise: "Turquoise",
-    purple: "Purple",
-  },
-};
-const flags = [
-  { id: 1, name: "red", color: "#d32f2f" },
-  { id: 2, name: "orange", color: "#ed6c02" },
-  { id: 3, name: "green", color: "#2e9d46" },
-  { id: 4, name: "blue", color: "#4285f4" },
-  { id: 5, name: "pink", color: "#e86aa6" },
-  { id: 6, name: "turquoise", color: "#22b8b0" },
-  { id: 7, name: "purple", color: "#a66be0" },
-] as const;
-
-type Current = { card: Card; note: Note } | undefined;
-const label = (t: (key: keyof (typeof messages)["en"]) => string, f: (typeof flags)[number]) =>
-  `${t("flag")} ${f.id}: ${t(f.name)}`;
-
-/** Flag and mark menu entries for the current card. The owning screen guards and persists them. */
-export function annotationItems(
-  next: Current,
-  locale: Locale,
-  change: (command: (c: Collection) => void) => Promise<void>,
-): StudyMenuItem[] {
-  if (!next) return [];
-  const { card, note } = next;
-  const t = translator(messages, locale);
-  const marked = note.fields.tags.value.includes("marked");
-  const set = (flag: number) => () => {
-    void change((c) => {
-      c.setCardFlag(card.id, flag);
-    });
-  };
-  return [
-    ...flags.map((f) => ({ id: `flag-${f.id}`, label: label(t, f), onPress: set(f.id) })),
-    {
-      id: "flag-clear",
-      label: t("clear"),
-      disabled: card.fields.flag.value === 0,
-      onPress: set(0),
-    },
-    {
-      id: "mark",
-      label: t(marked ? "unmark" : "mark"),
-      onPress: () => {
-        void change((c) => {
-          c.setNoteMarked(note.id, !marked);
-        });
-      },
-    },
-  ];
-}
+import { annotationMessages, flagLabel, flags, type Current } from "./study-annotations.ts";
 
 /** The current card's flag and its note's star, for the top bar (never inside the card HTML). */
 export function StudyAnnotations({ next, locale }: { next: Current; locale: Locale }) {
   if (!next) return null;
-  const t = translator(messages, locale);
+  const t = translator(annotationMessages, locale);
   const marked = next.note.fields.tags.value.includes("marked");
   const flag = flags.find((f) => f.id === next.card.fields.flag.value);
   if (!flag && !marked) return null;
@@ -94,7 +15,7 @@ export function StudyAnnotations({ next, locale }: { next: Current; locale: Loca
       {flag && (
         <Svg
           accessible
-          accessibilityLabel={label(t, flag)}
+          accessibilityLabel={flagLabel(t, flag)}
           width={20}
           height={20}
           viewBox="0 0 24 24"

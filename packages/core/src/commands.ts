@@ -15,7 +15,11 @@ export type CollectionCommand =
   /** With `deckId`, the note's cards move there too. */
   | { kind: "editNote"; id: string; values: string[]; deckId?: string }
   | { kind: "deleteNotes"; ids: string[] }
-  | { kind: "editNoteType"; id: string; edit: NoteTypeEdit };
+  | { kind: "editNoteType"; id: string; edit: NoteTypeEdit }
+  /** Anki's flag 1–7 on a card; 0 clears it. */
+  | { kind: "setCardFlag"; id: string; flag: number }
+  /** The note's `marked` tag. */
+  | { kind: "setNoteMarked"; id: string; marked: boolean };
 
 /** Runs one command. Returns the id of the deck or note it created. */
 export function runCommand(collection: Collection, command: CollectionCommand): string | undefined {
@@ -48,6 +52,12 @@ export function runCommand(collection: Collection, command: CollectionCommand): 
       break;
     case "editNoteType":
       collection.editNoteType(command.id, command.edit);
+      break;
+    case "setCardFlag":
+      collection.setCardFlag(command.id, command.flag);
+      break;
+    case "setNoteMarked":
+      collection.setNoteMarked(command.id, command.marked);
       break;
   }
   return undefined;

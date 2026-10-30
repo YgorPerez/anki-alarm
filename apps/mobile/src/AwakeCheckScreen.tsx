@@ -1,6 +1,6 @@
 import { StudyMenu } from "./StudyMenu.tsx";
-import { annotationItems, StudyAnnotations } from "./StudyAnnotations.tsx";
-import { useStudyAnnotationChange } from "./study-annotations.ts";
+import { StudyAnnotations } from "./StudyAnnotations.tsx";
+import { annotationItems, useStudyAnnotationChange } from "./study-annotations.ts";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useQuery } from "@tanstack/react-query";
 import { awakeCheckSession, RING_POLICY, type Grade, type Locale } from "@app/core";

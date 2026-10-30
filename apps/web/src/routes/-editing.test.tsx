@@ -86,3 +86,44 @@ test("a new deck gets options and a note, which the browser finds and edits as y
   await waitFor(() => expect(within(cards).queryByRole("button", { name: /cat/ })).toBeNull());
   expect(within(cards).getByRole("button", { name: /bird/ })).toBeDefined();
 }, 30_000);
+
+test("the browser finds flagged and marked cards", async () => {
+  const deckId = await webRequest("change", { kind: "createDeck", name: "Bandeiras" });
+  await Promise.all(
+    ["red", "blue", "star"].map((front) =>
+      webRequest("change", {
+        kind: "addNote",
+        deckId: deckId!,
+        noteTypeId: "",
+        values: [front, ""],
+      }),
+    ),
+  );
+  const state = await webRequest("collection");
+  const note = (front: string) => state.notes.find((n) => n.values[0]!.value === front)!;
+  const card = (front: string) =>
+    state.cards.find((c) => c.fields.noteId.value === note(front).id)!;
+  await webRequest("change", { kind: "setCardFlag", id: card("red").id, flag: 1 });
+  await webRequest("change", { kind: "setCardFlag", id: card("blue").id, flag: 4 });
+  await webRequest("change", { kind: "setNoteMarked", id: note("star").id, marked: true });
+
+  const { user } = await renderRoute("/browse");
+  const cards = await screen.findByRole("list", { name: "Cartões" });
+  const search = screen.getByRole("searchbox", { name: "Buscar" });
+  const found = async (query: string, fronts: string[]) => {
+    await user.clear(search);
+    await user.type(search, `deck:Bandeiras ${query}{Enter}`);
+    await waitFor(() =>
+      expect(
+        within(cards)
+          .getAllByRole("button")
+          .map((b) => ["red", "blue", "star"].find((f) => b.textContent?.startsWith(f))),
+      ).toEqual(fronts),
+    );
+  };
+  await found("flag:4", ["blue"]);
+  await found("flag:1", ["red"]);
+  await found("is:marked", ["star"]);
+  await found("-is:marked -flag:1", ["blue"]);
+  expect(screen.getByText(/flag:1.*is:marked/)).toBeDefined();
+});

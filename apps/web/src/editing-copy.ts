@@ -46,7 +46,7 @@ const messages = {
     browser: "Navegador de cartões",
     search: "Buscar",
     searchHint:
-      'Palavras ou "frases". Também deck:Nome, note:Tipo, card:1, tag:x, is:suspended e - para excluir.',
+      'Palavras ou "frases". Também deck:Nome, note:Tipo, card:1, tag:x, flag:1…flag:7, is:marked, is:suspended e - para excluir.',
     results: "{count} cartões",
     noResults: "Nenhum cartão encontrado.",
     suspended: "Suspenso",
@@ -134,7 +134,7 @@ const messages = {
     browser: "Card browser",
     search: "Search",
     searchHint:
-      'Words or "phrases". Also deck:Name, note:Type, card:1, tag:x, is:suspended, and - to exclude.',
+      'Words or "phrases". Also deck:Name, note:Type, card:1, tag:x, flag:1…flag:7, is:marked, is:suspended, and - to exclude.',
     results: "{count} cards",
     noResults: "No cards found.",
     suspended: "Suspended",

@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { Collection, browseCards, parseRecord } from "./index.ts";
+import { Collection, browseCards, parseRecord, runCommand } from "./index.ts";
 
 test("flags belong to cards and marking belongs to the note; setters return values for undo", () => {
   let id = 0;
@@ -51,4 +51,26 @@ test.each([1, 2, 3, 4, 5, 6, 7])("search matches only flag %i and its negation",
   expect(browseCards(c.snapshot(), `flag:${flag}`)).toHaveLength(1);
   expect(browseCards(c.snapshot(), `-flag:${flag}`)).toHaveLength(0);
   expect(browseCards(c.snapshot(), "flag:8")).toHaveLength(0);
+});
+
+test("flag and mark are plain commands, and the setter's previous value reverses them", () => {
+  let id = 0;
+  const c = new Collection({
+    deviceId: "phone",
+    now: () => 1700000000000,
+    random: () => new Uint8Array(16).fill(id++),
+  });
+  const deck = c.createDeck("Words");
+  const note = c.addBasicNote(deck.id, "front", "back");
+  const card = c.snapshot().cards[0]!;
+  runCommand(c, { kind: "setCardFlag", id: card.id, flag: 3 });
+  runCommand(c, { kind: "setNoteMarked", id: note.id, marked: true });
+  expect(browseCards(c.snapshot(), "flag:3 is:marked")).toHaveLength(1);
+  const previous = { flag: c.setCardFlag(card.id, 4), marked: c.setNoteMarked(note.id, false) };
+  runCommand(c, { kind: "setCardFlag", id: card.id, flag: previous.flag });
+  runCommand(c, { kind: "setNoteMarked", id: note.id, marked: previous.marked });
+  expect(browseCards(c.snapshot(), "flag:3 is:marked")).toHaveLength(1);
+  expect(() => runCommand(c, { kind: "setNoteMarked", id: "missing", marked: true })).toThrow(
+    "Invalid note",
+  );
 });

@@ -1,6 +1,7 @@
 import { intervalText } from "./interval-text.ts";
 import { StudyMenu, type StudyMenuItem } from "./StudyMenu.tsx";
-import { annotationItems, StudyAnnotations } from "./StudyAnnotations.tsx";
+import { StudyAnnotations } from "./StudyAnnotations.tsx";
+import { annotationItems } from "./study-annotations.ts";
 import { StudyCounts } from "./StudyCounts.tsx";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useContext, type ReactNode } from "react";
@@ -192,7 +193,6 @@ function StudyNavigation({
   onExit: () => void;
   onUndo: (() => Promise<void>) | undefined;
 }) {
-  const t = copy(locale);
   return (
     <View className="flex-row items-center justify-between px-4">
       <Pressable
