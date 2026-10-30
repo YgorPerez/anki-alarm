@@ -361,7 +361,8 @@ alarms". The countdown refreshes while Home is open and when the app resumes.
 
 Compact cards show a large Inter time, seven day letters with selected days emphasized (a date
 for a one-off), one line with the name or deck followed by the card count, and an independent
-switch. Skipped occurrences remain marked, including on disabled cards; disabled times use muted
+switch. Skipped occurrences remain marked, on screen and in the card's TalkBack label, including on
+disabled cards; disabled times use muted
 text without dimming the entire card. Long-press opens Skip next (or Undo skip), Duplicate and
 Delete. TalkBack has a named long-press action for the same menu. Swipe to delete and Undo remain
 available. Decided in #94; implemented in #100.

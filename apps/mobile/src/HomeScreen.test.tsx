@@ -99,7 +99,7 @@ test("Home keeps long labels and deck paths available on a small phone at large 
     expect(screen.getByText(label + " · 3 cartões").props.numberOfLines).toBe(1);
     expect(screen.getByRole("button", { name: new RegExp(label) })).toBeTruthy();
 
-    expect(screen.getByLabelText("Seg, Qua")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Seg, Qua/ })).toBeTruthy();
     const cardTime = screen.getByText("06:30");
     expect(StyleSheet.flatten(cardTime.props.style).fontSize * 1.3).toBeLessThan(50);
     expect(screen.getByRole("button", { name: "Novo alarme" })).toBeTruthy();
@@ -249,4 +249,38 @@ test("quick alarm chips add a marked one-off alarm and say when it rings", async
   // With no saved alarm or no deck, App passes no handler and the chips go.
   await result.rerender(view([], "en", false));
   expect(screen.queryByText("+10 min")).toBeNull();
+});
+
+test("a card's TalkBack label says it is skipped, without a separate stop for its day letters", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-29T23:18:00Z"));
+  await render(
+    <HomeScreen
+      alarms={[
+        {
+          ...newAlarm("a"),
+          label: "Trabalho",
+          enabled: false,
+          skip: Date.parse("2026-10-30T06:30:00Z"),
+          rule: { hour: 6, minute: 30, repeatDays: [1, 2, 3, 4, 5] },
+        },
+      ]}
+      decks={[]}
+      locale="pt-BR"
+      zone="UTC"
+      use24Hour
+      onEdit={() => {}}
+      onAdd={() => {}}
+      onToggle={() => {}}
+    />,
+  );
+  expect(
+    screen.getByRole("button", {
+      name: "06:30, Trabalho, Dias úteis, Pulado · toca seg., 2 de nov., 3 cartões",
+    }),
+  ).toBeTruthy();
+  expect(screen.queryByLabelText("Dias úteis")).toBeNull();
+  // Disabled stays readable: muted ink, not a dimmed card.
+  expect(screen.getByText("06:30").props.className).toBe("text-muted-foreground");
+  expect(screen.getByText("Trabalho · 3 cartões")).toBeTruthy();
 });

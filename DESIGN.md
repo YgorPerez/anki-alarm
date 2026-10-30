@@ -210,7 +210,7 @@ Atkinson Hyperlegible regular and bold is bundled with both apps for general tex
 for low vision: I, l and 1 differ, 0 is slashed, and letters keep open shapes.
 
 On the phone, clock times use bundled Inter bold with tabular figures and an unslashed zero:
-Home's clock and alarm rows, the editor's time, and the large times on ringing, snoozed and native
+Home's alarm cards, the editor's time, and the large times on ringing, snoozed and native
 lock-screen screens. Other text, including progress counts and AM/PM beside the large clock,
 stays Atkinson. The web keeps Atkinson. Decided in #94; implemented in #95.
 
@@ -315,8 +315,8 @@ alarms". Days, hours and minutes appear only when nonzero; a partial minute roun
 
 Cards use a 16px surface, a large Inter time (44sp, reduced as needed on narrow screens), seven
 Caption day letters with selected days bold, and one ellipsized Label line: name or deck, then
-the card count. A one-off shows its date instead of day letters. The full summary stays in the
-card's accessibility label. The switch sits beside the content and remains independent.
+the card count. A one-off shows its date instead of day letters. The full summary, including a
+skip, stays in the card's accessibility label. The switch sits beside the content and remains independent.
 Disabled times and day letters use muted ink; the card keeps full opacity. A skipped ring keeps
 its peach marker until that occurrence passes, even when disabled.
 

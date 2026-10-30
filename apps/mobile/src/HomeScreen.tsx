@@ -34,7 +34,7 @@ function dayText(at: number, locale: Locale, zone: string) {
   }).format(at);
 }
 
-/** The card menu: skip or undo the next ring when that's on offer, and duplicate. */
+/** The card menu: skip or undo the next ring when that's on offer, duplicate and delete. */
 function alarmMenuItems(
   alarm: Alarm,
   {
@@ -70,21 +70,19 @@ function AlarmCardDetails({
   alarm,
   deckName,
   locale,
-  ringsAfterSkip,
-  zone,
+  skipped,
 }: {
   alarm: Alarm;
   deckName?: string;
   locale: Locale;
-  ringsAfterSkip: number | null;
-  zone: string;
+  skipped: string | null;
 }) {
   const t = copy(locale);
   return (
     <>
-      {ringsAfterSkip !== null && (
+      {skipped !== null && (
         <Text style={regular} className="text-label text-attention">
-          {t("skippedUntil", { date: dayText(ringsAfterSkip, locale, zone) })}
+          {skipped}
         </Text>
       )}
       <Text style={regular} numberOfLines={1} className="text-label text-muted-foreground">
@@ -128,11 +126,24 @@ function AlarmCard({
     skipOffer({ ...alarm, enabled: true }, now, zone) === "undo"
       ? upcomingRing({ ...alarm, enabled: true }, now, zone)
       : null;
+  const skipped =
+    ringsAfterSkip === null
+      ? null
+      : t("skippedUntil", { date: dayText(ringsAfterSkip, locale, zone) });
+  const accessibilityName = [
+    time,
+    alarm.label || deckName || t("chooseDeck"),
+    repeatSummary(alarm.rule, { locale, now, zone }),
+    skipped,
+    alarm.need === 1 ? t("oneCard") : t("needCount", { count: String(alarm.need) }),
+  ]
+    .filter(Boolean)
+    .join(", ");
   return (
     <View className="rounded-lg bg-surface p-4">
       <View className="flex-row items-center gap-3">
         <AlarmCardMenu
-          name={`${time}, ${alarm.label || deckName || t("chooseDeck")}, ${repeatSummary(alarm.rule, { locale, now, zone })}, ${alarm.need === 1 ? t("oneCard") : t("needCount", { count: String(alarm.need) })}`}
+          name={accessibilityName}
           locale={locale}
           items={alarmMenuItems(alarm, { offer, locale, now, zone, onSkip, onDuplicate, onDelete })}
           onPress={() => onEdit(alarm)}
@@ -154,11 +165,7 @@ function AlarmCard({
               {alarm.quick ? ` · ${t("quick")}` : null}
             </Text>
           ) : (
-            <View
-              accessible
-              accessibilityLabel={repeatSummary(alarm.rule, { locale, now, zone })}
-              className="flex-row flex-wrap gap-2"
-            >
+            <View className="flex-row flex-wrap gap-2">
               {EVERY_DAY.map((day) => (
                 <Text
                   key={day}
@@ -174,13 +181,7 @@ function AlarmCard({
               ))}
             </View>
           )}
-          <AlarmCardDetails
-            alarm={alarm}
-            deckName={deckName}
-            locale={locale}
-            ringsAfterSkip={ringsAfterSkip}
-            zone={zone}
-          />
+          <AlarmCardDetails alarm={alarm} deckName={deckName} locale={locale} skipped={skipped} />
         </AlarmCardMenu>
         <Switch
           accessibilityLabel={`${alarm.label || time}: ${t(alarm.enabled ? "enabled" : "disabled")}`}

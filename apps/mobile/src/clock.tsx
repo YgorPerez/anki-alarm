@@ -4,7 +4,7 @@ import { AppState, Text, View, useWindowDimensions } from "react-native";
 import { timeParts } from "./alarm-text.ts";
 import { clock, regular } from "./fonts.ts";
 
-// The clock Home and the alarm screens share: the system's 12 or 24 h setting, in the phone's zone.
+// The clock the alarm screens share: the system's 12 or 24 h setting, in the phone's zone.
 
 /** The wall clock each second. Resamples on resume as well, so sleeping never leaves it stale. */
 export function useNow() {
