@@ -36,6 +36,7 @@ export type {
   SyncBackAnswer,
   SyncBackBury,
   SyncBackPlan,
+  SyncBackSuspension,
   AnkiDroidAccess,
   AnkiDroidCard,
   AnkiDroidDeck,
@@ -221,5 +222,3 @@ export {
   quickAlarmsDone,
 } from "./quick-alarm.ts";
 export type { QuickAlarmOptions } from "./quick-alarm.ts";
-
-export type { SyncBackSuspension } from "./ankidroid.ts";
