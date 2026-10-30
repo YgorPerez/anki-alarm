@@ -4,22 +4,24 @@ import { StudyMenu } from "./StudyMenu.tsx";
 import { buryItem, buryStudyCard } from "./study-actions.ts";
 import { StudyAnnotations } from "./StudyAnnotations.tsx";
 import { annotationItems } from "./study-annotations.ts";
+import { takeStudyAction, useUndoStack } from "./study-undo.ts";
 import { StudyCounts } from "./StudyCounts.tsx";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useContext, type ReactNode } from "react";
 import { ScreenActivity } from "./screen-activity.ts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  answerUndo,
   renderCard,
   nextStudyCard,
-  type Collection,
   nextIntervals,
   studyCounts,
   type Card,
   type Grade,
   type Locale,
-  type LogEntry,
   type RenderInput,
+  type StudyAction,
+  type UndoStep,
 } from "@app/core";
 import { Effect } from "effect";
 import { useEffect, useRef, useState } from "react";
@@ -388,8 +390,8 @@ function useStudySession(deckId: string, onExit: () => void) {
   const [revealedId, setRevealedId] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
-  /** This session's answers, newest last: what Undo voids. */
-  const [answers, setAnswers] = useState<LogEntry[]>([]);
+  /** This session's answers and card-menu actions, newest last: what Undo reverses. */
+  const history = useUndoStack();
   const [undone, setUndone] = useState<string>();
   const lock = useRef(false);
   const query = useQuery({
@@ -439,9 +441,9 @@ function useStudySession(deckId: string, onExit: () => void) {
     setBusy(false);
   }
   /** Flag or mark: the card stays, revealed or not. */
-  async function annotate(command: (c: Collection) => void) {
+  async function annotate(action: StudyAction) {
     await guarded(async () => {
-      await Effect.runPromise(localData((data) => data.changeCollection(command)));
+      history.record(await takeStudyAction(action));
       await Promise.all([refresh(), client.invalidateQueries({ queryKey: ["collection"] })]);
     });
   }
@@ -457,31 +459,29 @@ function useStudySession(deckId: string, onExit: () => void) {
           ),
         ),
       );
-      setAnswers((list) => [...list, entry]);
+      history.record(answerUndo(entry));
       setUndone(undefined);
       setRevealedId(undefined);
       await refresh();
     });
   }
   /** Takes the current card out without an answer (suspend, bury); the next one comes. */
-  async function leaveCard(change: (target: Card) => Promise<void>) {
+  async function leaveCard(change: (target: Card) => Promise<UndoStep>) {
     if (!card) return;
     await guarded(async () => {
-      await change(card);
+      history.record(await change(card));
       setRevealedId(undefined);
       setUndone(undefined);
       await refresh();
     });
   }
+  /** Reverses the newest answer or card-menu action; its card comes back, on its front. */
   async function undo() {
-    const last = answers.at(-1);
-    if (!last) return;
+    if (!history.canUndo) return;
     await guarded(async () => {
-      await Effect.runPromise(localData((data) => data.undo(last.id)));
-      setAnswers((list) => list.slice(0, -1));
-      setUndone(last.cardId);
+      setUndone(await history.undo());
       setRevealedId(undefined);
-      await refresh();
+      await Promise.all([refresh(), client.invalidateQueries({ queryKey: ["collection"] })]);
     });
   }
   return {
@@ -505,7 +505,7 @@ function useStudySession(deckId: string, onExit: () => void) {
     change: annotate,
     suspend: (scope: SuspendScope) =>
       leaveCard((target) => suspendStudyCard(target, scope, client)),
-    canUndo: answers.length > 0,
+    canUndo: history.canUndo,
     undo,
     /** Buries the card until the next study day; the deck's counts change with it. */
     bury: () => leaveCard((target) => buryStudyCard(target, client)),

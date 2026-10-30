@@ -222,6 +222,14 @@ session** is a special mode of it on the phone.
   Core computes the counts for the deck and subdecks within the remaining daily limits. System Back
   and the back link return to the deck. All three study headers share a card-action menu, hidden
   until it has actions. The big clock and alarm label stay on Start and other stages without a card.
+- Undo reverts the last study action of any kind, as in AnkiDroid: a grade, suspend, bury, flag or
+  mark. Each study screen keeps its own history in Core's undo stack (the newest 30 steps), and the
+  card the action was on comes back, on its front. Decks study has the Undo icon in its top bar; the
+  alarm (after Start) and the awake check have "Desfazer" / "Undo" first in the card menu. An
+  undone grade is a void, so on an alarm it leaves "N de M certos". Every other undo is a later edit
+  that puts back the values the action found. Both sync as normal changes. Undoing a suspend or bury
+  before sync back sends nothing to AnkiDroid; after it, the card comes back only in the app,
+  since AnkiDroid's API has no unsuspend or unbury.
 - "Editar nota" / "Edit note" in the card-action menu opens the note editor in place of the card,
   for the card's note in its own deck. Save, Cancel and Back return to the same card, re-rendered.
   On an alarm the menu only exists after Start; typing in the editor counts as session activity, so

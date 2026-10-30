@@ -3,10 +3,12 @@ import { StudyMenu } from "./StudyMenu.tsx";
 import { buryItem, buryStudyCard } from "./study-actions.ts";
 import { StudyAnnotations } from "./StudyAnnotations.tsx";
 import { annotationItems, useStudyAnnotationChange } from "./study-annotations.ts";
+import { undoItem, useUndoStack } from "./study-undo.ts";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   alarmSession,
+  answerUndo,
   awakeCheckAfter,
   type Card,
   readAloudFor,
@@ -15,6 +17,7 @@ import {
   type Grade,
   type Locale,
   type ReadAloud,
+  type UndoStep,
 } from "@app/core";
 import { Effect, type Layer } from "effect";
 import { useEffect, useRef, useState } from "react";
@@ -185,6 +188,7 @@ function CardStage({
           <StudyAnnotations next={next} locale={locale} />
           <StudyMenu
             items={[
+              undoItem(locale, alarm.canUndo, alarm.undo),
               { id: "editNote", label: t("editNote"), onPress: () => setEditing(next.card.id) },
               ...suspensionItems(locale, alarm.suspend),
               buryItem(locale, alarm.bury),
@@ -410,6 +414,9 @@ function useAlarmSession(
   const signal = signalWith(layer);
   // Bumped for each card shown, so a reading still under way knows it's been replaced.
   const readingId = useRef(0);
+  const history = useUndoStack();
+  // The card the last undo was on: the session shows it again first.
+  const undone = useRef<string>(undefined);
   /** Read aloud, when the alarm has it: the card just shown. A failure never blocks the session. */
   const read = (next: Session["next"] | undefined) => {
     const id = ++readingId.current;
@@ -445,6 +452,7 @@ function useAlarmSession(
         need: ringNeed(current, events, alarms),
         ringId: ring.id,
         now: Date.now(),
+        undone: undone.current,
       });
     },
   });
@@ -476,12 +484,13 @@ function useAlarmSession(
    * The current card goes through `change` (an answer, or a card leaving without one), then the
    * session's next card shows, or the ring is dismissed once N are right.
    */
-  const replaceCard = (change: (target: Card) => Promise<unknown>) =>
+  const replaceCard = (change: (target: Card) => Promise<UndoStep>) =>
     guarded(async () => {
       const target = session?.next?.card;
       if (!target) return;
       await signal((service) => service.activity(ring.id));
-      await change(target);
+      history.record(await change(target));
+      undone.current = undefined;
       card.hide();
       const { data } = await query.refetch();
       shownAt.current = performance.now();
@@ -492,10 +501,10 @@ function useAlarmSession(
    * Takes the current card out of the session without an answer (suspend, bury): progress stays
    * and the next card comes, read aloud.
    */
-  const leaveCard = (change: (target: Card) => Promise<void>) =>
-    replaceCard(async (target) => {
+  const leaveCard = (change: (target: Card) => Promise<UndoStep>) =>
+    replaceCard((target) => {
       stopReading();
-      await change(target);
+      return change(target);
     });
   /** A deck with no cards can't give the awake check a card, so that dismissal skips it. */
   const finish = async (awakeCheck = true) => {
@@ -503,7 +512,7 @@ function useAlarmSession(
     await signal((service) => service.dismiss(ring.id, after));
     onDismissed();
   };
-  const change = useStudyAnnotationChange(guarded, () => query.refetch());
+  const change = useStudyAnnotationChange(guarded, () => query.refetch(), history.record);
   return {
     session,
     started,
@@ -545,13 +554,31 @@ function useAlarmSession(
     change,
     answer: async (grade: Grade) => {
       if (!card.revealed) return;
-      await replaceCard((target) => {
+      await replaceCard(async (target) => {
         const durationMs = Math.max(0, performance.now() - shownAt.current);
-        return Effect.runPromise(
+        const entry = await Effect.runPromise(
           localData((data) => data.answerCard(target.id, grade, durationMs, ring.id)),
         );
+        return answerUndo(entry);
       });
     },
+    canUndo: history.canUndo,
+    /**
+     * Reverses the session's newest answer or card-menu action: an undone grade leaves the
+     * progress, and the card comes back on its front, read aloud again.
+     */
+    undo: () =>
+      guarded(async () => {
+        if (!history.canUndo) return;
+        await signal((service) => service.activity(ring.id));
+        stopReading();
+        undone.current = await history.undo();
+        card.hide();
+        const { data } = await query.refetch();
+        shownAt.current = performance.now();
+        read(data?.next);
+        await client.invalidateQueries({ queryKey: ["collection"] });
+      }),
     /** Buries the card until the next study day: another comes, and it doesn't count toward N. */
     bury: () => leaveCard((target) => buryStudyCard(target, client)),
     dismiss: () => guarded(() => finish(false)),

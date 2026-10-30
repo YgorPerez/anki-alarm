@@ -1,8 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { translator, type Card, type Collection, type Locale, type Note } from "@app/core";
+import {
+  translator,
+  type Card,
+  type Locale,
+  type Note,
+  type StudyAction,
+  type UndoStep,
+} from "@app/core";
 import type { StudyMenuItem } from "./StudyMenu.tsx";
-import { Effect } from "effect";
-import { localData } from "./database.ts";
+import { takeStudyAction } from "./study-undo.ts";
 
 export const annotationMessages = {
   "pt-BR": {
@@ -54,16 +60,14 @@ export const flagLabel = (
 export function annotationItems(
   next: Current,
   locale: Locale,
-  change: (command: (c: Collection) => void) => Promise<void>,
+  change: (action: StudyAction) => Promise<void>,
 ): StudyMenuItem[] {
   if (!next) return [];
   const { card, note } = next;
   const t = translator(annotationMessages, locale);
   const marked = note.fields.tags.value.includes("marked");
   const set = (flag: number) => () => {
-    void change((c) => {
-      c.setCardFlag(card.id, flag);
-    });
+    void change({ kind: "setCardFlag", cardId: card.id, flag });
   };
   return [
     ...flags.map((f) => ({ id: `flag-${f.id}`, label: flagLabel(t, f), onPress: set(f.id) })),
@@ -77,23 +81,25 @@ export function annotationItems(
       id: "mark",
       label: t(marked ? "unmark" : "mark"),
       onPress: () => {
-        void change((c) => {
-          c.setNoteMarked(note.id, !marked);
-        });
+        void change({ kind: "setNoteMarked", cardId: card.id, marked: !marked });
       },
     },
   ];
 }
 
-/** Persist under the screen's existing action lock, then refresh that screen's session query. */
+/**
+ * Persists a flag or mark under the screen's action lock, records its undo, then refreshes that
+ * screen's session query.
+ */
 export function useStudyAnnotationChange(
   guarded: (operation: () => Promise<void>) => Promise<void>,
   refresh: () => Promise<unknown>,
+  record: (step: UndoStep) => void,
 ) {
   const client = useQueryClient();
-  return (command: (c: Collection) => void) =>
+  return (action: StudyAction) =>
     guarded(async () => {
-      await Effect.runPromise(localData((data) => data.changeCollection(command)));
+      record(await takeStudyAction(action));
       await Promise.all([refresh(), client.invalidateQueries({ queryKey: ["collection"] })]);
     });
 }
