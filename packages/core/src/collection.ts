@@ -5,6 +5,7 @@ import {
   linkedAnkiDroidDecks,
   presetFromOptions,
   seenReps,
+  sentSuspensionKey,
   snapshotEntry,
   type AnkiDroidCard,
   type AnkiDroidSource,
@@ -145,6 +146,8 @@ export interface AnkiDroidLink {
   seen: [cardId: string, reps: number][];
   /** Decks this phone took over: their earlier reviews are not sent back from here. */
   claimed: string[];
+  /** Keys in what sync back sent for suspensions AnkiDroid no longer holds, to forget. */
+  released: string[];
   added: number;
   edited: number;
 }
@@ -620,13 +623,16 @@ export class Collection {
    * Records take ids from their Anki identities, so linking again updates instead of duplicating:
    * a note field takes AnkiDroid's value when the note's mod time is newer than the field's clock.
    * Pulling is linking again: new notes and cards come in, edited fields follow that rule, and
-   * suspension follows AnkiDroid. A card AnkiDroid reviewed since this phone last saw it (`seen`,
-   * see `seenReps`) comes with a snapshot of its state to append to the review log.
+   * suspension follows AnkiDroid, except a suspension sync back sent (`sent`, see
+   * `sentSuspensionKey`) on a card unsuspended here since. A card AnkiDroid reviewed since this
+   * phone last saw it (`seen`, see `seenReps`) comes with a snapshot of its state to append to the
+   * review log.
    */
   linkAnkiDroid(
     source: AnkiDroidSource,
     log: readonly LogEntry[] = [],
     seen: ReadonlyMap<string, number> = new Map(),
+    sent: ReadonlySet<string> = new Set(),
   ): AnkiDroidLink {
     const decks = linkedAnkiDroidDecks(source);
     const claimed: string[] = [];
@@ -697,6 +703,7 @@ export class Collection {
     }
     const snapshots: LogEntry[] = [];
     const reps: [string, number][] = [];
+    const released: string[] = [];
     for (const ad of source.cards) {
       const noteId = noteIds.get(ad.noteId);
       const deckId = homeDeck(ad);
@@ -705,6 +712,8 @@ export class Collection {
       if (this.deleted("cards", id)) continue;
       // Queue -1 is suspended in Anki; buried cards (-2/-3) are not modelled.
       const suspended = ad.queue === -1;
+      const ours = sent.has(sentSuspensionKey(id));
+      if (ours && !suspended) released.push(sentSuspensionKey(id));
       const card = this.state.cards.find((c) => c.id === id);
       if (!card)
         this.state.cards.push({
@@ -714,14 +723,22 @@ export class Collection {
           ),
           anki: { id: ad.id },
         });
-      else if (card.fields.suspended.value !== suspended)
+      else if (card.fields.suspended.value !== suspended && !(suspended && ours))
         card.fields.suspended = { value: suspended, hlc: this.tick() };
       reps.push([id, ad.reps]);
       if (ad.reps <= seenReps(log, id, seen)) continue;
       const snapshot = snapshotEntry(ad, id, steps.get(deckId) ?? [], this.env.now());
       if (snapshot) snapshots.push(snapshot);
     }
-    return { deckId: deckIds.get(source.deckId)!, snapshots, seen: reps, claimed, added, edited };
+    return {
+      deckId: deckIds.get(source.deckId)!,
+      snapshots,
+      seen: reps,
+      claimed,
+      released,
+      added,
+      edited,
+    };
   }
   private mergeAnkiNote(id: string, ad: AnkiDroidSource["notes"][number], noteTypeId: string) {
     const values = ad.fields.split(SEPARATOR);

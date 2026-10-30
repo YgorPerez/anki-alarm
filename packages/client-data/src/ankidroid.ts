@@ -1,6 +1,7 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import type { SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import {
+  sentSuspensionKey,
   syncBackBuries,
   syncBackBuryPlan,
   syncBackPlan,
@@ -114,6 +115,10 @@ export function ankiDroidEngine(deps: Deps) {
         .values(batch.map((id) => ({ id })))
         .onConflictDoNothing(),
     );
+  const forgetSent = (ids: readonly string[]) =>
+    inBatches(ids, (batch) =>
+      db.delete(ankiDroidSent).where(inArray(ankiDroidSent.id, [...batch])),
+    );
 
   /** Links or pulls one AnkiDroid deck, with snapshots, seen reps and the take-over baseline. */
   const link = (source: AnkiDroidSource) =>
@@ -123,9 +128,10 @@ export function ankiDroidEngine(deps: Deps) {
         Effect.gen(function* () {
           const log = yield* deps.readLog;
           const seen = yield* readSeen;
+          const sent = yield* readSent;
           return yield* deps.runCollection(
             (c) => {
-              const linked = c.linkAnkiDroid(source, log, seen);
+              const linked = c.linkAnkiDroid(source, log, seen, sent);
               // Reviews of a deck this phone just took over were another phone's to send.
               const baseline = syncBackQueue(c.snapshot(), log, deps.deviceId, new Set())
                 .filter((a) => linked.claimed.includes(a.deckId))
@@ -143,6 +149,7 @@ export function ankiDroidEngine(deps: Deps) {
                 yield* deps.appendNew(linked.snapshots);
                 yield* storeSeen(linked.seen);
                 yield* markSent(linked.baseline);
+                yield* forgetSent(linked.released);
               }),
           );
         }),
@@ -204,7 +211,9 @@ export function ankiDroidEngine(deps: Deps) {
         const after = yield* provider.suspend(action);
         if (after && after.queue !== -1)
           return yield* new AnswerNotRecorded({ message: "AnkiDroid didn't suspend the card" });
-        yield* deps.write(markSent([action.entryId]));
+        yield* deps.write(
+          markSent(after ? [action.entryId, sentSuspensionKey(action.cardId)] : [action.entryId]),
+        );
       }
       // Buries go after the answers: an answer would put a buried card back in AnkiDroid's queue.
       for (const bury of buryPlan.send) {

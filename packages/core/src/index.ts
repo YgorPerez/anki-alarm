@@ -25,6 +25,7 @@ export {
   ankiDroidAccess,
   cardsStayInApp,
   linkableAnkiDroidDecks,
+  sentSuspensionKey,
   syncBackBuries,
   syncBackBuryPlan,
   syncBackPlan,

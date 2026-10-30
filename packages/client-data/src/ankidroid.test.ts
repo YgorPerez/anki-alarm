@@ -287,6 +287,66 @@ test("suspension syncs without reviews, survives restart and retries a failed pr
   }
 });
 
+test("undoing a suspend already sent stays undone until AnkiDroid's queue changes", async () => {
+  const db = openData();
+  const anki = fakeAnkiDroid();
+  try {
+    const data = await db.open();
+    const deckId = await run(data.linkAnkiDroidDeck(anki.source));
+    const stored = async () =>
+      (await run(data.collection)).cards.find((c) => c.anki?.id === 9001)!.fields.suspended.value;
+    const inAnkiDroid = anki.source.cards.find((c) => c.id === 9001)!;
+    const queue = inAnkiDroid.queue;
+    const card = (await run(data.collection)).cards.find((c) => c.anki?.id === 9001)!;
+    const step = await run(data.studyAction({ kind: "suspendCard", cardId: card.id }));
+    await run(data.syncBackAnkiDroid(anki.provider));
+    expect(inAnkiDroid.queue).toBe(-1);
+
+    await run(data.undoStudy(step));
+    await run(data.pullAnkiDroid(anki.provider, deckId));
+    expect(await stored()).toBe(false);
+    // A restart keeps it.
+    const reopened = await db.open();
+    await run(reopened.pullAnkiDroid(anki.provider, deckId));
+    expect(await stored()).toBe(false);
+
+    // Unsuspended there, then suspended there: that one is AnkiDroid's own.
+    inAnkiDroid.queue = queue;
+    await run(reopened.pullAnkiDroid(anki.provider, deckId));
+    expect(await stored()).toBe(false);
+    inAnkiDroid.queue = -1;
+    await run(reopened.pullAnkiDroid(anki.provider, deckId));
+    expect(await stored()).toBe(true);
+  } finally {
+    db.close();
+  }
+});
+
+test("a suspension AnkiDroid made itself still follows AnkiDroid after an unsuspend here", async () => {
+  const db = openData();
+  const anki = fakeAnkiDroid();
+  try {
+    const data = await db.open();
+    const deckId = await run(data.linkAnkiDroidDeck(anki.source));
+    const inAnkiDroid = anki.source.cards.find((c) => c.id === 9001)!;
+    inAnkiDroid.queue = -1;
+    await run(data.pullAnkiDroid(anki.provider, deckId));
+    const card = (await run(data.collection)).cards.find((c) => c.anki?.id === 9001)!;
+    expect(card.fields.suspended.value).toBe(true);
+    await run(
+      data.changeCollection((c) => {
+        c.setCardsSuspended([card.id], false);
+      }),
+    );
+    await run(data.pullAnkiDroid(anki.provider, deckId));
+    expect(
+      (await run(data.collection)).cards.find((c) => c.id === card.id)!.fields.suspended.value,
+    ).toBe(true);
+  } finally {
+    db.close();
+  }
+});
+
 test("sync back sends answers before suspension and a pull does not resend imported suspension", async () => {
   const db = openData();
   const anki = fakeAnkiDroid();

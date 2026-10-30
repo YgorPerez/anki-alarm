@@ -170,7 +170,8 @@ AnkiDroid decks become the app's own decks. The app schedules them with FSRS lik
   deck and stores its images and audio.
 - **Pull** (on demand, from the deck) always runs a sync back first. Then new notes and cards and
   edited fields come in (a field takes AnkiDroid's value when its mod time is newer than our
-  edit), and suspension follows AnkiDroid. For each linked card AnkiDroid reviewed since the phone
+  edit), and suspension follows AnkiDroid, except a suspension we sent and undid here (see Study).
+  For each linked card AnkiDroid reviewed since the phone
   last saw it (its `reps` went up), the app appends a snapshot timed at that review, and replay
   adopts it.
 - **Sync back** (on demand from the deck, plus an auto sync after each alarm session, on by default
@@ -212,8 +213,12 @@ session** is a special mode of it on the phone.
   cards of its note, including siblings in other decks. Suspension syncs and takes effect immediately
   without an answer or progress toward N. The alarm and awake check show another card, keeping
   their existing empty-deck actions if none remain. Linked cards are suspended in AnkiDroid on the
-  next sync back, after pending answers; failed writes retry. Suspension undo can restore the app's
-  previous values, but AnkiDroid's API has no unsuspend operation.
+  next sync back, after pending answers; failed writes retry. Suspension undo restores the app's
+  previous values. AnkiDroid's API has no unsuspend operation, so the phone remembers each
+  suspension it sent, and a card unsuspended here stays unsuspended on pull until AnkiDroid's queue
+  for the card leaves suspended. After that, a new suspension in AnkiDroid follows as usual. While
+  AnkiDroid still holds the card, its answers wait, like any suspended card's. Bury needs no such
+  memory: pull doesn't change a card's bury.
 - On the phone, alarm sessions, awake checks and Decks study give the card the width and remaining
   height of the screen, without a frame. The compact header shows time and progress on an alarm,
   with Snooze at the end; the awake check shows time, one-card progress and seconds remaining.
