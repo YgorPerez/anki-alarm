@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Effect } from "effect";
 import { newAlarm, type Alarm, type Collection } from "@app/core";
@@ -23,6 +23,12 @@ async function ringing(
   fronts: readonly string[],
   alarm: Partial<Alarm>,
   more: (c: Collection) => void = () => {},
+  display: { zone: string; use24Hour: boolean } = { zone: "UTC", use24Hour: true },
+  phase: Pick<Ring, "phase" | "snoozes" | "snoozedUntil"> = {
+    phase: "ringing",
+    snoozes: 0,
+    snoozedUntil: null,
+  },
 ) {
   const state = await Effect.runPromise(
     localData((data) =>
@@ -38,9 +44,7 @@ async function ringing(
     id: `ring-${name}`,
     alarm: { ...newAlarm("alarm-1"), label: "Trabalho", deckId, ...alarm },
     startedAt: Date.now(),
-    phase: "ringing",
-    snoozes: 0,
-    snoozedUntil: null,
+    ...phase,
   };
   const native = memoryAlarmService();
   native.deliver(
@@ -63,6 +67,8 @@ async function ringing(
       <AlarmScreen
         ring={active}
         locale="pt-BR"
+        zone={display.zone}
+        use24Hour={display.use24Hour}
         layer={native.layer}
         gradeDelayMs={50}
         onDismissed={() => dismissed++}
@@ -121,6 +127,72 @@ test("Start silences the ring, cards count toward N and N right dismisses it", a
   }
 });
 
+test("the ring's clock is Home's: the system's 12 or 24 h setting, in the phone's zone", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-29T09:05:00Z"));
+  try {
+    await ringing("Relógio", ["sol"], {}, undefined, {
+      zone: "America/Sao_Paulo",
+      use24Hour: false,
+    });
+    expect(screen.getByText("6:05")).toBeTruthy();
+    expect(screen.getByText("AM")).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a snoozed ring shows when it rings again on the same clock, in the same format", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-29T09:05:00Z"));
+  try {
+    await ringing(
+      "Soneca",
+      ["sol"],
+      { need: 1 },
+      undefined,
+      { zone: "America/Sao_Paulo", use24Hour: false },
+      { phase: "snoozed", snoozes: 1, snoozedUntil: Date.parse("2026-10-29T09:14:00Z") },
+    );
+    expect(screen.getByText("6:14")).toBeTruthy();
+    expect(screen.getByText("AM")).toBeTruthy();
+    await screen.findByText(/^Vai tocar de novo às 6:14 AM com \d+ cartões\.$/);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+/** The rows the four grades sit in, once a card is revealed. */
+async function gradeRows() {
+  await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Mostrar resposta" }));
+  await screen.findByRole("button", { name: "Bom" });
+  return ["De novo", "Difícil", "Bom", "Fácil"].map(
+    (name) => screen.getByRole("button", { name }).parent,
+  );
+}
+
+test("at the largest font scale on a small phone the grades sit two by two, keeping words whole", async () => {
+  const native = await import("react-native");
+  const dimensions = vi.spyOn(native, "useWindowDimensions").mockReturnValue({
+    width: 320,
+    height: 640,
+    scale: 2,
+    fontScale: 2,
+  });
+  try {
+    await ringing("Grande", ["sol"], {});
+    const [again, hard, good, easy] = await gradeRows();
+    expect(hard).toBe(again);
+    expect(easy).toBe(good);
+    expect(good).not.toBe(again);
+  } finally {
+    dimensions.mockRestore();
+  }
+  await ringing("Normal", ["lua"], {});
+  expect(new Set(await gradeRows()).size).toBe(1);
+});
+
 test("an alarm folded into the ring raises its N and keeps the ring's deck", async () => {
   const api = await fakeSyncApi({});
   const state = await Effect.runPromise(
@@ -167,7 +239,14 @@ test("an alarm folded into the ring raises its N and keeps the ring's deck", asy
           new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" } } })
         }
       >
-        <AlarmScreen ring={ring} locale="pt-BR" layer={native.layer} onDismissed={() => {}} />
+        <AlarmScreen
+          ring={ring}
+          locale="pt-BR"
+          zone="UTC"
+          use24Hour
+          layer={native.layer}
+          onDismissed={() => {}}
+        />
       </QueryClientProvider>,
     );
     await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
@@ -264,6 +343,8 @@ test("with the awake check on, the dismissal schedules it after the alarm's dela
         <AlarmScreen
           ring={ring}
           locale="pt-BR"
+          zone="UTC"
+          use24Hour
           layer={native.layer}
           gradeDelayMs={50}
           onDismissed={() => {
@@ -325,6 +406,8 @@ async function ringWithFronts(
       <AlarmScreen
         ring={ring}
         locale="pt-BR"
+        zone="UTC"
+        use24Hour
         layer={native.layer}
         gradeDelayMs={10}
         onDismissed={() => {}}

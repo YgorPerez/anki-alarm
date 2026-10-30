@@ -12,6 +12,23 @@ export const clockText = (hour: number, minute: number, use24Hour: boolean, loca
     .format(Date.UTC(2000, 0, 1, hour, minute))
     .replace(/\s+/g, " ");
 
+export function timeParts(at: number, locale: Locale, zone: string, use24Hour: boolean) {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: zone,
+    hour: use24Hour ? "2-digit" : "numeric",
+    minute: "2-digit",
+    hour12: !use24Hour,
+  }).formatToParts(at);
+}
+
+/** A time as one line of text, in the clock's format. */
+export function timeText(at: number, locale: Locale, zone: string, use24Hour: boolean) {
+  return timeParts(at, locale, zone, use24Hour)
+    .map((part) => part.value)
+    .join("")
+    .replace(/\s+/g, " ");
+}
+
 const weekdayNames = {
   "pt-BR": ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"],
   en: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],

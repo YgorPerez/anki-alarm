@@ -308,12 +308,22 @@ function Home({ children }: { children: ReactNode }) {
       switchLanguage={() => setLocale(locale === "en" ? "pt-BR" : "en")}
     />
   );
+  const [use24Hour, setUse24Hour] = useState(() => native.is24HourFormat());
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") setUse24Hour(native.is24HourFormat());
+    });
+    return () => subscription.remove();
+  }, []);
+  const zone = new Intl.DateTimeFormat().resolvedOptions().timeZone;
   const takeover = ring ? (
     <ScopedTheme theme="dark">
       <AlarmScreen
         key={ring.id}
         ring={ring}
         locale={locale}
+        zone={zone}
+        use24Hour={use24Hour}
         layer={androidAlarmService}
         onDismissed={afterAlarm}
       />
@@ -324,6 +334,8 @@ function Home({ children }: { children: ReactNode }) {
         key={awakeCheck.id}
         check={awakeCheck}
         locale={locale}
+        zone={zone}
+        use24Hour={use24Hour}
         layer={androidAlarmService}
         onPassed={afterAlarm}
       />
@@ -334,23 +346,16 @@ function Home({ children }: { children: ReactNode }) {
     queryKey: ["collection"],
     queryFn: () => Effect.runPromise(localData((data) => data.collection)),
   });
-  const [use24Hour, setUse24Hour] = useState(() => native.is24HourFormat());
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") setUse24Hour(native.is24HourFormat());
-    });
-    return () => subscription.remove();
-  }, []);
   const decks = (collectionQuery.data?.decks ?? []).map((deck) => ({
     id: deck.id,
     name: deck.fields.name.value,
   }));
-  const zone = new Intl.DateTimeFormat().resolvedOptions().timeZone;
   const quickOptions = quickAlarmOptions({
     alarms,
     lastSavedId: lastSavedAlarm,
     deckIds: decks.map((deck) => deck.id),
   });
+
   const alarmsContent = (
     <HomeScreen
       alarms={alarms}

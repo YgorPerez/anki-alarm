@@ -4,7 +4,6 @@ import { AlarmService } from "./alarms.ts";
 
 /** What the alarm and awake check screens share besides their components (`alarm-ui.tsx`). */
 export const GRADE_DELAY_MS = SESSION_RULES.gradeDelaySeconds * 1000;
-export const bold = { fontFamily: "AtkinsonHyperlegible_700Bold" };
 
 /** Sends one signal to native through the screen's `AlarmService` layer. */
 export const signalWith =

@@ -11,11 +11,19 @@ import {
 } from "@app/core";
 import { Effect } from "effect";
 import { useEffect, useRef, useState } from "react";
-import { BackHandler, Pressable, Text, View, useColorScheme } from "react-native";
+import {
+  BackHandler,
+  Pressable,
+  Text,
+  View,
+  useColorScheme,
+  useWindowDimensions,
+} from "react-native";
 import { WebView } from "react-native-webview";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { localData } from "./database.ts";
 import { copy } from "./copy.ts";
+import { bold } from "./fonts.ts";
 import { editingCopy } from "./editing-copy.ts";
 import { mediaBaseUrl, mediaUrl } from "./media.ts";
 
@@ -160,6 +168,7 @@ export function AnswerControls({
   onAnswer: (grade: Grade) => Promise<void>;
 }) {
   const t = copy(locale);
+  const rows = gradeRows(useWindowDimensions());
   if (!revealed)
     return (
       <Pressable
@@ -168,32 +177,44 @@ export function AnswerControls({
         onPress={onReveal}
         className="min-h-16 items-center justify-center rounded-pill bg-surface"
       >
-        <Text className="text-body text-foreground">{t("reveal")}</Text>
+        <Text className="text-body text-foreground" style={bold}>
+          {t("reveal")}
+        </Text>
       </Pressable>
     );
   if (!gradesShown) return <View className="min-h-16" />;
   return (
-    <View className="flex-row gap-2">
-      {([1, 2, 3, 4] as const).map((grade) => (
-        <Pressable
-          key={grade}
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={() => {
-            void onAnswer(grade);
-          }}
-          className={`min-h-16 flex-1 items-center justify-center rounded-pill px-1 ${gradeClasses[grade]}`}
-        >
-          <Text
-            className={`text-label ${gradeText[grade]}`}
-            style={{ fontFamily: "AtkinsonHyperlegible_700Bold" }}
-          >
-            {t(gradeLabels[grade])}
-          </Text>
-        </Pressable>
+    <View className="gap-3">
+      {rows.map((row) => (
+        <View key={row.join()} className="flex-row gap-3">
+          {row.map((grade) => (
+            <Pressable
+              key={grade}
+              accessibilityRole="button"
+              disabled={busy}
+              onPress={() => {
+                void onAnswer(grade);
+              }}
+              className={`min-h-16 flex-1 items-center justify-center rounded-pill px-1 ${gradeClasses[grade]}`}
+            >
+              <Text className={`text-body ${gradeText[grade]}`} style={bold}>
+                {t(gradeLabels[grade])}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       ))}
     </View>
   );
+}
+
+/**
+ * One row of four while each pill still holds the longest grade word ("Difícil", about four ems
+ * of Body) at the system's font scale; two by two otherwise, so no word breaks mid-letter.
+ */
+function gradeRows({ width, fontScale }: { width: number; fontScale: number }) {
+  const pill = (width - 2 * 24 - 3 * 12) / 4;
+  return pill >= 4 * 17 * fontScale ? [[1, 2, 3, 4] as const] : [[1, 2] as const, [3, 4] as const];
 }
 
 function useStudySession(deckId: string, onExit: () => void) {

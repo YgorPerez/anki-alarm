@@ -17,10 +17,10 @@ import { copy } from "./copy.ts";
 import { bold, regular } from "./fonts.ts";
 import { RepeatSheet } from "./RepeatSheet.tsx";
 import { Sheet } from "./Sheet.tsx";
-import { HomeClock } from "./HomeScreen.tsx";
+import { Clock } from "./clock.tsx";
 
 const deviceZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
-/** A wall time as an instant in UTC, which HomeClock shows with zone "UTC". */
+/** A wall time as an instant in UTC, which Clock shows with zone "UTC". */
 const utcTime = (hour: number, minute: number) => Date.UTC(2000, 0, 1, hour, minute);
 
 /**
@@ -153,8 +153,8 @@ export function AlarmEditorScreen({
           className="items-center py-4"
         >
           {/* Home's clock, which fits the width at large font scales. */}
-          <HomeClock
-            now={utcTime(rule.hour, rule.minute)}
+          <Clock
+            at={utcTime(rule.hour, rule.minute)}
             locale={locale}
             zone="UTC"
             use24Hour={hour24}

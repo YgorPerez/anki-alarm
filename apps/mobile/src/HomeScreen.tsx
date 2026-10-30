@@ -13,54 +13,16 @@ import {
   type Alarm,
   type Locale,
 } from "@app/core";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import {
-  AppState,
-  FlatList,
-  Pressable,
-  Switch,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native";
-import { clockText, durationText, repeatSummary, ringsInText } from "./alarm-text.ts";
+import { useRef, useState, type ReactNode } from "react";
+import { FlatList, Pressable, Switch, Text, View } from "react-native";
+import { Clock, useNow } from "./clock.tsx";
+import { clockText, durationText, repeatSummary, ringsInText, timeText } from "./alarm-text.ts";
 import { bold, regular } from "./fonts.ts";
 import { copy } from "./copy.ts";
 import { HomeEmptyState, type DeckSetup } from "./HomeEmptyState.tsx";
 
 type Deck = { id: string; name: string };
 
-/** Resamples on resume as well as each second, so sleeping never leaves a stale clock. */
-function useClock() {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const tick = () => setNow(Date.now());
-    const timer = setInterval(tick, 1000);
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") tick();
-    });
-    return () => {
-      clearInterval(timer);
-      subscription.remove();
-    };
-  }, []);
-  return now;
-}
-
-function timeParts(at: number, locale: Locale, zone: string, use24Hour: boolean) {
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: zone,
-    hour: use24Hour ? "2-digit" : "numeric",
-    minute: "2-digit",
-    hour12: !use24Hour,
-  }).formatToParts(at);
-}
-function timeText(at: number, locale: Locale, zone: string, use24Hour: boolean) {
-  return timeParts(at, locale, zone, use24Hour)
-    .map((part) => part.value)
-    .join("")
-    .replace(/\s+/g, " ");
-}
 function dayText(at: number, locale: Locale, zone: string) {
   return new Intl.DateTimeFormat(locale, {
     timeZone: zone,
@@ -68,44 +30,6 @@ function dayText(at: number, locale: Locale, zone: string) {
     day: "numeric",
     month: "short",
   }).format(at);
-}
-
-export function HomeClock({
-  now,
-  locale,
-  zone,
-  use24Hour,
-}: {
-  now: number;
-  locale: Locale;
-  zone: string;
-  use24Hour: boolean;
-}) {
-  const parts = timeParts(now, locale, zone, use24Hour);
-  const { width, fontScale } = useWindowDimensions();
-  return (
-    <View className="flex-row flex-wrap items-baseline gap-2">
-      <Text
-        className="text-foreground"
-        style={{
-          ...bold,
-          fontSize: Math.min(68, (width - 48) / (3.5 * fontScale)),
-          fontVariant: ["tabular-nums"],
-        }}
-      >
-        {parts
-          .filter((p) => p.type !== "dayPeriod")
-          .map((p) => p.value)
-          .join("")
-          .trim()}
-      </Text>
-      {parts.some((p) => p.type === "dayPeriod") && (
-        <Text style={regular} className="text-body text-muted-foreground">
-          {parts.find((p) => p.type === "dayPeriod")?.value}
-        </Text>
-      )}
-    </View>
-  );
 }
 
 export function AlarmCard({
@@ -248,7 +172,7 @@ export function HomeScreen({
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(false);
   const pending = useRef(false);
-  const now = useClock();
+  const now = useNow();
   const undoAvailable = deleted !== null && (busy || now - deleted.at < 8000);
   const visibleAlarms = alarms.filter((alarm) => !hidden.includes(alarm.id));
   const removeAlarm = async (alarm: Alarm) => {
@@ -282,6 +206,7 @@ export function HomeScreen({
       setBusy(false);
     }
   };
+
   const list = useRef<FlatList<Alarm>>(null);
   const needsDeck = setup !== undefined && decks.length === 0;
   const t = copy(locale);
@@ -310,7 +235,7 @@ export function HomeScreen({
         onRefresh={onRefresh}
         ListHeaderComponent={
           <View className="gap-4 pb-4">
-            <HomeClock now={now} locale={locale} zone={zone} use24Hour={use24Hour} />
+            <Clock at={now} locale={locale} zone={zone} use24Hour={use24Hour} />
             <Text style={regular} className="text-body text-muted-foreground">
               {next
                 ? t("nextAlarm", {
