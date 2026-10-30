@@ -153,41 +153,42 @@ test("the card menu skips the next ring of a repeating alarm, shows the ring aft
   expect(screen.getByText("Próximo 06:30 · em 2 d 23 h 30 min")).toBeTruthy();
 });
 
-test("disabled and one-off card menus keep Duplicate without offering Skip", async () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-10-29T23:18:00Z"));
-  const repeating = { ...newAlarm("a"), label: "Semana" };
-  const duplicated: Alarm[] = [];
-  await render(
-    <HomeScreen
-      alarms={[
-        { ...repeating, id: "off", label: "Desligado", enabled: false },
-        {
-          ...repeating,
-          id: "once",
-          label: "Uma vez",
-          rule: { hour: 7, minute: 0, onceDate: "2026-10-30" },
-        },
-      ]}
-      decks={[]}
-      locale="pt-BR"
-      zone="UTC"
-      use24Hour
-      onEdit={() => {}}
-      onAdd={() => {}}
-      onToggle={() => {}}
-      onSkip={() => {}}
-      onDuplicate={(alarm) => duplicated.push(alarm)}
-    />,
-  );
-  for (const label of ["Desligado", "Uma vez"]) {
+test.each(["Desligado", "Uma vez"])(
+  "%s card menu keeps Duplicate without offering Skip",
+  async (label) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-29T23:18:00Z"));
+    const repeating = { ...newAlarm("a"), label: "Semana" };
+    const duplicated: Alarm[] = [];
+    await render(
+      <HomeScreen
+        alarms={[
+          { ...repeating, id: "off", label: "Desligado", enabled: false },
+          {
+            ...repeating,
+            id: "once",
+            label: "Uma vez",
+            rule: { hour: 7, minute: 0, onceDate: "2026-10-30" },
+          },
+        ]}
+        decks={[]}
+        locale="pt-BR"
+        zone="UTC"
+        use24Hour
+        onEdit={() => {}}
+        onAdd={() => {}}
+        onToggle={() => {}}
+        onSkip={() => {}}
+        onDuplicate={(alarm) => duplicated.push(alarm)}
+      />,
+    );
     await fireEvent.press(screen.getByRole("button", { name: `Mais opções: ${label}` }));
     expect(screen.queryByRole("button", { name: "Pular a próxima" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Desfazer pulo" })).toBeNull();
     await fireEvent.press(screen.getByRole("button", { name: "Duplicar alarme" }));
-  }
-  expect(duplicated.map((alarm) => alarm.id)).toEqual(["off", "once"]);
-});
+    expect(duplicated.map((alarm) => alarm.id)).toEqual([label === "Desligado" ? "off" : "once"]);
+  },
+);
 
 test("quick alarm chips add a marked one-off alarm and say when it rings", async () => {
   vi.useFakeTimers();
