@@ -200,6 +200,10 @@ session** is a special mode of it on the phone.
   Core computes the counts for the deck and subdecks within the remaining daily limits. System Back
   and the back link return to the deck. All three study headers share a card-action menu, hidden
   until it has actions. The big clock and alarm label stay on Start and other stages without a card.
+- "Editar nota" / "Edit note" in the card-action menu opens the note editor in place of the card,
+  for the card's note in its own deck. Save, Cancel and Back return to the same card, re-rendered.
+  On an alarm the menu only exists after Start; typing in the editor counts as session activity, so
+  the idle time doesn't ring again mid-edit, and the alarm keeps covering the app.
 - A native tap on the card reveals its back; dragging scrolls its HTML without revealing. The
   WebView keeps JavaScript disabled, preserves deck CSS and defaults to 28px text following system
   font scale. A screen reader gets the reveal hint and an accessibility action.

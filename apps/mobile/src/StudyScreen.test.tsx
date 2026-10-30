@@ -204,3 +204,61 @@ test.each([
     dimensions.mockRestore();
   }
 });
+
+test("Edit note from the menu returns to the same card, re-rendered; Back cancels the edit", async () => {
+  const exit = vi.fn<() => void>();
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Edit test");
+        c.createDeck("Edit test other");
+        c.addBasicNote(deck.id, "gato", "cat");
+        c.addBasicNote(deck.id, "rato", "mouse");
+      }),
+    ),
+  );
+  const deck = state.decks.find((d) => d.fields.name.value === "Edit test")!;
+  await render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" } } })
+      }
+    >
+      <StudyScreen deckId={deck.id} locale="pt-BR" onExit={exit} />
+    </QueryClientProvider>,
+  );
+  await fireEvent(await screen.findByLabelText("Frente"), "accessibilityAction", {
+    nativeEvent: { actionName: "activate" },
+  });
+  const back = String(screen.getByLabelText("Verso").props.source.html);
+  const word = back.includes("cat") ? "cat" : "mouse";
+
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Editar nota" }));
+  expect((await screen.findByLabelText("Verso")).props.value).toBe(word);
+  // Moving the note to another deck stays in the deck page's editor.
+  expect(screen.queryByRole("radio", { name: "Edit test other" })).toBeNull();
+  await act(async () => {
+    expect(pressBack()).toBe(true);
+  });
+  expect(exit).not.toHaveBeenCalled();
+  expect(String((await screen.findByLabelText("Verso")).props.source.html)).toBe(back);
+
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Editar nota" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Cancelar" }));
+  expect(String((await screen.findByLabelText("Verso")).props.source.html)).toBe(back);
+
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Editar nota" }));
+  await fireEvent.changeText(await screen.findByLabelText("Verso"), `${word} (editado)`);
+  await fireEvent.press(screen.getByRole("button", { name: "Salvar" }));
+  await waitFor(() =>
+    expect(String(screen.getByLabelText("Verso").props.source?.html)).toContain(
+      `${word} (editado)`,
+    ),
+  );
+  const saved = await Effect.runPromise(localData((data) => data.collection));
+  expect(saved.notes.some((n) => n.values[1]?.value === `${word} (editado)`)).toBe(true);
+  expect(exit).not.toHaveBeenCalled();
+});

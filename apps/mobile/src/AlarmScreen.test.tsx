@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
+import { pressBack } from "../test/native/react-native.ts";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
 import { expect, test, vi } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Effect } from "effect";
@@ -476,4 +477,34 @@ test("an alarm without read aloud reads nothing", async () => {
     await view.unmount();
   }
   expect(reading(native.signals())).toEqual([]);
+});
+
+test("Edit note opens only after Start and Back returns to the same card, not out of the alarm", async () => {
+  const { native, dismissed } = await ringing("Editar no alarme", ["lua"], { need: 1 });
+  expect(screen.queryByRole("button", { name: "Ações do cartão" })).toBeNull();
+  await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+  await screen.findByLabelText("Frente");
+  const before = front();
+
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Editar nota" }));
+  expect((await screen.findByLabelText("Frente")).props.value).toBe("lua");
+  await act(async () => {
+    expect(pressBack()).toBe(true);
+  });
+  await waitFor(() => expect(front()).toBe(before));
+  expect(dismissed()).toBe(0);
+
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Editar nota" }));
+  const quiet = native.signals().filter((s) => s === "activity:ring-Editar no alarme").length;
+  // Typing counts as activity, so the idle time doesn't ring the alarm again mid-edit.
+  await fireEvent.changeText(await screen.findByLabelText("Frente"), "lua cheia");
+  expect(native.signals().filter((s) => s === "activity:ring-Editar no alarme").length).toBe(
+    quiet + 1,
+  );
+  await fireEvent.press(screen.getByRole("button", { name: "Salvar" }));
+  await waitFor(() => expect(front()).toContain("lua cheia"));
+  screen.getByText(/ · 0 de 1 certos · faltam 1/);
+  expect(dismissed()).toBe(0);
 });
