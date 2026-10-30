@@ -1,4 +1,10 @@
+import CalendarClock from "lucide-react-native/icons/calendar-clock";
+import CirclePause from "lucide-react-native/icons/circle-pause";
+import Pencil from "lucide-react-native/icons/pencil";
+import Star from "lucide-react-native/icons/star";
+import Undo2 from "lucide-react-native/icons/undo-2";
 import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
+import type { LucideIcon } from "lucide-react-native";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { Card, Locale, Note, StudyAction, UndoStep } from "@app/core";
 import { Effect } from "effect";
@@ -24,11 +30,13 @@ export const flagLabel = (t: ReturnType<typeof copy>, f: (typeof flags)[number])
 const menuItem = (
   id: string,
   label: string,
+  icon: LucideIcon,
   run: () => unknown,
   disabled = false,
 ): StudyMenuItem => ({
   id,
   label,
+  icon,
   disabled,
   onPress: () => {
     void run();
@@ -62,15 +70,31 @@ export function studyMenuItems({
   const marked = note.fields.tags.value.includes("marked");
   const setFlag = (flag: number) => () => change({ kind: "setCardFlag", cardId, flag });
   return [
-    ...(undo ? [menuItem("undo", editingCopy(locale)("undo"), undo.run, !undo.canUndo)] : []),
-    menuItem("editNote", t("editNote"), () => edit(cardId)),
-    menuItem("suspend-card", t("suspendCard"), () => leave({ kind: "suspendCard", cardId })),
-    menuItem("suspend-note", t("suspendNote"), () => leave({ kind: "suspendNote", cardId })),
-    menuItem("bury", t("buryCard"), () => leave({ kind: "buryCard", cardId })),
-    ...flags.map((f) => menuItem(`flag-${f.id}`, flagLabel(t, f), setFlag(f.id))),
-    menuItem("flag-clear", t("flagClear"), setFlag(0), card.fields.flag.value === 0),
-    menuItem("mark", t(marked ? "unmarkNote" : "markNote"), () =>
+    ...flags.map((f): StudyMenuItem => {
+      // The set flag's button clears it, so it's named for that.
+      const selected = card.fields.flag.value === f.id;
+      return {
+        id: `flag-${f.id}`,
+        label: selected ? t("flagClear") : flagLabel(t, f),
+        flag: { color: f.color, selected },
+        onPress: () => {
+          void setFlag(selected ? 0 : f.id)();
+        },
+      };
+    }),
+    ...(undo
+      ? [menuItem("undo", editingCopy(locale)("undo"), Undo2, undo.run, !undo.canUndo)]
+      : []),
+    menuItem("editNote", t("editNote"), Pencil, () => edit(cardId)),
+    menuItem("mark", t(marked ? "unmarkNote" : "markNote"), Star, () =>
       change({ kind: "setNoteMarked", cardId, marked: !marked }),
+    ),
+    menuItem("bury", t("buryCard"), CalendarClock, () => leave({ kind: "buryCard", cardId })),
+    menuItem("suspend-card", t("suspendCard"), CirclePause, () =>
+      leave({ kind: "suspendCard", cardId }),
+    ),
+    menuItem("suspend-note", t("suspendNote"), CirclePause, () =>
+      leave({ kind: "suspendNote", cardId }),
     ),
   ];
 }

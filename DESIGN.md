@@ -247,6 +247,9 @@ Decks study opens above the tabs with no Settings header. Its top bar has a back
 deck name, New/Learning/Review counts in Anki blue/red/green, an Undo icon and a shared card-action
 menu. The menu stays hidden while empty; alarm and awake check use it in their compact headers
 too, with "Desfazer" first (disabled until there is something to undo) in place of an Undo icon.
+The menu is a bottom sheet over a scrim: Anki's seven flags in one row, in their colors, with the
+set one on `primary-tint` (pressing it clears the flag), then a row with an icon for each action. A
+tap on the scrim or Back closes it.
 A set flag appears as a 20px flag in its Anki color and a marked note as a 20px gold star,
 between the counts/Undo area and the menu. Both have translated accessibility labels and stay
 outside the card HTML. Flag colors identify Anki metadata and are independent of the theme.
@@ -385,6 +388,12 @@ Material 3 navigation bar on the phone: three destinations, the active one with 
 indicator and bold label. System Back goes back within the current tab and exits from a tab root.
 Settings returns to the tab that opened it. A ring or shown awake check takes over outside the
 navigator and consumes Back; it never dismisses an alarm session.
+
+### Icons
+
+Lucide, through `lucide-react-native`, at stroke 1.8. Import each from
+`lucide-react-native/icons/<name>` so the bundle holds only the ones in use, and use `ThemedIcon`
+for a theme color.
 
 ## Do's and Don'ts
 

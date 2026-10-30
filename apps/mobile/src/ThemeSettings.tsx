@@ -9,6 +9,8 @@ import {
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import ChevronLeft from "lucide-react-native/icons/chevron-left";
+import { ThemedIcon } from "./icons.tsx";
 import { ScopedTheme } from "uniwind";
 
 import { copy } from "./copy.ts";
@@ -45,9 +47,14 @@ export function ThemeSettings({ locale, onBack }: { locale: Locale; onBack: () =
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
       <ScrollView contentContainerClassName="gap-6 p-6">
-        <Pressable accessibilityRole="button" onPress={onBack} className="self-start py-2">
+        <Pressable
+          accessibilityRole="button"
+          onPress={onBack}
+          className="min-h-12 flex-row items-center gap-1 self-start"
+        >
+          <ThemedIcon icon={ChevronLeft} colorClassName="text-primary-ink" size={20} />
           <Text style={regular} className="text-label text-primary-ink">
-            ‹ {t("back")}
+            {t("back")}
           </Text>
         </Pressable>
         <Text accessibilityRole="header" style={bold} className="text-title text-foreground">

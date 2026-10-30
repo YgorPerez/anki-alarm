@@ -22,7 +22,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Path } from "react-native-svg";
+import Calendar from "lucide-react-native/icons/calendar";
 import { repeatLine, ringsInText } from "./alarm-text.ts";
 import { Button } from "./controls.tsx";
 import { copy } from "./copy.ts";
@@ -246,18 +246,7 @@ function RepeatSummaryLine({
       <Text style={regular} className="shrink text-body text-foreground">
         {summary}
       </Text>
-      <Svg
-        width={24}
-        height={24}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke={iconColor}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <Path d="M6 5h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3ZM3 10h18M8 3v4m8-4v4" />
-      </Svg>
+      <Calendar size={24} color={iconColor} strokeWidth={1.8} />
     </Pressable>
   );
 }

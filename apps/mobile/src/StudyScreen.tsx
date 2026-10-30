@@ -1,5 +1,8 @@
 import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import { intervalText } from "./interval-text.ts";
+import ChevronLeft from "lucide-react-native/icons/chevron-left";
+import Undo2 from "lucide-react-native/icons/undo-2";
+import { ThemedIcon } from "./icons.tsx";
 import { StudyMenu } from "./StudyMenu.tsx";
 import { StudyAnnotations } from "./StudyAnnotations.tsx";
 import { studyMenuItems, takeStudyAction, useStudyChange } from "./study-menu.ts";
@@ -202,10 +205,11 @@ function StudyNavigation({
         accessibilityRole="button"
         disabled={busy}
         onPress={onExit}
-        className="min-h-12 shrink justify-center"
+        className="min-h-12 shrink flex-row items-center gap-1"
       >
-        <Text numberOfLines={1} className="text-body text-foreground">
-          ‹ {title}
+        <ThemedIcon icon={ChevronLeft} />
+        <Text numberOfLines={1} className="shrink text-body text-foreground">
+          {title}
         </Text>
       </Pressable>
       {counts && <StudyCounts counts={counts} locale={locale} />}
@@ -218,7 +222,7 @@ function StudyNavigation({
         }}
         className="min-h-12 min-w-12 items-center justify-center px-2"
       >
-        <Text className="text-body text-foreground">↶</Text>
+        <ThemedIcon icon={Undo2} />
       </Pressable>
       {annotations}
       <StudyMenu items={items} locale={locale} busy={busy} />

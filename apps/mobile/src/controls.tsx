@@ -1,3 +1,6 @@
+import Minus from "lucide-react-native/icons/minus";
+import Plus from "lucide-react-native/icons/plus";
+import { ThemedIcon } from "./icons.tsx";
 import { Pressable, Text, TextInput, View } from "react-native";
 import type { Locale } from "@app/core";
 import { copy } from "./copy.ts";
@@ -193,7 +196,7 @@ export function StepperControl({
         onPress={() => step(-1)}
         className={buttonClassName}
       >
-        <Text className="text-title text-foreground">−</Text>
+        <ThemedIcon icon={Minus} />
       </Pressable>
       <Text accessibilityLabel={spoken} className="text-body text-foreground">
         {text}
@@ -206,7 +209,7 @@ export function StepperControl({
         onPress={() => step(1)}
         className={buttonClassName}
       >
-        <Text className="text-title text-foreground">+</Text>
+        <ThemedIcon icon={Plus} />
       </Pressable>
     </View>
   );

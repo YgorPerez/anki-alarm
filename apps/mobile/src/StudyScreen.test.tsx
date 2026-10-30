@@ -128,7 +128,7 @@ test("Undo restores the front; the back link and system Back leave study", async
     nativeEvent: { actionName: "activate" },
   });
   expect(screen.getByLabelText("Verso").props.source.html).toBe(first);
-  await fireEvent.press(screen.getByRole("button", { name: "‹ Undo test" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Undo test" }));
   await act(async () => {
     expect(pressBack()).toBe(true);
   });
@@ -325,20 +325,22 @@ test("Bury from the card menu skips the card until tomorrow without answering it
   const [buried, other] = html.includes("ponte") ? ["ponte", "rio"] : ["rio", "ponte"];
   expect(screen.getByLabelText("2 novos")).toBeTruthy();
   await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  for (const n of [1, 2, 3, 4, 5, 6, 7]) {
+    expect(screen.getByRole("button", { name: new RegExp(`^Bandeira ${n}: `) })).toBeTruthy();
+  }
+  expect(screen.queryByRole("button", { name: "Remover bandeira" })).toBeNull();
   expect(
     screen
       .getAllByText(
-        /^(Editar nota|Suspender cartão|Suspender nota|Enterrar até amanhã|Bandeira \d: .+|Remover bandeira|Marcar nota)$/,
+        /^(Editar nota|Marcar nota|Enterrar até amanhã|Suspender cartão|Suspender nota)$/,
       )
       .map((item) => item.props.children),
   ).toEqual([
     "Editar nota",
+    "Marcar nota",
+    "Enterrar até amanhã",
     "Suspender cartão",
     "Suspender nota",
-    "Enterrar até amanhã",
-    ...[1, 2, 3, 4, 5, 6, 7].map((n) => expect.stringMatching(new RegExp(`^Bandeira ${n}: `))),
-    "Remover bandeira",
-    "Marcar nota",
   ]);
   await fireEvent.press(screen.getByRole("button", { name: "Enterrar até amanhã" }));
   await waitFor(() => expect(screen.getByLabelText("Frente").props.source.html).toContain(other));

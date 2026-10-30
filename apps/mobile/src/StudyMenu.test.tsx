@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react-native/pure";
 import { expect, test, vi } from "vite-plus/test";
+import Pencil from "lucide-react-native/icons/pencil";
 import { StudyMenu } from "./StudyMenu.tsx";
 import { pressBack } from "../test/native/react-native.ts";
 
@@ -8,7 +9,10 @@ test("an empty study menu stays hidden; supplied actions close before returning 
   const view = await render(<StudyMenu locale="pt-BR" items={[]} />);
   expect(screen.queryByRole("button")).toBeNull();
   await view.rerender(
-    <StudyMenu locale="pt-BR" items={[{ id: "edit", label: "Editar nota", onPress: edit }]} />,
+    <StudyMenu
+      locale="pt-BR"
+      items={[{ id: "edit", label: "Editar nota", icon: Pencil, onPress: edit }]}
+    />,
   );
   await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
   await fireEvent.press(screen.getByRole("button", { name: "Editar nota" }));

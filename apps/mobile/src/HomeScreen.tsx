@@ -1,3 +1,6 @@
+import Plus from "lucide-react-native/icons/plus";
+import X from "lucide-react-native/icons/x";
+import { ThemedIcon } from "./icons.tsx";
 import { useAlarmDeletion } from "./useAlarmDeletion.ts";
 import { useQuickAlarmNotice } from "./useQuickAlarmNotice.ts";
 import { SwipeAlarm } from "./SwipeAlarm.tsx";
@@ -381,9 +384,7 @@ export function HomeScreen({
               onPress={onQuickHintSeen}
               className="min-h-12 min-w-12 items-center justify-center rounded-pill"
             >
-              <Text style={bold} className="text-body text-foreground">
-                ×
-              </Text>
+              <ThemedIcon icon={X} />
             </Pressable>
           </View>
         ) : null}
@@ -433,9 +434,7 @@ export function HomeScreen({
         onPress={needsDeck ? () => list.current?.scrollToOffset({ offset: 0 }) : onAdd}
         className="absolute bottom-4 right-6 min-h-16 min-w-20 items-center justify-center rounded-pill bg-primary px-6 py-4"
       >
-        <Text style={bold} className="text-question text-primary-foreground">
-          +
-        </Text>
+        <ThemedIcon icon={Plus} colorClassName="text-primary-foreground" size={32} />
       </LongPressMenu>
     </View>
   );
