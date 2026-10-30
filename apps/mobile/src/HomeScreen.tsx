@@ -1,3 +1,6 @@
+import { SwipeAlarm } from "./SwipeAlarm.tsx";
+import { Button } from "./controls.tsx";
+import { AlarmCardMenu } from "./AlarmCardMenu.tsx";
 import { nextAlarmRing, timeLeft, type Alarm, type Locale } from "@app/core";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -95,6 +98,7 @@ export function AlarmCard({
   use24Hour,
   onEdit,
   onToggle,
+  onDuplicate,
 }: {
   alarm: Alarm;
   deckName?: string;
@@ -104,6 +108,7 @@ export function AlarmCard({
   use24Hour: boolean;
   onEdit: (alarm: Alarm) => void;
   onToggle: (alarm: Alarm) => void;
+  onDuplicate?: (alarm: Alarm) => void;
 }) {
   const t = copy(locale);
   const time = clockText(alarm.rule.hour, alarm.rule.minute, use24Hour, locale);
@@ -139,6 +144,13 @@ export function AlarmCard({
             {alarm.need === 1 ? t("oneCard") : t("needCount", { count: String(alarm.need) })}
           </Text>
         </Pressable>
+        <AlarmCardMenu
+          name={alarm.label || time}
+          locale={locale}
+          items={
+            onDuplicate ? [{ label: t("duplicateAlarm"), onPress: () => onDuplicate(alarm) }] : []
+          }
+        />
         <Switch
           accessibilityLabel={`${alarm.label || time}: ${t(alarm.enabled ? "enabled" : "disabled")}`}
           value={alarm.enabled}
@@ -158,10 +170,13 @@ export function HomeScreen({
   onEdit,
   onAdd,
   onToggle,
+  onDuplicate,
   banner,
   error,
   refreshing,
   onRefresh,
+  onDelete,
+  onRestore,
   setup,
 }: {
   alarms: readonly Alarm[];
@@ -172,23 +187,66 @@ export function HomeScreen({
   onEdit: (alarm: Alarm) => void;
   onAdd: () => void;
   onToggle: (alarm: Alarm) => void;
+  onDuplicate?: (alarm: Alarm) => void;
   banner?: ReactNode;
   error?: string;
   refreshing?: boolean;
   onRefresh?: () => void;
+  onDelete?: (id: string) => Promise<void>;
+  onRestore?: (alarm: Alarm) => Promise<void>;
   /** Given once decks and alarms have loaded; without it Home shows no empty state. */
   setup?: DeckSetup;
 }) {
+  const [deleted, setDeleted] = useState<{ alarm: Alarm; at: number } | null>(null);
+  const [hidden, setHidden] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState(false);
+  const pending = useRef(false);
   const now = useClock();
+  useEffect(() => {
+    if (deleted && now - deleted.at >= 8000 && !busy) setDeleted(null);
+  }, [deleted, now, busy]);
+  const visibleAlarms = alarms.filter((alarm) => !hidden.includes(alarm.id));
+  const removeAlarm = async (alarm: Alarm) => {
+    if (!onDelete || pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setActionError(false);
+    try {
+      await onDelete(alarm.id);
+      setHidden((ids) => [...ids, alarm.id]);
+      setDeleted({ alarm, at: Date.now() });
+    } catch {
+      setActionError(true);
+    } finally {
+      pending.current = false;
+      setBusy(false);
+    }
+  };
+  const restoreAlarm = async () => {
+    if (!deleted || !onRestore || pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setActionError(false);
+    try {
+      await onRestore(deleted.alarm);
+      setDeleted(null);
+    } catch {
+      setActionError(true);
+    } finally {
+      pending.current = false;
+      setBusy(false);
+    }
+  };
   const list = useRef<FlatList<Alarm>>(null);
   const needsDeck = setup !== undefined && decks.length === 0;
   const t = copy(locale);
-  const next = nextAlarmRing(alarms, now, zone);
+  const next = nextAlarmRing(visibleAlarms, now, zone);
   return (
     <View className="flex-1 bg-background">
       <FlatList
         ref={list}
-        data={alarms}
+        data={visibleAlarms}
         keyExtractor={(alarm) => alarm.id}
         contentContainerStyle={{ padding: 24, gap: 16, paddingBottom: 112 }}
         refreshing={refreshing ?? false}
@@ -210,7 +268,7 @@ export function HomeScreen({
                 {error}
               </Text>
             ) : null}
-            {setup && !alarms.length ? (
+            {setup && !visibleAlarms.length ? (
               <HomeEmptyState
                 locale={locale}
                 hasDecks={decks.length > 0}
@@ -221,18 +279,49 @@ export function HomeScreen({
           </View>
         }
         renderItem={({ item }) => (
-          <AlarmCard
-            alarm={item}
-            deckName={decks.find((d) => d.id === item.deckId)?.name}
-            locale={locale}
-            now={now}
-            zone={zone}
-            use24Hour={use24Hour}
-            onEdit={onEdit}
-            onToggle={onToggle}
-          />
+          <SwipeAlarm
+            id={item.id}
+            onDelete={() => {
+              void removeAlarm(item);
+            }}
+          >
+            <AlarmCard
+              alarm={item}
+              deckName={decks.find((d) => d.id === item.deckId)?.name}
+              locale={locale}
+              now={now}
+              zone={zone}
+              use24Hour={use24Hour}
+              onEdit={onEdit}
+              onToggle={onToggle}
+              onDuplicate={onDuplicate}
+            />
+          </SwipeAlarm>
         )}
       />
+      {actionError && (
+        <Text accessibilityRole="alert" className="text-body text-destructive">
+          {t("alarmError")}
+        </Text>
+      )}
+      {deleted && (
+        <View className="absolute bottom-24 left-6 right-6 flex-row items-center justify-between gap-2 rounded-lg bg-surface p-4">
+          <Text
+            accessibilityRole="alert"
+            style={regular}
+            className="shrink text-body text-foreground"
+          >
+            {t("alarmDeleted")}
+          </Text>
+          <Button
+            label={t("undoAlarmDelete")}
+            disabled={busy}
+            onPress={() => {
+              void restoreAlarm();
+            }}
+          />
+        </View>
+      )}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t("add")}

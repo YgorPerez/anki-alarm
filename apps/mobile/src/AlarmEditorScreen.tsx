@@ -41,6 +41,7 @@ export function AlarmEditorScreen({
   hour24,
   onSave,
   onDelete,
+  onDuplicate,
   onClose,
   options,
   now = Date.now,
@@ -54,6 +55,7 @@ export function AlarmEditorScreen({
   hour24: boolean;
   onSave: (alarm: Alarm) => Promise<void>;
   onDelete: (alarmId: string) => Promise<void>;
+  onDuplicate?: (alarm: Alarm) => void;
   onClose: () => void;
   options?: (alarm: Alarm, onChange: (alarm: Alarm) => void) => ReactNode;
   now?: () => number;
@@ -208,6 +210,16 @@ export function AlarmEditorScreen({
         locale={locale}
         onClose={() => setSheet(null)}
       >
+        {onDuplicate && (
+          <Button
+            label={t("duplicateAlarm")}
+            disabled={busy}
+            onPress={() => {
+              setSheet(null);
+              onDuplicate(draft);
+            }}
+          />
+        )}
         <Button label={t("deleteAlarm")} destructive disabled={busy} onPress={confirmDelete} />
       </Sheet>
     </View>

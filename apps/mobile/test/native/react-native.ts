@@ -139,3 +139,13 @@ export function FlatList<T>({
     ListFooterComponent,
   );
 }
+
+/** Gesture responder events exposed by React Native's PanResponder. */
+export const PanResponder = {
+  create: (config: Record<string, unknown>) => ({
+    panHandlers: {
+      onMoveShouldSetResponder: config.onMoveShouldSetPanResponder,
+      onResponderRelease: config.onPanResponderRelease,
+    },
+  }),
+};

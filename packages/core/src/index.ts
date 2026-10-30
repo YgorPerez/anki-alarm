@@ -189,3 +189,5 @@ export {
 export type { MediaFile, MediaRecord } from "./media.ts";
 
 export type { NextAlarmRing } from "./alarm.ts";
+
+export { duplicateAlarm } from "./duplicate-alarm.ts";

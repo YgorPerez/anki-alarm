@@ -166,3 +166,17 @@ it("re-reads reliability after a settings change and retains onboarding completi
     ),
   ).toBe(true);
 });
+
+it("restoring a deleted alarm through save restores its native schedule", async () => {
+  const native = memoryAlarmService();
+  const controller = alarmController(memoryAlarmRepository());
+  const run = <A>(effect: Effect.Effect<A, Error, AlarmService>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(native.layer)));
+  await run(controller.save(alarm));
+  await run(controller.remove(alarm.id));
+  expect(await run(Effect.flatMap(AlarmService, (service) => service.list))).toEqual([]);
+  const restored = { ...alarm, id: "restored" };
+  await run(controller.save(restored));
+  expect(await run(Effect.flatMap(AlarmService, (service) => service.list))).toEqual([restored]);
+  expect(await Effect.runPromise(controller.list)).toEqual([restored]);
+});
