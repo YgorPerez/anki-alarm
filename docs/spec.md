@@ -223,6 +223,20 @@ session** is a special mode of it on the phone.
 
 ### Phone alarm editor
 
+- Inline looping hour and minute wheels set the draft at the top of the editor, replacing the
+  native time dialog. They snap to whole values and follow the phone's 12/24 h setting; only
+  12 h shows an AM/PM wheel. Each column wraps independently, preserving the other values.
+  The wheels use bundled Inter Bold with tabular figures. TalkBack exposes each column's
+  current value and increment/decrement actions. Row height follows system font scale;
+  the settings scroll above the fixed actions.
+- Below the wheels, a summary line with a calendar icon says how the alarm repeats ("Dias úteis",
+  "Amanhã · sáb, 31 out"). Tapping it opens a sheet with Todo dia / Every day, Dias úteis /
+  Weekdays and the one-off date. A preset clears the date and a date clears the days.
+- Tappable day letters follow, Sunday first, on the page. Each is a 48dp target and TalkBack speaks
+  its day's short name. Tapping one updates the summary and the draft, and clears a one-off date.
+  With no days and no date, the summary names the day it will ring once.
+- A name field sits on the page under the letters; it replaces the Name row and its sheet.
+
 - No top bar. A fixed bottom bar holds neutral Cancelar / Cancel and solid Salvar / Save while the
   settings scroll above it. Saving turns the alarm on.
 - Cancel and Android system Back leave immediately when the draft matches the opened alarm. With

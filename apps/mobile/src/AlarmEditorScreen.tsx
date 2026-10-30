@@ -8,7 +8,6 @@ import {
   type Alarm,
   type Locale,
 } from "@app/core";
-import { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   Alert,
@@ -21,21 +20,18 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { clockText, repeatSummary, ringsInText } from "./alarm-text.ts";
+import Svg, { Path } from "react-native-svg";
+import { repeatLine, ringsInText } from "./alarm-text.ts";
 import { Button } from "./controls.tsx";
 import { copy } from "./copy.ts";
 import { regular } from "./fonts.ts";
-import { RepeatSheet } from "./RepeatSheet.tsx";
-import { Sheet } from "./Sheet.tsx";
-import { Clock } from "./clock.tsx";
+import { DayLetters, RepeatSheet } from "./RepeatSheet.tsx";
+import { TimeWheels } from "./TimeWheels.tsx";
 
 const deviceZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
-/** A wall time as an instant in UTC, which Clock shows with zone "UTC". */
-const utcTime = (hour: number, minute: number) => Date.UTC(2000, 0, 1, hour, minute);
-
 /**
- * The alarm editor, a screen of its own: the time large at the top, rows that open sheets, Save
- * and Cancel pinned at the bottom. Leaving asks before discarding unsaved changes.
+ * The alarm editor, a screen of its own: the time large at the top, then the repeat summary, day
+ * letters and name on the page, and Save and Cancel pinned at the bottom. Leaving asks before discarding unsaved changes.
  * `options` draws the alarm's other settings under the rows.
  */
 export function AlarmEditorScreen({
@@ -48,6 +44,7 @@ export function AlarmEditorScreen({
   onDuplicate,
   onClose,
   options,
+  iconColor = "currentColor",
   now = Date.now,
   zone = deviceZone(),
 }: {
@@ -62,13 +59,15 @@ export function AlarmEditorScreen({
   onDuplicate?: (alarm: Alarm) => void;
   onClose: () => void;
   options?: (alarm: Alarm, onChange: (alarm: Alarm) => void) => ReactNode;
+  /** The theme's color for the summary's calendar icon; SVG can't take a class name. */
+  iconColor?: string;
   now?: () => number;
   zone?: string;
 }) {
   const t = copy(locale);
   const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState(alarm);
-  const [sheet, setSheet] = useState<"repeat" | "label" | null>(null);
+  const [repeatOpen, setRepeatOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // Compare values rather than object identity: sheets may return the original values in a new object.
@@ -84,26 +83,19 @@ export function AlarmEditorScreen({
   useEffect(() => {
     const handler = BackHandler.addEventListener("hardwareBackPress", () => {
       // Native Modal consumes Back first; keep the same priority in screen tests.
-      if (sheet) setSheet(null);
+      if (repeatOpen) setRepeatOpen(false);
       else leave();
       return true;
     });
     return () => handler.remove();
-  }, [sheet, leave]);
+  }, [repeatOpen, leave]);
   const offer = skipOffer(draft, now(), zone);
   const { rule } = draft;
-  const time = clockText(rule.hour, rule.minute, hour24, locale);
-  const pickTime = () =>
-    DateTimePickerAndroid.open({
-      mode: "time",
-      // No is24Hour: the dialog follows the phone's setting.
-      value: new Date(2000, 0, 1, rule.hour, rule.minute),
-      onValueChange: (_event, date) =>
-        setDraft((current) => ({
-          ...current,
-          rule: { ...current.rule, hour: date.getHours(), minute: date.getMinutes() },
-        })),
-    });
+  const setRepeat = (repeat: Pick<Alarm["rule"], "repeatDays" | "onceDate">) =>
+    setDraft((current) => ({
+      ...current,
+      rule: { hour: current.rule.hour, minute: current.rule.minute, ...repeat },
+    }));
   const save = () => {
     const at = now();
     const next = savedRule(rule, at, zone);
@@ -125,7 +117,6 @@ export function AlarmEditorScreen({
     );
   };
   const confirmDelete = () => {
-    setSheet(null);
     Alert.alert(t("deleteAlarmTitle"), t("deleteAlarmBody"), [
       { text: t("cancel"), style: "cancel" },
       {
@@ -146,34 +137,42 @@ export function AlarmEditorScreen({
       className="flex-1 bg-background"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      <ScrollView className="flex-1" contentContainerClassName="gap-6 px-6 pb-6">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${t("time")}, ${time}`}
-          onPress={pickTime}
-          className="items-center py-4"
-        >
-          {/* Home's clock, which fits the width at large font scales. */}
-          <Clock
-            at={utcTime(rule.hour, rule.minute)}
-            locale={locale}
-            zone="UTC"
-            use24Hour={hour24}
-          />
-        </Pressable>
-        <View className="rounded-lg bg-surface">
-          <EditorRow
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="gap-6 px-6 pb-6"
+        keyboardShouldPersistTaps="handled"
+      >
+        <TimeWheels
+          hour={rule.hour}
+          minute={rule.minute}
+          locale={locale}
+          hour24={hour24}
+          onChange={(hour, minute) =>
+            setDraft((current) =>
+              current.rule.hour === hour && current.rule.minute === minute
+                ? current
+                : { ...current, rule: { ...current.rule, hour, minute } },
+            )
+          }
+        />
+        <View className="gap-3">
+          <RepeatSummaryLine
             label={t("repeat")}
-            value={repeatSummary(rule, { locale, now: now(), zone })}
-            onPress={() => setSheet("repeat")}
+            summary={repeatLine(rule, { locale, now: now(), zone })}
+            iconColor={iconColor}
+            onPress={() => setRepeatOpen(true)}
           />
-          <View className="mx-4 h-px bg-border" />
-          <EditorRow
-            label={t("label")}
-            value={draft.label || t("noLabel")}
-            onPress={() => setSheet("label")}
-          />
+          <DayLetters repeat={rule} locale={locale} onChange={setRepeat} />
         </View>
+        <TextInput
+          accessibilityLabel={t("label")}
+          placeholder={t("alarmNamePlaceholder")}
+          placeholderTextColorClassName="accent-muted-foreground"
+          value={draft.label}
+          onChangeText={(label) => setDraft((current) => ({ ...current, label }))}
+          style={regular}
+          className="min-h-12 rounded-lg border border-border bg-surface p-4 text-body text-foreground"
+        />
         {options?.(draft, setDraft)}
         {saved && (
           <View className="gap-3">
@@ -210,35 +209,52 @@ export function AlarmEditorScreen({
       </View>
       <RepeatSheet
         repeat={rule}
-        visible={sheet === "repeat"}
+        visible={repeatOpen}
         locale={locale}
         now={now}
         zone={zone}
-        onChange={(repeat) =>
-          setDraft((current) => ({
-            ...current,
-            rule: { hour: current.rule.hour, minute: current.rule.minute, ...repeat },
-          }))
-        }
-        onClose={() => setSheet(null)}
+        onChange={setRepeat}
+        onClose={() => setRepeatOpen(false)}
       />
-      <Sheet
-        title={t("label")}
-        visible={sheet === "label"}
-        locale={locale}
-        onClose={() => setSheet(null)}
-      >
-        <TextInput
-          accessibilityLabel={t("label")}
-          placeholder={t("noLabel")}
-          value={draft.label}
-          onChangeText={(label) => setDraft((current) => ({ ...current, label }))}
-          autoFocus
-          style={regular}
-          className="min-h-12 rounded-lg border border-border bg-surface p-4 text-body text-foreground"
-        />
-      </Sheet>
     </View>
+  );
+}
+
+/** How the alarm repeats, with a calendar icon: opens the presets and the one-off date. */
+function RepeatSummaryLine({
+  label,
+  summary,
+  iconColor,
+  onPress,
+}: {
+  label: string;
+  summary: string;
+  iconColor: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}, ${summary}`}
+      onPress={onPress}
+      className="min-h-12 flex-row items-center justify-between gap-4"
+    >
+      <Text style={regular} className="shrink text-body text-foreground">
+        {summary}
+      </Text>
+      <Svg
+        width={24}
+        height={24}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={iconColor}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <Path d="M6 5h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3ZM3 10h18M8 3v4m8-4v4" />
+      </Svg>
+    </Pressable>
   );
 }
 
