@@ -53,7 +53,9 @@ export function AwakeCheckScreen({
   const t = copy(locale);
   const now = useNow();
   const prompt = useAwakeCheck(check, layer, onPassed, gradeDelayMs);
-  const left = Math.max(0, (check.shownAt ?? now) + TIMEOUT_MS - now);
+  // `now` ticks, so a restart can be newer than it.
+  const elapsed = now - Math.max(check.shownAt ?? now, prompt.activeAt);
+  const left = Math.min(TIMEOUT_MS, Math.max(0, TIMEOUT_MS - elapsed));
   const next = prompt.session?.next;
   // The card whose note is open in the editor, over the card: Back returns to the card.
   const [editing, setEditing] = useState<string>();
@@ -65,6 +67,7 @@ export function AwakeCheckScreen({
           locale={locale}
           onSaved={prompt.refetch}
           onClose={() => setEditing(undefined)}
+          onActivity={prompt.activity}
         />
       </AlarmFrame>
     );
@@ -117,7 +120,14 @@ export function AwakeCheckScreen({
             <StudyMenu
               items={[
                 undoItem(locale, prompt.canUndo, prompt.undo),
-                { id: "editNote", label: t("editNote"), onPress: () => setEditing(next.card.id) },
+                {
+                  id: "editNote",
+                  label: t("editNote"),
+                  onPress: () => {
+                    prompt.activity();
+                    setEditing(next.card.id);
+                  },
+                },
                 ...suspensionItems(locale, prompt.suspend),
                 buryItem(locale, prompt.bury),
                 ...annotationItems(next, locale, prompt.change),
@@ -159,9 +169,21 @@ function useAwakeCheck(
   gradeDelayMs: number,
 ) {
   const client = useQueryClient();
-  const { busy, error, guarded } = useGuarded();
+  const { busy, error, setError, guarded } = useGuarded();
   const shownAt = useRef(0);
   const signal = signalWith(layer);
+  // When native last restarted the timeout. Typing sends at most one restart a second.
+  const [activeAt, setActiveAt] = useState(0);
+  const lastActivity = useRef(0);
+  const activity = () => {
+    const at = Date.now();
+    if (at - lastActivity.current < 1000) return;
+    lastActivity.current = at;
+    void signal((service) => service.awakeCheckActivity(check.id)).then(
+      () => setActiveAt(at),
+      () => setError(true),
+    );
+  };
   const { query, cardId, history, card } = useAlarmStudy(
     ["awakeCheck", check.id],
     async (undone) => {
@@ -213,6 +235,8 @@ function useAwakeCheck(
     suspend: (scope: SuspendScope) =>
       leaveCard((target) => suspendStudyCard(target, scope, client)),
     refetch: () => query.refetch(),
+    activity,
+    activeAt,
     change,
     canUndo: history.canUndo,
     /** Reverses the check's newest card-menu action; its card comes back. Answers pass the check. */

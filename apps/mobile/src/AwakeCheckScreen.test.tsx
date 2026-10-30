@@ -191,6 +191,29 @@ test.each(["Suspender card", "Suspender nota"])(
   },
 );
 
+test("editing the note restarts the check's countdown, in native too", async () => {
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Editar a tempo");
+        c.addBasicNote(deck.id, "sol", "sun");
+      }),
+    ),
+  );
+  const deckId = state.decks.find((d) => d.fields.name.value === "Editar a tempo")!.id;
+  const { check, native } = await shownCheck("edit-in-time", deckId);
+  await show({ ...check, shownAt: Date.now() - 50_000 }, native.layer);
+  await screen.findByLabelText("Frente");
+  expect(screen.getByText(/· 1\d s/)).toBeTruthy();
+
+  await fromMenu("Editar nota");
+  await fireEvent.changeText(await screen.findByDisplayValue("sol"), "sol nascente");
+  expect(native.signals()).toContain(`awakeCheckActivity:${check.id}`);
+  pressBack();
+  await screen.findByLabelText("Frente");
+  expect(screen.getByText(/· (59|60) s/)).toBeTruthy();
+});
+
 test("Edit note returns to the same card, updated, and Back stays on the check", async () => {
   const state = await Effect.runPromise(
     localData((data) =>

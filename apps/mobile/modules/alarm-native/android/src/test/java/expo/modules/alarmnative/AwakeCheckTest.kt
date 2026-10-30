@@ -86,6 +86,23 @@ class AwakeCheckTest {
     assertEquals("ring-1", journal().first { it.getString("kind") == "awakeCheckFailed" }.getString("ringId"))
   }
 
+  @Test fun activityRestartsTheTimeoutOfTheCheckItBelongsTo() {
+    dismissWithCheck()
+    assertFalse(AwakeCheck.activity(ctx, AwakeCheck.pending(ctx)!!.getString("id"), now = dismissedAt + 100))
+    AwakeCheck.advance(ctx, now = dismissedAt + 300_000, unlocked = true)
+    assertFalse(AwakeCheck.activity(ctx, "stale-check", now = dismissedAt + 350_000))
+    assertEquals(dismissedAt + 360_000, nextAlarmClock())
+
+    assertTrue(AwakeCheck.activity(ctx, AwakeCheck.pending(ctx)!!.getString("id"), now = dismissedAt + 350_000))
+    assertEquals(dismissedAt + 410_000, nextAlarmClock())
+    AwakeCheck.advance(ctx, now = dismissedAt + 360_000, unlocked = true)
+    assertTrue(AwakeCheck.isShown(ctx))
+    assertNull(AlarmStore.ring(ctx))
+    AwakeCheck.advance(ctx, now = dismissedAt + 410_000, unlocked = true)
+    assertNull(AwakeCheck.pending(ctx))
+    assertEquals("awakeCheckFailed", kinds().takeLast(2).first())
+  }
+
   @Test fun anAnswerPassesOnlyTheCheckItBelongsTo() {
     dismissWithCheck()
     AwakeCheck.advance(ctx, now = dismissedAt + 300_000, unlocked = true)
