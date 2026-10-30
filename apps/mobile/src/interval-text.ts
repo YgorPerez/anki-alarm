@@ -1,15 +1,16 @@
 import type { Locale } from "@app/core";
+import { copy } from "./copy.ts";
 
 const DAY = 86400;
 const YEAR = 365 * DAY;
 const units = [
-  { seconds: YEAR, pt: "a", en: "y", decimals: 1 },
-  { seconds: YEAR / 12, pt: "mês(es)", en: "mo", decimals: 1 },
-  { seconds: DAY, pt: "dia(s)", en: "d", decimals: 0 },
-  { seconds: 3600, pt: "h", en: "h", decimals: 1 },
-  { seconds: 60, pt: "min(s)", en: "m", decimals: 0 },
-  { seconds: 1, pt: "s", en: "s", decimals: 0 },
-];
+  { seconds: YEAR, label: "intervalYears", decimals: 1 },
+  { seconds: YEAR / 12, label: "intervalMonths", decimals: 1 },
+  { seconds: DAY, label: "intervalDays", decimals: 0 },
+  { seconds: 3600, label: "intervalHours", decimals: 1 },
+  { seconds: 60, label: "intervalMinutes", decimals: 0 },
+  { seconds: 1, label: "intervalSeconds", decimals: 0 },
+] as const;
 
 /** Anki's short answer-button time, with its default 20-minute learn-ahead prefix. */
 export function intervalText(seconds: number, locale: Locale): string {
@@ -18,5 +19,5 @@ export function intervalText(seconds: number, locale: Locale): string {
     maximumFractionDigits: unit.decimals,
     useGrouping: false,
   });
-  return `${seconds < 20 * 60 ? "<" : ""}${amount}${locale === "pt-BR" ? unit.pt : unit.en}`;
+  return `${seconds < 20 * 60 ? "<" : ""}${amount}${copy(locale)(unit.label)}`;
 }

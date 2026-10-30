@@ -1,12 +1,13 @@
-import { translator, type Locale } from "@app/core";
+import type { Locale } from "@app/core";
 import Svg, { Path } from "react-native-svg";
 import { View } from "react-native";
-import { annotationMessages, flagLabel, flags, type Current } from "./study-annotations.ts";
+import { copy } from "./copy.ts";
+import { flagLabel, flags, type Current } from "./study-annotations.ts";
 
 /** The current card's flag and its note's star, for the top bar (never inside the card HTML). */
 export function StudyAnnotations({ next, locale }: { next: Current; locale: Locale }) {
   if (!next) return null;
-  const t = translator(annotationMessages, locale);
+  const t = copy(locale);
   const marked = next.note.fields.tags.value.includes("marked");
   const flag = flags.find((f) => f.id === next.card.fields.flag.value);
   if (!flag && !marked) return null;
@@ -29,7 +30,13 @@ export function StudyAnnotations({ next, locale }: { next: Current; locale: Loca
         </Svg>
       )}
       {marked && (
-        <Svg accessible accessibilityLabel={t("marked")} width={20} height={20} viewBox="0 0 24 24">
+        <Svg
+          accessible
+          accessibilityLabel={t("noteMarked")}
+          width={20}
+          height={20}
+          viewBox="0 0 24 24"
+        >
           <Path d="m12 2 3 6 7 1-5 5 1 8-6-4-6 4 1-8-5-5 7-1Z" fill="#e0b000" />
         </Svg>
       )}
