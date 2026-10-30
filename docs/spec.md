@@ -209,7 +209,9 @@ session** is a special mode of it on the phone.
   `marked` tag. Flag and star icons appear in the top bar, outside the card HTML. Flags sync per
   card and survive `.apkg` import/export; mark syncs through note tags. Browser search accepts
   `flag:1` through `flag:7` and `is:marked`, including negation. On linked AnkiDroid decks,
-  these choices stay in the app; pulling preserves them while updating other tags.
+  these choices stay in the app; pulling preserves them while updating other tags. The exception is
+  a note's first link, which takes AnkiDroid's `marked` tag; after that the app's mark wins, so an
+  unmark here isn't undone by a pull.
 - The card menu in Decks study, alarm sessions and awake checks suspends the current card or all
   cards of its note, including siblings in other decks. Suspension syncs and takes effect immediately
   without an answer or progress toward N. The alarm and awake check show another card; suspended

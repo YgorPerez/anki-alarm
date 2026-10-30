@@ -636,6 +636,13 @@ export class Collection {
   ): AnkiDroidLink {
     const decks = linkedAnkiDroidDecks(source);
     const claimed: string[] = [];
+    // Notes that were in a linked deck before this link: their mark is already the app's.
+    const linkedDecks = new Set(this.state.decks.filter((d) => d.fields.linkedBy).map((d) => d.id));
+    const linkedNotes = new Set(
+      this.state.cards
+        .filter((c) => linkedDecks.has(c.fields.deckId.value))
+        .map((c) => c.fields.noteId.value),
+    );
     const deckIds = new Map(decks.map((d) => [d.id, importId("deck", d.id, d.name)]));
     if ([...deckIds.values()].some((id) => this.deleted("decks", id)))
       throw new Error("Linked deck was deleted");
@@ -697,7 +704,7 @@ export class Collection {
       const hasCard = source.cards.some((c) => c.noteId === ad.id && homeDeck(c));
       if (!noteTypeId || !hasCard || this.deleted("notes", id)) continue;
       noteIds.set(ad.id, id);
-      const merged = this.mergeAnkiNote(id, ad, noteTypeId);
+      const merged = this.mergeAnkiNote(id, ad, noteTypeId, !linkedNotes.has(id));
       if (merged === "added") added++;
       else if (merged === "edited") edited++;
     }
@@ -740,7 +747,12 @@ export class Collection {
       edited,
     };
   }
-  private mergeAnkiNote(id: string, ad: AnkiDroidSource["notes"][number], noteTypeId: string) {
+  private mergeAnkiNote(
+    id: string,
+    ad: AnkiDroidSource["notes"][number],
+    noteTypeId: string,
+    firstLink: boolean,
+  ) {
     const values = ad.fields.split(SEPARATOR);
     let tags = ad.tags.split(" ").filter(Boolean);
     const note = this.state.notes.find((n) => n.id === id);
@@ -753,9 +765,12 @@ export class Collection {
       });
       return "added";
     }
-    // Mark is local to this app for linked notes, even when AnkiDroid edits other tags.
+    // A first link takes AnkiDroid's mark, whatever the clocks say. After that mark is local to
+    // this app, so an unmark here survives, even when AnkiDroid edits other tags.
+    const adopted = firstLink && tags.includes("marked");
+    const marked = note.fields.tags.value.includes("marked");
     tags = tags.filter((tag) => tag !== "marked");
-    if (note.fields.tags.value.includes("marked")) tags.push("marked");
+    if (marked || adopted) tags.push("marked");
     // Per field, the newer of the local clock and AnkiDroid's mod time wins (ADR 0001).
     const mod = ad.mod * 1000;
     let changed = false;
@@ -768,6 +783,9 @@ export class Collection {
     });
     if (note.fields.tags.value.join(" ") !== tags.join(" ") && mod > note.fields.tags.hlc.wallMs) {
       note.fields.tags = { value: tags, hlc: this.tick() };
+      changed = true;
+    } else if (adopted && !marked) {
+      note.fields.tags = { value: [...note.fields.tags.value, "marked"], hlc: this.tick() };
       changed = true;
     }
     return changed ? "edited" : undefined;

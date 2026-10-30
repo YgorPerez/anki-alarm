@@ -105,6 +105,50 @@ test("AnkiDroid's screens say why linking isn't possible, and from which version
   expect(ankiDroidAccess({ versionCode: 322500300, permission: "granted" })).toBe("ready");
 });
 
+const withTags = (tags: string, mod = 1_760_000_000) => {
+  const linked = source();
+  linked.notes[0] = { ...linked.notes[0]!, tags, mod };
+  return linked;
+};
+
+test("linking takes AnkiDroid's mark; afterwards a pull keeps the app's", () => {
+  const c = new Collection(environment());
+  c.linkAnkiDroid(withTags("verb marked"));
+  const tags = () => c.snapshot().notes[0]!.fields.tags.value;
+  const noteId = c.snapshot().notes[0]!.id;
+  expect(tags()).toEqual(["verb", "marked"]);
+
+  c.setNoteMarked(noteId, false);
+  c.linkAnkiDroid(withTags("verb n4 marked", now / 1000 + 60));
+  expect(tags()).toEqual(["verb", "n4"]);
+
+  c.setNoteMarked(noteId, true);
+  c.linkAnkiDroid(withTags("verb n3", now / 1000 + 120));
+  expect(tags()).toEqual(["verb", "n3", "marked"]);
+});
+
+test("a note already here takes AnkiDroid's mark when first linked, however old its mod", () => {
+  const before = new Collection(environment());
+  before.linkAnkiDroid(withTags("verb"));
+  const state = before.snapshot();
+  // As an .apkg import leaves it: the same ids, in a deck nothing has linked.
+  for (const deck of state.decks) delete deck.fields.linkedBy;
+  const c = new Collection(environment(), state);
+  c.linkAnkiDroid(withTags("verb marked", 1_000));
+  expect(c.snapshot().notes[0]!.fields.tags.value).toEqual(["verb", "marked"]);
+});
+
+test("a note marked here before its first link stays marked", () => {
+  const before = new Collection(environment());
+  before.linkAnkiDroid(withTags("verb"));
+  const state = before.snapshot();
+  for (const deck of state.decks) delete deck.fields.linkedBy;
+  const c = new Collection(environment(), state);
+  c.setNoteMarked(state.notes[0]!.id, true);
+  c.linkAnkiDroid(withTags("verb"));
+  expect(c.snapshot().notes[0]!.fields.tags.value).toEqual(["verb", "marked"]);
+});
+
 test("filtered decks are not offered for linking, and the list is sorted by name", () => {
   const decks = [
     ...source().decks,
