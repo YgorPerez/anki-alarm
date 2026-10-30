@@ -233,7 +233,7 @@ test("study menu suspends the card without a review", async () => {
   );
   await screen.findByLabelText("Frente");
   await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
-  await fireEvent.press(screen.getByRole("button", { name: "Suspender card" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Suspender cartão" }));
   await screen.findByText("Nenhum cartão disponível agora. Os limites diários se aplicam.");
   expect(
     (await Effect.runPromise(localData((d) => d.collection))).cards.find(
@@ -328,12 +328,12 @@ test("Bury from the card menu skips the card until tomorrow without answering it
   expect(
     screen
       .getAllByText(
-        /^(Editar nota|Suspender card|Suspender nota|Enterrar até amanhã|Bandeira \d: .+|Remover bandeira|Marcar nota)$/,
+        /^(Editar nota|Suspender cartão|Suspender nota|Enterrar até amanhã|Bandeira \d: .+|Remover bandeira|Marcar nota)$/,
       )
       .map((item) => item.props.children),
   ).toEqual([
     "Editar nota",
-    "Suspender card",
+    "Suspender cartão",
     "Suspender nota",
     "Enterrar até amanhã",
     ...[1, 2, 3, 4, 5, 6, 7].map((n) => expect.stringMatching(new RegExp(`^Bandeira ${n}: `))),
@@ -402,7 +402,7 @@ test("Undo reverses suspend, bury, flag and mark too, newest first, and the card
   await screen.findByLabelText("Bandeira 5: Rosa");
   await fromMenu("Marcar nota");
   await screen.findByLabelText("Nota marcada");
-  await fromMenu("Suspender card");
+  await fromMenu("Suspender cartão");
   await waitFor(() => expect(frontHtml()).not.toBe(first));
 
   await fireEvent.press(undoButton());

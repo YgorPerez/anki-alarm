@@ -3,7 +3,7 @@ const messages = {
   "pt-BR": {
     study: "Estudar",
     studyActions: "Ações do cartão",
-    suspendCard: "Suspender card",
+    suspendCard: "Suspender cartão",
     suspendNote: "Suspender nota",
     buryCard: "Enterrar até amanhã",
     studyNew: "{count} novos",

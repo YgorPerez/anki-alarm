@@ -160,7 +160,7 @@ test("with no card to show, tapping I'm awake passes it", async () => {
   expect(native.awakeCheck()).toBeNull();
 });
 
-test.each(["Suspender card", "Suspender nota"])(
+test.each(["Suspender cartão", "Suspender nota"])(
   "%s replaces the awake-check card without passing it",
   async (action) => {
     const state = await Effect.runPromise(

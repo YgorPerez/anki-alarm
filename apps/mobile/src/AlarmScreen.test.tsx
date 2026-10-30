@@ -507,7 +507,7 @@ test("an alarm without read aloud reads nothing", async () => {
   expect(reading(native.signals())).toEqual([]);
 });
 
-test.each(["Suspender card", "Suspender nota"])(
+test.each(["Suspender cartão", "Suspender nota"])(
   "%s replaces the alarm card without progress and can't reach the no-cards dismissal",
   async (action) => {
     const { dismissed } = await ringing(`Suspend ${action}`, ["first", "second"], { need: 2 });
