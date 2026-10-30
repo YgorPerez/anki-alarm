@@ -325,6 +325,11 @@ TalkBack exposes the same menu as a named accessibility action. There is no over
 Swipe deletion keeps its Undo. The list scrolls, day letters can wrap, and the countdown wraps
 with system font scale, including 1.3×. Decided in #94; implemented in #100.
 
+The + is a solid primary pill fixed at the bottom right, whatever the number of alarms; the list's
+bottom padding lets the last card's switch clear it. Long-press opens +10, +20 and +30 min in the
+card menu's sheet, and TalkBack gets a named action for it. Above +, short notices use a 16px
+`surface`; the one-time hint uses `primary-tint`, right-aligned, with a 48dp × to dismiss it.
+
 ### Alarm editor
 
 The phone editor starts with looping hour and minute wheels in Inter Bold, with a smaller AM/PM

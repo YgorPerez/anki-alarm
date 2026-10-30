@@ -182,6 +182,8 @@ function Home({ children }: { children: ReactNode }) {
     confirmSetting,
     setLastSavedAlarm,
     lastSavedAlarm,
+    quickHintSeen,
+    setQuickHintSeen,
   } = useUI();
   const confirmedSettings = new Set(confirmedList);
   const [ring, setRing] = useState<Ring | null>(null);
@@ -363,6 +365,8 @@ function Home({ children }: { children: ReactNode }) {
             }
           : undefined
       }
+      quickHint={lastSavedAlarm !== null && !quickHintSeen}
+      onQuickHintSeen={setQuickHintSeen}
       onEdit={(alarm) => router.push({ pathname: "/alarm/[id]", params: { id: alarm.id } })}
       onAdd={() => router.push({ pathname: "/alarm/[id]", params: { id: "new" } })}
       onDuplicate={(alarm) =>

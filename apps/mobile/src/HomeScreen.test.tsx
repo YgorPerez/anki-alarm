@@ -208,12 +208,13 @@ test.each(["Desligado", "Uma vez"])(
   },
 );
 
-test("quick alarm chips add a marked one-off alarm and say when it rings", async () => {
+test("long-pressing + offers the quick alarms, which add a marked one-off and say when it rings", async () => {
   vi.useFakeTimers();
   // 06:00:40 UTC: +10 min rings at 06:10, 9 min 20 s away.
   vi.setSystemTime(new Date("2026-10-29T06:00:40Z"));
   const options = { deckId: "deck", need: 3, sound: newAlarm("a").sound };
   const added: number[] = [];
+  const opened: string[] = [];
   const view = (alarms: Alarm[], locale: "pt-BR" | "en" = "pt-BR", quick = true) => (
     <HomeScreen
       alarms={alarms}
@@ -222,7 +223,7 @@ test("quick alarm chips add a marked one-off alarm and say when it rings", async
       zone="UTC"
       use24Hour
       onEdit={() => {}}
-      onAdd={() => {}}
+      onAdd={() => opened.push("new")}
       onToggle={() => {}}
       onQuickAlarm={
         quick
@@ -235,20 +236,78 @@ test("quick alarm chips add a marked one-off alarm and say when it rings", async
     />
   );
   const result = await render(view([]));
+  // The chips only come up from +; a tap on + still adds an alarm.
+  expect(screen.queryByText("+10 min")).toBeNull();
+  await fireEvent.press(screen.getByRole("button", { name: "Novo alarme" }));
+  expect(opened).toEqual(["new"]);
+  expect(screen.queryByText("+10 min")).toBeNull();
+
+  await fireEvent(screen.getByRole("button", { name: "Novo alarme" }), "longPress");
+  expect(screen.getByText("+20 min")).toBeTruthy();
   await fireEvent.press(screen.getByRole("button", { name: "Alarme daqui a 10 minutos" }));
   expect(added).toEqual([10]);
+  expect(opened).toEqual(["new"]);
+  expect(screen.queryByText("+20 min")).toBeNull();
   await waitFor(() => expect(screen.getByText("Toca em 10 min")).toBeTruthy());
   await result.rerender(view([quickAlarm("q", 10, options, Date.now(), "UTC")]));
   expect(screen.getByText("29 de out. de 2026 · Rápido")).toBeTruthy();
   await act(() => vi.advanceTimersByTime(5000));
   expect(screen.queryByText("Toca em 10 min")).toBeNull();
+
+  // TalkBack names the action and reaches the same choices.
   await result.rerender(view([], "en"));
+  const add = screen.getByRole("button", { name: "New alarm" });
+  expect(add.props.accessibilityActions).toEqual([{ name: "longpress", label: "Quick alarms" }]);
+  expect(add.props.accessibilityHint).toBe("Touch and hold for quick alarms");
+  await fireEvent(add, "accessibilityAction", { nativeEvent: { actionName: "longpress" } });
   expect(screen.getByText("+30 min")).toBeTruthy();
   await fireEvent.press(screen.getByRole("button", { name: "Alarm in 30 minutes" }));
   await waitFor(() => expect(screen.getByText("Rings in 30 min")).toBeTruthy());
-  // With no saved alarm or no deck, App passes no handler and the chips go.
+
+  // With no saved alarm or no deck, App passes no handler and + only adds.
   await result.rerender(view([], "en", false));
+  const plainAdd = screen.getByRole("button", { name: "New alarm" });
+  expect(plainAdd.props.accessibilityActions).toEqual([]);
+  expect(plainAdd.props.accessibilityHint).toBeUndefined();
+  await fireEvent(plainAdd, "longPress");
   expect(screen.queryByText("+10 min")).toBeNull();
+});
+
+test("the quick alarm hint shows when asked for, and reports being dismissed or used", async () => {
+  const seen: string[] = [];
+  const view = ({ hint = true, quick = true }: { hint?: boolean; quick?: boolean } = {}) => (
+    <HomeScreen
+      alarms={[{ ...newAlarm("a"), deckId: "deck" }]}
+      decks={[{ id: "deck", name: "Inglês" }]}
+      locale="pt-BR"
+      zone="UTC"
+      use24Hour
+      onEdit={() => {}}
+      onAdd={() => {}}
+      onToggle={() => {}}
+      onQuickAlarm={quick ? () => {} : undefined}
+      quickHint={hint}
+      onQuickHintSeen={() => seen.push("seen")}
+    />
+  );
+  const text = "Segure o + para um alarme rápido de +10, +20 ou +30 min.";
+  const result = await render(view());
+  expect(screen.getByText(text)).toBeTruthy();
+  await fireEvent.press(screen.getByRole("button", { name: "Novo alarme" }));
+  expect(seen).toEqual([]);
+  await fireEvent.press(screen.getByRole("button", { name: "Dispensar dica" }));
+  expect(seen).toEqual(["seen"]);
+  await result.rerender(view({ hint: false }));
+  expect(screen.queryByText(text)).toBeNull();
+
+  // Using the quick alarms counts as having seen the hint.
+  await result.rerender(view());
+  await fireEvent(screen.getByRole("button", { name: "Novo alarme" }), "longPress");
+  expect(seen).toEqual(["seen", "seen"]);
+
+  // Without quick alarms on offer, the hint would describe something + can't do.
+  await result.rerender(view({ quick: false }));
+  expect(screen.queryByText(text)).toBeNull();
 });
 
 test("a card's TalkBack label says it is skipped, without a separate stop for its day letters", async () => {

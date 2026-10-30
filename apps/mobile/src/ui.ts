@@ -14,6 +14,9 @@ export const useUI = create(
     /** The alarm saved last on this phone: a new alarm starts with its deck and N. */
     lastSavedAlarm: string | null;
     setLastSavedAlarm: (alarmId: string) => void;
+    /** The hint about long-pressing + was dismissed or used on this phone. */
+    quickHintSeen: boolean;
+    setQuickHintSeen: () => void;
   }>(
     (set) => ({
       locale: "pt-BR",
@@ -27,6 +30,8 @@ export const useUI = create(
         })),
       lastSavedAlarm: null,
       setLastSavedAlarm: (lastSavedAlarm) => set({ lastSavedAlarm }),
+      quickHintSeen: false,
+      setQuickHintSeen: () => set({ quickHintSeen: true }),
     }),
     {
       name: "preferences",
