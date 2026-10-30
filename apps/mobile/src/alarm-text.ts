@@ -45,8 +45,10 @@ const civilDate = (at: number, zone: string) =>
     day: "2-digit",
   }).format(at);
 
-const same = (days: readonly number[], set: readonly number[]) =>
-  days.length === set.length && set.every((day) => days.includes(day));
+export function sameDays(days: readonly number[], expected: readonly number[]) {
+  const selected = new Set(days);
+  return days.length === expected.length && expected.every((day) => selected.has(day));
+}
 
 /**
  * How an alarm repeats, in a few words: "Weekdays", "Mon, Wed", "Tomorrow", a date, or "Once"
@@ -71,10 +73,11 @@ export function repeatSummary(
   }
   const days = rule.repeatDays ?? [];
   if (days.length === 0) return t("repeatOnce");
-  if (same(days, EVERY_DAY)) return t("everyDay");
-  if (same(days, WEEKDAYS)) return t("weekdays");
-  if (same(days, [6, 7])) return t("weekends");
-  return EVERY_DAY.filter((day) => days.includes(day))
+  if (sameDays(days, EVERY_DAY)) return t("everyDay");
+  if (sameDays(days, WEEKDAYS)) return t("weekdays");
+  if (sameDays(days, [6, 7])) return t("weekends");
+  const selected = new Set(days);
+  return EVERY_DAY.filter((day) => selected.has(day))
     .map((day) => weekdayName(day, locale))
     .join(", ");
 }

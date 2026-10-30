@@ -24,6 +24,33 @@ export function AlarmSettingsRows({
   const decks = useAlarmDecks(locale);
   const [open, setOpen] = useState<string | null>(null);
   const deck = decks.data?.find((item) => item.id === alarm.deckId);
+  const rows = settingsRows(alarm, locale, deck?.name);
+  const selected = rows.find((row) => row.id === open);
+  const Controls = selected?.Controls;
+  return (
+    <>
+      <View className="rounded-lg bg-surface">
+        {rows.map((row, index) => (
+          <View key={row.id}>
+            {index > 0 && <View className="mx-4 h-px bg-border" />}
+            <EditorRow label={row.label} value={row.value} onPress={() => setOpen(row.id)} />
+          </View>
+        ))}
+      </View>
+      <Sheet
+        title={selected?.label ?? ""}
+        visible={!!selected}
+        locale={locale}
+        onClose={() => setOpen(null)}
+      >
+        {Controls && <Controls alarm={alarm} locale={locale} onChange={onChange} />}
+      </Sheet>
+    </>
+  );
+}
+
+function settingsRows(alarm: Alarm, locale: Locale, deckName?: string) {
+  const t = copy(locale);
   const sound = parseAlarmSound(alarm.sound);
   const soundName =
     sound.kind === "bundled"
@@ -32,11 +59,11 @@ export function AlarmSettingsRows({
         ? t("defaultSound")
         : sound.title || t(sound.kind === "file" ? "audioFile" : "ringtone");
   const minutes = (count: number) => t("minutes", { count: String(count) });
-  const rows = [
+  return [
     {
       id: "cards",
       label: t("editorCards"),
-      value: `${deck?.name ?? t("chooseDeck")} · ${t("needCount", { count: String(alarm.need) })}`,
+      value: `${deckName ?? t("chooseDeck")} · ${t("needCount", { count: String(alarm.need) })}`,
       Controls: AlarmDeckSettings,
     },
     {
@@ -70,26 +97,4 @@ export function AlarmSettingsRows({
       Controls: AlarmReadAloudSettings,
     },
   ];
-  const selected = rows.find((row) => row.id === open);
-  const Controls = selected?.Controls;
-  return (
-    <>
-      <View className="rounded-lg bg-surface">
-        {rows.map((row, index) => (
-          <View key={row.id}>
-            {index > 0 && <View className="mx-4 h-px bg-border" />}
-            <EditorRow label={row.label} value={row.value} onPress={() => setOpen(row.id)} />
-          </View>
-        ))}
-      </View>
-      <Sheet
-        title={selected?.label ?? ""}
-        visible={!!selected}
-        locale={locale}
-        onClose={() => setOpen(null)}
-      >
-        {Controls && <Controls alarm={alarm} locale={locale} onChange={onChange} />}
-      </Sheet>
-    </>
-  );
 }

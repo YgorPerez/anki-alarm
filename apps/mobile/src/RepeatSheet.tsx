@@ -1,7 +1,8 @@
+import { PillChip } from "./PillChip.tsx";
 import { EVERY_DAY, WEEKDAYS, type AlarmRule, type Locale } from "@app/core";
 import { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import { Pressable, Text, View } from "react-native";
-import { repeatSummary, startOfToday, weekdayName } from "./alarm-text.ts";
+import { repeatSummary, sameDays, startOfToday, weekdayName } from "./alarm-text.ts";
 import { copy } from "./copy.ts";
 import { bold, regular } from "./fonts.ts";
 import { Sheet } from "./Sheet.tsx";
@@ -9,8 +10,6 @@ import { Sheet } from "./Sheet.tsx";
 type Repeat = Pick<AlarmRule, "repeatDays" | "onceDate">;
 
 const pad = (value: number) => String(value).padStart(2, "0");
-const sameDays = (days: readonly number[], set: readonly number[]) =>
-  days.length === set.length && set.every((day) => days.includes(day));
 
 /**
  * The editor's Repeat sheet: day chips, Every day and Weekdays, or a one-off date from Android's
@@ -35,8 +34,10 @@ export function RepeatSheet({
 }) {
   const t = copy(locale);
   const days = repeat.onceDate ? [] : (repeat.repeatDays ?? []);
-  const setDays = (next: readonly number[]) =>
-    onChange({ repeatDays: EVERY_DAY.filter((day) => next.includes(day)) });
+  const setDays = (next: readonly number[]) => {
+    const selected = new Set(next);
+    onChange({ repeatDays: EVERY_DAY.filter((day) => selected.has(day)) });
+  };
   const pickDate = () => {
     const today = startOfToday(now(), zone);
     const [year, month, day] = (repeat.onceDate ?? "").split("-").map(Number);
@@ -54,12 +55,14 @@ export function RepeatSheet({
   return (
     <Sheet title={t("repeat")} visible={visible} locale={locale} onClose={onClose}>
       <View className="flex-row flex-wrap gap-2">
-        <Shortcut
+        <PillChip
+          className=""
           label={t("everyDay")}
           selected={sameDays(days, EVERY_DAY)}
           onPress={() => setDays(EVERY_DAY)}
         />
-        <Shortcut
+        <PillChip
+          className=""
           label={t("weekdays")}
           selected={sameDays(days, WEEKDAYS)}
           onPress={() => setDays(WEEKDAYS)}
@@ -102,31 +105,5 @@ export function RepeatSheet({
         </Text>
       </Pressable>
     </Sheet>
-  );
-}
-
-function Shortcut({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      className={`min-h-12 justify-center rounded-pill px-5 ${selected ? "bg-primary-tint" : "bg-surface"}`}
-    >
-      <Text
-        style={selected ? bold : regular}
-        className={`text-body ${selected ? "text-primary-ink" : "text-foreground"}`}
-      >
-        {label}
-      </Text>
-    </Pressable>
   );
 }

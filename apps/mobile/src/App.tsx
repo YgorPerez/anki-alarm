@@ -1,3 +1,4 @@
+import { RuntimeContext, useRuntime } from "./runtime.ts";
 import { useNow } from "./clock.tsx";
 import { regular, bold } from "./fonts.ts";
 import { AlarmSettingsRows } from "./AlarmSettingsRows.tsx";
@@ -36,8 +37,6 @@ import { StatsScreen } from "./StatsScreen.tsx";
 import { Effect } from "effect";
 import { StatusBar } from "expo-status-bar";
 import {
-  createContext,
-  useContext,
   useMemo,
   useCallback,
   useEffect,
@@ -60,6 +59,7 @@ import { initializeTheme, useThemeChoice } from "./theme.ts";
 import { ScopedTheme } from "uniwind";
 import { queryClient } from "./query.ts";
 import { useUI } from "./ui.ts";
+const timeZoneFormatter = new Intl.DateTimeFormat();
 const repository = {
   list: localData((data) => data.alarms),
   save: (alarm: Alarm) => localData((data) => data.saveAlarm(alarm)),
@@ -69,11 +69,6 @@ const repository = {
   events: localData((data) => data.events),
 };
 
-const RuntimeContext = createContext<{
-  alarms: ReactNode;
-  editor: (id: string, duplicate?: string) => ReactNode;
-  reliability: (onExit: () => void) => ReactNode;
-} | null>(null);
 function RuntimeProvider({
   alarms,
   editor,
@@ -88,21 +83,16 @@ function RuntimeProvider({
   const value = useMemo(() => ({ alarms, editor, reliability }), [alarms, editor, reliability]);
   return <RuntimeContext value={value}>{children}</RuntimeContext>;
 }
-function useRuntime() {
-  const runtime = useContext(RuntimeContext);
-  if (!runtime) throw new Error("Routes must be inside App");
-  return runtime;
-}
 export function AlarmsRoute() {
-  return useRuntime().alarms;
+  return <>{useRuntime().alarms}</>;
 }
 export function AlarmEditorRoute() {
   const { id, duplicate } = useLocalSearchParams<{ id: string; duplicate?: string }>();
-  return useRuntime().editor(id, duplicate);
+  return <>{useRuntime().editor(id, duplicate)}</>;
 }
 export function ReliabilityRoute() {
   const router = useRouter();
-  return useRuntime().reliability(() => router.back());
+  return <>{useRuntime().reliability(() => router.back())}</>;
 }
 export function SettingsRoute() {
   const router = useRouter();
@@ -318,7 +308,7 @@ function Home({ children }: { children: ReactNode }) {
     });
     return () => subscription.remove();
   }, []);
-  const zone = new Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const zone = timeZoneFormatter.resolvedOptions().timeZone;
   const takeover = ring ? (
     <ScopedTheme theme="dark">
       <AlarmScreen
