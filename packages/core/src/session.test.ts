@@ -204,6 +204,46 @@ describe("alarm session", () => {
     expect(session(only, []).next).toBeNull();
   });
 
+  test("burying the current card brings another without counting toward N", () => {
+    const setup = deckWithEveryKind();
+    const c = new Collection(
+      { deviceId: "a", now: () => now, random: () => new Uint8Array(16) },
+      setup.state,
+    );
+    const before = session(setup, [inRing(setup.id("overdue"), 4, now)], 3);
+    expect(before.next?.card.id).toBe(setup.id("new"));
+    c.buryCard(setup.id("new"));
+    const after = session(
+      { ...setup, state: c.snapshot() },
+      [inRing(setup.id("overdue"), 4, now)],
+      3,
+    );
+    expect(after).toMatchObject({ right: 1, need: 3, done: false });
+    expect(after.next?.card.id).toBe(setup.id("ahead-soon"));
+    c.buryCard(setup.id("overdue"));
+    expect(
+      awakeCheckSession({
+        collection: c.snapshot(),
+        log: setup.log,
+        deckId: setup.deckId,
+        checkId: "check",
+        now,
+      }).next?.card.id,
+    ).toBe(setup.id("ahead-soon"));
+  });
+
+  test("an alarm whose cards are all buried still shows them, so burying never ends it", () => {
+    const setup = deckWithEveryKind();
+    const c = new Collection(
+      { deviceId: "a", now: () => now, random: () => new Uint8Array(16) },
+      setup.state,
+    );
+    for (const card of setup.state.cards) if (card.id !== setup.id("new")) c.buryCard(card.id);
+    expect(session({ ...setup, state: c.snapshot() }, []).next?.card.id).toBe(setup.id("new"));
+    c.buryCard(setup.id("new"));
+    expect(session({ ...setup, state: c.snapshot() }, []).next?.card.id).toBe(setup.id("overdue"));
+  });
+
   test("an alarm with no deck or no cards has nothing to show", () => {
     const c = collection();
     const empty = c.createDeck("Empty");

@@ -10,7 +10,7 @@ const NOW = 1_770_000_000_000;
 function fakeAnkiDroid() {
   const source: AnkiDroidSource = structuredClone(fixture.source);
   const calls: string[] = [];
-  const state = { ignoreAnswers: false };
+  const state = { ignoreAnswers: false, ignoreBuries: false };
   const provider: AnkiDroidProvider = {
     readDeck: (deckId) =>
       Effect.sync(() => {
@@ -28,6 +28,14 @@ function fakeAnkiDroid() {
         const card = source.cards.find((c) => c.noteId === noteId && c.ord === ord);
         if (!card) return null;
         if (!state.ignoreAnswers) review(card, NOW / 1000);
+        return { ...card };
+      }),
+    bury: ({ noteId, ord }) =>
+      Effect.sync(() => {
+        calls.push(`bury ${noteId}:${ord}`);
+        const card = source.cards.find((c) => c.noteId === noteId && c.ord === ord);
+        if (!card) return null;
+        if (!state.ignoreBuries) card.queue = -3;
         return { ...card };
       }),
   };
@@ -91,6 +99,7 @@ test("sync back answers in AnkiDroid once per review, and pull doesn't take our 
       held: 0,
       gone: 0,
       snapshots: 0,
+      buried: 0,
     });
     expect(ankiDroid.calls).toEqual([
       "cards 501,502",
@@ -153,6 +162,41 @@ test("an answer AnkiDroid didn't record stays pending and the sync back fails", 
     );
     ankiDroid.state.ignoreAnswers = false;
     expect((await run(data.syncBackAnkiDroid(ankiDroid.provider))).sent).toBe(1);
+  } finally {
+    close();
+  }
+});
+
+test("a bury goes to AnkiDroid after the card's answers, once, and must be recorded", async () => {
+  const { open, close } = openData();
+  const ankiDroid = fakeAnkiDroid();
+  try {
+    const data = await open();
+    const deckId = await run(data.linkAnkiDroidDeck(ankiDroid.source));
+    const fresh = (await run(data.collection)).cards.find((c) => c.anki?.id === 9001)!;
+    await run(data.answerCard(fresh.id, 1, 5000));
+    await run(data.changeCollection((c) => c.buryCard(fresh.id)));
+    ankiDroid.state.ignoreBuries = true;
+    await expect(run(data.syncBackAnkiDroid(ankiDroid.provider))).rejects.toThrow(
+      "AnkiDroid didn't record the bury",
+    );
+    ankiDroid.state.ignoreBuries = false;
+    expect(await run(data.syncBackAnkiDroid(ankiDroid.provider))).toMatchObject({
+      sent: 0,
+      buried: 1,
+    });
+    expect(ankiDroid.calls).toEqual([
+      "cards 501",
+      "answer 501:0 ease 1 5000ms",
+      "bury 501:0",
+      "cards 501",
+      "bury 501:0",
+    ]);
+    expect(await run(data.pullAnkiDroid(ankiDroid.provider, deckId))).toMatchObject({
+      buried: 0,
+    });
+    const card = (await run(data.collection)).cards.find((c) => c.id === fresh.id)!;
+    expect(card.fields.buriedUntil.value).toBeGreaterThan(NOW);
   } finally {
     close();
   }

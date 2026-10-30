@@ -8,6 +8,8 @@ import {
   linkableAnkiDroidDecks,
   replayCard,
   studyQueue,
+  syncBackBuries,
+  syncBackBuryPlan,
   syncBackPlan,
   syncBackQueue,
   type AnkiDroidSource,
@@ -337,6 +339,31 @@ test("sync back holds answers for cards suspended or buried in AnkiDroid and dro
   const deleted = syncBackPlan(state, log, queue, [ankiReviewed!], new Map(), now);
   expect(deleted.gone.map((a) => a.entryId)).toEqual(["a"]);
   expect(deleted.send.map((a) => a.entryId)).toEqual(["b"]);
+});
+
+test("sync back buries this phone's linked cards still buried, once per bury", () => {
+  const { c, fresh, reviewed } = linked();
+  const own = c.createDeck("Mine");
+  c.addBasicNote(own.id, "casa", "house");
+  const mine = c.snapshot().cards.find((x) => x.fields.deckId.value === own.id)!;
+  for (const id of [fresh.id, reviewed.id, mine.id]) c.buryCard(id);
+  const state = c.snapshot();
+  const until = state.cards.find((x) => x.id === fresh.id)!.fields.buriedUntil.value;
+  const buries = syncBackBuries(state, "phone-a", new Set(), now);
+  expect(buries).toEqual([
+    { key: `bury:${fresh.id}:${until}`, cardId: fresh.id, noteId: 501, ord: 0 },
+    { key: `bury:${reviewed.id}:${until}`, cardId: reviewed.id, noteId: 501, ord: 1 },
+  ]);
+  expect(syncBackBuries(state, "phone-a", new Set([buries[0]!.key]), now)).toEqual([buries[1]]);
+  expect(syncBackBuries(state, "phone-a", new Set(), until!)).toEqual([]);
+  expect(syncBackBuries(state, "phone-b", new Set(), now)).toEqual([]);
+  // Already out of AnkiDroid's queue, or gone from it: nothing to send.
+  const [ankiFresh, ankiReviewed] = source().cards;
+  expect(syncBackBuryPlan(buries, [ankiFresh!, ankiReviewed!])).toEqual({ send: buries, done: [] });
+  expect(syncBackBuryPlan(buries, [{ ...ankiReviewed!, queue: -1 }])).toEqual({
+    send: [],
+    done: buries,
+  });
 });
 
 test("a card AnkiDroid reviewed since we last saw it is snapshotted before our answers go", () => {

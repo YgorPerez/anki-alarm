@@ -279,6 +279,7 @@ const shared = (count: number): AnkiPackage => ({
     ordinal: 0,
     mtime: 1700000000000,
     suspended: false,
+    buried: false,
   })),
   revlog: [
     {

@@ -93,6 +93,29 @@ test("one answer, any grade, passes the check and is a normal review", async () 
   ]);
 });
 
+test("burying the check's card shows another and doesn't pass the check", async () => {
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Tarde");
+        c.addBasicNote(deck.id, "nuvem", "cloud");
+        c.addBasicNote(deck.id, "chuva", "rain");
+      }),
+    ),
+  );
+  const deckId = state.decks.find((d) => d.fields.name.value === "Tarde")!.id;
+  const { native, check } = await shownCheck("ring-bury", deckId);
+  const passed = await show(check, native.layer);
+  const first = String((await screen.findByLabelText("Frente")).props.source.html);
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Enterrar até amanhã" }));
+  await waitFor(() =>
+    expect(String(screen.getByLabelText("Frente").props.source.html)).not.toBe(first),
+  );
+  expect(passed()).toBe(0);
+  expect(native.awakeCheck()).not.toBeNull();
+});
+
 test("the check's clock is Home's: the system's 12 or 24 h setting, in the phone's zone", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-29T09:20:00Z"));

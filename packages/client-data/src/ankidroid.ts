@@ -1,6 +1,8 @@
 import { eq, sql } from "drizzle-orm";
 import type { SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import {
+  syncBackBuries,
+  syncBackBuryPlan,
   syncBackPlan,
   syncBackQueue,
   type AnkiDroidCard,
@@ -10,6 +12,7 @@ import {
   type CollectionState,
   type LogEntry,
   type SyncBackAnswer,
+  type SyncBackBury,
 } from "@app/core";
 import { Data, Deferred, Effect } from "effect";
 
@@ -30,6 +33,8 @@ export interface AnkiDroidProvider {
    * such card. AnkiDroid reports success even when the answer failed, so the reps tell.
    */
   answer: (answer: SyncBackAnswer) => Effect.Effect<AnkiDroidCard | null, Error>;
+  /** Buries the card and reads it back; `null` when AnkiDroid has no such card. */
+  bury: (bury: SyncBackBury) => Effect.Effect<AnkiDroidCard | null, Error>;
 }
 export interface SyncBackSummary {
   sent: number;
@@ -39,13 +44,18 @@ export interface SyncBackSummary {
   gone: number;
   /** Cards AnkiDroid reviewed since we last saw them. */
   snapshots: number;
+  /** Cards buried in the app that this sync back buried in AnkiDroid. */
+  buried: number;
 }
 export interface PullSummary extends SyncBackSummary {
   added: number;
   edited: number;
 }
 
-/** AnkiDroid took the answer but its reps didn't move: it didn't record it. */
+/**
+ * AnkiDroid took the answer but its reps didn't move, or took the bury but the card stayed in its
+ * queue: it didn't record it.
+ */
 export class AnswerNotRecorded extends Data.TaggedError("AnswerNotRecorded")<{
   message: string;
 }> {}
@@ -143,10 +153,13 @@ export function ankiDroidEngine(deps: Deps) {
         }),
       );
       const queue = syncBackQueue(state, log, deps.deviceId, sent);
-      const summary: SyncBackSummary = { sent: 0, held: 0, gone: 0, snapshots: 0 };
-      if (!queue.length) return summary;
-      const cards = yield* provider.cards([...new Set(queue.map((a) => a.noteId))]);
+      const buries = syncBackBuries(state, deps.deviceId, sent, deps.now());
+      const summary: SyncBackSummary = { sent: 0, held: 0, gone: 0, snapshots: 0, buried: 0 };
+      if (!queue.length && !buries.length) return summary;
+      const noteIds = [...queue, ...buries].map((a) => a.noteId);
+      const cards = yield* provider.cards([...new Set(noteIds)]);
       const plan = syncBackPlan(state, log, queue, cards, seen, deps.now());
+      const buryPlan = syncBackBuryPlan(buries, cards);
       const reps = new Map(cards.map((c) => [key(c), c.reps]));
       const added = yield* deps.write(
         Effect.gen(function* () {
@@ -154,6 +167,7 @@ export function ankiDroidEngine(deps: Deps) {
           const byCard = new Map(queue.map((a) => [a.cardId, key(a)]));
           yield* storeSeen(plan.snapshots.map((s) => [s.cardId, reps.get(byCard.get(s.cardId)!)!]));
           yield* markSent(plan.gone.map((a) => a.entryId));
+          yield* markSent(buryPlan.done.map((b) => b.key));
           return count;
         }),
       );
@@ -173,6 +187,14 @@ export function ankiDroidEngine(deps: Deps) {
           }),
         );
         summary.sent++;
+      }
+      // Buries go after the answers: an answer would put a buried card back in AnkiDroid's queue.
+      for (const bury of buryPlan.send) {
+        const after = yield* provider.bury(bury);
+        if (after && after.queue >= 0)
+          return yield* new AnswerNotRecorded({ message: "AnkiDroid didn't record the bury" });
+        yield* deps.write(markSent([bury.key]));
+        summary.buried++;
       }
       return summary;
     });

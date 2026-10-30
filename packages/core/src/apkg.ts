@@ -71,6 +71,8 @@ export interface AnkiPackage {
     ordinal: number;
     mtime: number;
     suspended: boolean;
+    /** Buried by the user or by sibling burying (queue -3 or -2), until the next study day. */
+    buried: boolean;
   }[];
   /** Revlog rows as log entries. Cram rows and rows without a grade or schedule change are gone. */
   revlog: ({ id: number; cardId: number; at: number } & (
@@ -254,6 +256,7 @@ async function readCollection(db: AnkiDatabase): Promise<Omit<AnkiPackage, "vers
       ordinal: int(r.ord),
       mtime: int(r.mod) * 1000,
       suspended: int(r.queue) === -1,
+      buried: int(r.queue) === -2 || int(r.queue) === -3,
     }),
   );
   const revlog: AnkiPackage["revlog"] = [];

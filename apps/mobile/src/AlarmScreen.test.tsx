@@ -130,6 +130,26 @@ test("Start silences the ring, cards count toward N and N right dismisses it", a
   }
 });
 
+test("burying the alarm's card brings another without counting toward N", async () => {
+  const { native } = await ringing("Enterrar", ["pedra", "areia"], { need: 1 });
+  await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+  await screen.findByLabelText("Frente");
+  const first = front();
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Enterrar até amanhã" }));
+  await waitFor(() => expect(front()).not.toBe(first));
+  expect(screen.getByText(/ · 0 de 1 certos · faltam 1/)).toBeTruthy();
+  expect(native.signals()).toContain("activity:ring-Enterrar");
+  const state = await Effect.runPromise(localData((data) => data.collection));
+  const buried = state.cards.filter((c) => (c.fields.buriedUntil.value ?? 0) > Date.now());
+  expect(buried).toHaveLength(1);
+  expect(first).toContain(
+    state.notes.find((n) => n.id === buried[0]!.fields.noteId.value)!.values[0]!.value,
+  );
+  const log = await Effect.runPromise(localData((data) => data.reviewLog));
+  expect(log.filter((e) => e.kind === "review" && e.ringId === "ring-Enterrar")).toEqual([]);
+});
+
 test("the ring's clock is Home's: the system's 12 or 24 h setting, in the phone's zone", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-29T09:05:00Z"));

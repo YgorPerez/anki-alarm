@@ -3,6 +3,7 @@ const messages = {
   "pt-BR": {
     study: "Estudar",
     studyActions: "Ações do cartão",
+    buryCard: "Enterrar até amanhã",
     studyNew: "{count} novos",
     studyLearning: "{count} aprendendo",
     studyReview: "{count} revisões",
@@ -182,6 +183,7 @@ const messages = {
   en: {
     study: "Study",
     studyActions: "Card actions",
+    buryCard: "Bury until tomorrow",
     studyNew: "{count} new",
     studyLearning: "{count} learning",
     studyReview: "{count} reviews",

@@ -1,4 +1,5 @@
 import { StudyMenu } from "./StudyMenu.tsx";
+import { buryItem } from "./study-actions.ts";
 import { useQuery } from "@tanstack/react-query";
 import { awakeCheckSession, RING_POLICY, type Grade, type Locale } from "@app/core";
 import { Effect, type Layer } from "effect";
@@ -94,7 +95,7 @@ export function AwakeCheckScreen({
               {timeText(now, locale, zone, use24Hour)} ·{" "}
               {t("awakeCardProgress", { seconds: String(Math.ceil(left / 1000)) })}
             </Text>
-            <StudyMenu items={[]} locale={locale} busy={prompt.busy} />
+            <StudyMenu items={[buryItem(locale, prompt.bury)]} locale={locale} busy={prompt.busy} />
             {prompt.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
           </View>
         ) : (
@@ -179,6 +180,15 @@ function useAwakeCheck(
           localData((data) => data.answerCard(cardId, grade, durationMs, check.id)),
         );
         await pass();
+      }),
+    /** Buries the card until the next study day; another card comes and the check goes on. */
+    bury: () =>
+      guarded(async () => {
+        if (!cardId) return;
+        await Effect.runPromise(
+          localData((data) => data.changeCollection((c) => c.buryCard(cardId))),
+        );
+        await query.refetch();
       }),
   };
 }

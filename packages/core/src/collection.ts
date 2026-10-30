@@ -12,7 +12,7 @@ import {
 import { cardId, importId, uuid7 } from "./ids.ts";
 import { isLanguageTag } from "./locale.ts";
 import { editedNoteType, editedValues, noteTypeProblems, type NoteTypeEdit } from "./note-types.ts";
-import { studyDayStart, type LogEntry } from "./study.ts";
+import { dueInDays, studyDayStart, type LogEntry } from "./study.ts";
 
 /** FSRS-6's default weights, which every new preset starts from. */
 export const DEFAULT_FSRS_PARAMETERS: readonly number[] = default_w;
@@ -109,6 +109,8 @@ export type Card = RecordFields<{
   deckId: string;
   ordinal: number;
   suspended: boolean;
+  /** Buried until this time, the start of a study day; a past time or null means not buried. */
+  buriedUntil: number | null;
 }> &
   AnkiIdentity;
 export type RecordKind = "decks" | "presets" | "noteTypes" | "notes" | "cards";
@@ -193,8 +195,8 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
  * Reads stored records in the current shape, upgrading what earlier versions saved with the
  * records' own clocks, so the upgrade itself is not an edit: Basic notes kept `front` and `back` as
  * properties and a `deckId` the cards now own; note types had one front and back template; presets
- * had no `fsrsParameters`, decks no `desiredRetention`, notes no `tags`, cards no `suspended`.
- * Current records pass through unchanged.
+ * had no `fsrsParameters`, decks no `desiredRetention`, notes no `tags`, cards no `suspended` or
+ * `buriedUntil`. Current records pass through unchanged.
  */
 export function parseCollection(stored: StoredCollection): CollectionState {
   // Each record is brought to its current shape below.
@@ -207,8 +209,10 @@ export function parseCollection(stored: StoredCollection): CollectionState {
       value: [...DEFAULT_FSRS_PARAMETERS],
       hlc: preset.fields.name.hlc,
     };
-  for (const card of state.cards)
+  for (const card of state.cards) {
     card.fields.suspended ??= { value: false, hlc: card.fields.ordinal.hlc };
+    card.fields.buriedUntil ??= { value: null, hlc: card.fields.ordinal.hlc };
+  }
   for (const type of state.noteTypes) {
     const old = legacy(type.fields);
     if (!old.frontTemplate) continue;
@@ -405,7 +409,7 @@ export class Collection {
     for (const ordinal of ordinalsFor(type, values))
       this.state.cards.push(
         this.record(
-          { noteId: note.id, deckId, ordinal, suspended: false },
+          { noteId: note.id, deckId, ordinal, suspended: false, buriedUntil: null },
           cardId(note.id, ordinal),
           hlc,
         ),
@@ -439,7 +443,9 @@ export class Collection {
     let id = cardId(noteId, ordinal);
     if (this.state.cards.some((c) => c.id === id) || this.deleted("cards", id))
       id = uuid7(this.env.now(), this.env.random());
-    this.state.cards.push(this.record({ noteId, deckId, ordinal, suspended: false }, id, hlc));
+    this.state.cards.push(
+      this.record({ noteId, deckId, ordinal, suspended: false, buriedUntil: null }, id, hlc),
+    );
   }
   /**
    * Changes a note type's name, fields, templates and CSS (see `NoteTypeEdit`). Notes move their
@@ -515,6 +521,23 @@ export class Collection {
     for (const card of cards)
       if (card.fields.deckId.value !== deckId)
         card.fields.deckId = { value: deckId, hlc: this.tick() };
+  }
+  /**
+   * Buries the card until the next study day starts: study and alarm sessions skip it until then.
+   * Linked cards are buried in AnkiDroid too, with the next sync back.
+   */
+  buryCard(id: string) {
+    this.setBuriedUntil(id, dueInDays(1, this.env.now()));
+  }
+  /** Reverses `buryCard`: the card is back in study at once. */
+  unburyCard(id: string) {
+    this.setBuriedUntil(id, null);
+  }
+  private setBuriedUntil(id: string, until: number | null) {
+    const card = this.state.cards.find((c) => c.id === id);
+    if (!card) throw new Error("Invalid card");
+    if (card.fields.buriedUntil.value !== until)
+      card.fields.buriedUntil = { value: until, hlc: this.tick() };
   }
   /** Moves every card of the note to `deckId`. */
   moveNote(id: string, deckId: string) {
@@ -627,7 +650,7 @@ export class Collection {
       const card = this.state.cards.find((c) => c.id === id);
       if (!card)
         this.state.cards.push({
-          ...this.record({ noteId, deckId, ordinal: ad.ord, suspended }, id),
+          ...this.record({ noteId, deckId, ordinal: ad.ord, suspended, buriedUntil: null }, id),
           anki: { id: ad.id },
         });
       else if (card.fields.suspended.value !== suspended)
@@ -810,6 +833,8 @@ export class Collection {
           deckId: decks.get(c.deckId)!,
           ordinal: c.ordinal,
           suspended: c.suspended,
+          // Anki unburies at the first study day after the card's last change.
+          buriedUntil: c.buried ? dueInDays(1, c.mtime) : null,
         };
         const merged = {
           id: cardId(id, c.ordinal),

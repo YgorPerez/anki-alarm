@@ -1,4 +1,5 @@
 import { StudyMenu } from "./StudyMenu.tsx";
+import { buryItem } from "./study-actions.ts";
 import { useQuery } from "@tanstack/react-query";
 import {
   alarmSession,
@@ -129,7 +130,7 @@ export function AlarmScreen({
                 onPress={alarm.snooze}
               />
             )}
-            <StudyMenu items={[]} locale={locale} busy={alarm.busy} />
+            <StudyMenu items={[buryItem(locale, alarm.bury)]} locale={locale} busy={alarm.busy} />
             {alarm.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
           </View>
         }
@@ -418,6 +419,21 @@ function useAlarmSession(
     [layer, readsAloud],
   );
 
+  /**
+   * The current card leaves through `leave` (an answer or a bury), then the session's next card
+   * shows, or the ring is dismissed once N are right.
+   */
+  const leaveCard = (leave: (id: string) => Promise<unknown>) =>
+    guarded(async () => {
+      if (!cardId) return;
+      await signal((service) => service.activity(ring.id));
+      await leave(cardId);
+      card.hide();
+      const { data } = await query.refetch();
+      shownAt.current = performance.now();
+      if (data?.done) await finish();
+      else read(data?.next);
+    });
   /** A deck with no cards can't give the awake check a card, so that dismissal skips it. */
   const finish = async (awakeCheck = true) => {
     const after = awakeCheck ? awakeCheckAfter(ring.alarm) : null;
@@ -458,20 +474,20 @@ function useAlarmSession(
       card.reveal();
       void signal((service) => service.activity(ring.id)).catch(() => setError(true));
     },
-    answer: (grade: Grade) =>
-      guarded(async () => {
-        if (!cardId || !card.revealed) return;
-        await signal((service) => service.activity(ring.id));
+    answer: async (grade: Grade) => {
+      if (!card.revealed) return;
+      await leaveCard((id) => {
         const durationMs = Math.max(0, performance.now() - shownAt.current);
-        await Effect.runPromise(
-          localData((data) => data.answerCard(cardId, grade, durationMs, ring.id)),
+        return Effect.runPromise(
+          localData((data) => data.answerCard(id, grade, durationMs, ring.id)),
         );
-        card.hide();
-        const { data } = await query.refetch();
-        shownAt.current = performance.now();
-        if (data?.done) await finish();
-        else read(data?.next);
-      }),
+      });
+    },
+    /** Buries the card until the next study day: another comes, and it doesn't count toward N. */
+    bury: () =>
+      leaveCard((id) =>
+        Effect.runPromise(localData((data) => data.changeCollection((c) => c.buryCard(id)))),
+      ),
     dismiss: () => guarded(() => finish(false)),
   };
 }
