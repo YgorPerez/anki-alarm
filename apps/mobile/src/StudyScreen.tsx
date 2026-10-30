@@ -1,12 +1,15 @@
-import { StudyMenu, type StudyMenuItem } from "./StudyMenu.tsx";
+import { intervalText } from "./interval-text.ts";
+import { StudyMenu } from "./StudyMenu.tsx";
 import { buryItem } from "./study-actions.ts";
 import { StudyCounts } from "./StudyCounts.tsx";
+import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useContext } from "react";
 import { ScreenActivity } from "./screen-activity.ts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   renderCard,
   nextStudyCard,
+  nextIntervals,
   studyCounts,
   type Grade,
   type Locale,
@@ -45,13 +48,23 @@ export function StudyScreen({
   const insets = useSafeAreaInsets();
   const dark = useColorScheme() === "dark";
   const study = useStudySession(deckId, onExit);
-  const { query, busy, error, canUndo, undo } = study;
+  const { query, busy, error, canUndo, undo, card } = study;
+  const [editing, setEditing] = useState<string>();
   const deckName = query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value;
+  const frame = { paddingTop: insets.top, paddingBottom: insets.bottom };
+  if (editing)
+    return (
+      <View className="flex-1 bg-background" style={frame}>
+        <StudyNoteEditor
+          cardId={editing}
+          locale={locale}
+          onSaved={study.refresh}
+          onClose={() => setEditing(undefined)}
+        />
+      </View>
+    );
   return (
-    <View
-      className="flex-1 bg-background"
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
-    >
+    <View className="flex-1 bg-background" style={frame}>
       <StudyNavigation
         counts={study.counts}
         title={deckName ?? t("study")}
@@ -59,7 +72,8 @@ export function StudyScreen({
         locale={locale}
         onExit={onExit}
         onUndo={canUndo ? undo : undefined}
-        menu={study.card ? [buryItem(locale, study.bury)] : []}
+        onEdit={card ? () => setEditing(card.id) : undefined}
+        onBury={card ? study.bury : undefined}
       />
       <StudyFeedback
         locale={locale}
@@ -109,6 +123,7 @@ function StudyReview({
             }}
           />
           <AnswerControls
+            intervals={study.intervals}
             onReveal={reveal}
             gradeHeight={56}
             revealed={revealed}
@@ -159,7 +174,8 @@ function StudyNavigation({
   locale,
   onExit,
   onUndo,
-  menu,
+  onEdit,
+  onBury,
 }: {
   counts: ReturnType<typeof studyCounts> | undefined;
   title: string;
@@ -167,8 +183,10 @@ function StudyNavigation({
   locale: Locale;
   onExit: () => void;
   onUndo: (() => Promise<void>) | undefined;
-  menu: readonly StudyMenuItem[];
+  onEdit: (() => void) | undefined;
+  onBury: (() => Promise<void>) | undefined;
 }) {
+  const t = copy(locale);
   return (
     <View className="flex-row items-center justify-between px-4">
       <Pressable
@@ -193,7 +211,14 @@ function StudyNavigation({
       >
         <Text className="text-body text-foreground">↶</Text>
       </Pressable>
-      <StudyMenu items={menu} locale={locale} busy={busy} />
+      <StudyMenu
+        items={[
+          ...(onEdit ? [{ id: "editNote", label: t("editNote"), onPress: onEdit }] : []),
+          ...(onBury ? [buryItem(locale, onBury)] : []),
+        ]}
+        locale={locale}
+        busy={busy}
+      />
     </View>
   );
 }
@@ -267,6 +292,7 @@ export function AnswerControls({
   revealed,
   gradesShown = true,
   gradeHeight = 64,
+  intervals,
   onReveal,
   busy,
   locale,
@@ -275,14 +301,17 @@ export function AnswerControls({
   revealed: boolean;
   gradesShown?: boolean;
   gradeHeight?: 56 | 64;
+  intervals?: Record<Grade, number> | undefined;
   onReveal?: () => void;
   busy: boolean;
   locale: Locale;
   onAnswer: (grade: Grade) => Promise<void>;
 }) {
   const t = copy(locale);
-  const rows = gradeRows(useWindowDimensions());
-  const height = rows.length * gradeHeight + (rows.length - 1) * 12;
+  const dimensions = useWindowDimensions();
+  const rows = gradeRows(dimensions);
+  const rowHeight = Math.max(gradeHeight, 42 * dimensions.fontScale + 8);
+  const height = rows.length * rowHeight + (rows.length - 1) * 12;
   if (!revealed || !gradesShown)
     return (
       <View style={{ height }} className="items-center justify-center">
@@ -313,13 +342,20 @@ export function AnswerControls({
             <Pressable
               key={grade}
               accessibilityRole="button"
+              accessibilityLabel={t(gradeLabels[grade])}
+              accessibilityHint={intervals ? intervalText(intervals[grade], locale) : undefined}
               disabled={busy}
               onPress={() => {
                 void onAnswer(grade);
               }}
-              style={{ height: gradeHeight }}
+              style={{ height: rowHeight }}
               className={`flex-1 items-center justify-center rounded-pill px-1 ${gradeClasses[grade]}`}
             >
+              {intervals && (
+                <Text className={`text-caption ${gradeText[grade]}`}>
+                  {intervalText(intervals[grade], locale)}
+                </Text>
+              )}
               <Text className={`text-body ${gradeText[grade]}`} style={bold}>
                 {t(gradeLabels[grade])}
               </Text>
@@ -437,6 +473,10 @@ function useStudySession(deckId: string, onExit: () => void) {
     });
   }
   return {
+    intervals:
+      query.data && cardId
+        ? nextIntervals(query.data.collection, query.data.log, cardId, query.data.now)
+        : undefined,
     counts: query.data
       ? studyCounts(query.data.collection, query.data.log, deckId, query.data.now)
       : undefined,
@@ -452,5 +492,6 @@ function useStudySession(deckId: string, onExit: () => void) {
     canUndo: answers.length > 0,
     undo,
     bury,
+    refresh,
   };
 }

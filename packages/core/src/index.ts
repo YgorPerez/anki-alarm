@@ -120,6 +120,7 @@ export type {
 } from "./reliability.ts";
 export {
   replayCard,
+  nextIntervals,
   studyQueue,
   studyCounts,
   nextStudyCard,

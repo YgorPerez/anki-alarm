@@ -34,6 +34,7 @@ export function NoteEditor({
   busy,
   onSave,
   onCancel,
+  onChange,
 }: {
   note?: Note;
   noteTypes: readonly NoteType[];
@@ -43,11 +44,17 @@ export function NoteEditor({
   busy: boolean;
   onSave: (draft: NoteDraft) => void;
   onCancel: () => void;
+  /** Any field edited. */
+  onChange?: (() => void) | undefined;
 }) {
   const t = editingCopy(locale);
   const types = noteTypeChoices(noteTypes);
   const { type: initialType, draft: defaultValues } = noteDraft(types, note, deckId);
-  const form = useForm({ defaultValues, onSubmit: ({ value }) => onSave(value) });
+  const form = useForm({
+    defaultValues,
+    listeners: { onChange: () => onChange?.() },
+    onSubmit: ({ value }) => onSave(value),
+  });
   return (
     <View className="gap-6" pointerEvents={busy ? "none" : "auto"}>
       <form.Field name="noteTypeId">

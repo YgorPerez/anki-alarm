@@ -57,6 +57,7 @@ test.each([1, 2, 3, 4] as const)(
       });
       await fireEvent(front, "touchEnd", { nativeEvent: { pageX: 12, pageY: 12, touches: [] } });
       expect(screen.getByLabelText("Verso").props.source.html).toContain("house");
+      expect(screen.getByText("<1min(s)")).toBeTruthy();
       await fireEvent.press(
         screen.getByRole("button", { name: ["De novo", "Difícil", "Bom", "Fácil"][grade - 1] }),
       );
@@ -128,7 +129,7 @@ test("Undo restores the front; the back link and system Back leave study", async
 
 test.each([
   { fontScale: 1, height: 64 },
-  { fontScale: 2, height: 140 },
+  { fontScale: 2, height: 196 },
 ])(
   "the control strip reserves $height pixels on both sides at font scale $fontScale",
   async ({ fontScale, height }) => {
@@ -149,6 +150,7 @@ test.each([
       await view.rerender(controls(true));
       expect(view.toJSON()).toMatchObject({ props: { style: { height } } });
       expect(screen.getAllByRole("button")).toHaveLength(4);
+      expect(screen.getByText("<10m")).toBeTruthy();
     } finally {
       dimensions.mockRestore();
     }
@@ -157,6 +159,7 @@ test.each([
 
 const controls = (revealed: boolean, gradesShown = true) => (
   <AnswerControls
+    intervals={{ 1: 60, 2: 360, 3: 600, 4: 86400 }}
     revealed={revealed}
     gradesShown={gradesShown}
     locale="en"
@@ -167,7 +170,7 @@ const controls = (revealed: boolean, gradesShown = true) => (
 
 test.each([
   { fontScale: 1, height: 56 },
-  { fontScale: 2, height: 124 },
+  { fontScale: 2, height: 196 },
 ])("Decks reveal bar and grades reserve $height pixels", async ({ fontScale, height }) => {
   const native = await import("react-native");
   const dimensions = vi
@@ -203,6 +206,64 @@ test.each([
   } finally {
     dimensions.mockRestore();
   }
+});
+
+test("Edit note from the menu returns to the same card, re-rendered; Back cancels the edit", async () => {
+  const exit = vi.fn<() => void>();
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Edit test");
+        c.createDeck("Edit test other");
+        c.addBasicNote(deck.id, "gato", "cat");
+        c.addBasicNote(deck.id, "rato", "mouse");
+      }),
+    ),
+  );
+  const deck = state.decks.find((d) => d.fields.name.value === "Edit test")!;
+  await render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" } } })
+      }
+    >
+      <StudyScreen deckId={deck.id} locale="pt-BR" onExit={exit} />
+    </QueryClientProvider>,
+  );
+  await fireEvent(await screen.findByLabelText("Frente"), "accessibilityAction", {
+    nativeEvent: { actionName: "activate" },
+  });
+  const back = String(screen.getByLabelText("Verso").props.source.html);
+  const word = back.includes("cat") ? "cat" : "mouse";
+
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Editar nota" }));
+  expect((await screen.findByLabelText("Verso")).props.value).toBe(word);
+  // Moving the note to another deck stays in the deck page's editor.
+  expect(screen.queryByRole("radio", { name: "Edit test other" })).toBeNull();
+  await act(async () => {
+    expect(pressBack()).toBe(true);
+  });
+  expect(exit).not.toHaveBeenCalled();
+  expect(String((await screen.findByLabelText("Verso")).props.source.html)).toBe(back);
+
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Editar nota" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Cancelar" }));
+  expect(String((await screen.findByLabelText("Verso")).props.source.html)).toBe(back);
+
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Editar nota" }));
+  await fireEvent.changeText(await screen.findByLabelText("Verso"), `${word} (editado)`);
+  await fireEvent.press(screen.getByRole("button", { name: "Salvar" }));
+  await waitFor(() =>
+    expect(String(screen.getByLabelText("Verso").props.source?.html)).toContain(
+      `${word} (editado)`,
+    ),
+  );
+  const saved = await Effect.runPromise(localData((data) => data.collection));
+  expect(saved.notes.some((n) => n.values[1]?.value === `${word} (editado)`)).toBe(true);
+  expect(exit).not.toHaveBeenCalled();
 });
 
 test("Bury from the card menu skips the card until tomorrow without answering it", async () => {

@@ -219,7 +219,7 @@ at 1.3×.
 - **Answer** 23/32 regular, in `answer`: the revealed back.
 - **Body** 17/24: rows, buttons, normal text.
 - **Label** 15/20: deck path, counts, links, "2 de 5 certos".
-- **Caption** 13/18: grade intervals under a grade, tab labels.
+- **Caption** 13/18: grade intervals above the grade name, tab labels.
 
 Card content itself is Anki HTML with the deck's own CSS, so its type is the deck author's. On the
 alarm and in study the card renders in Anki's night mode on dark grounds (`.nightMode`,
@@ -284,6 +284,10 @@ A row of four equal pills, 56px tall in Decks study and 64px on the alarm and aw
 use Body bold: De novo, Difícil, Bom, Fácil, in Anki's order. The alarm delays the grades for a few
 seconds after reveal. Good is
 solid primary; the others are their hue on its tint.
+
+Each pill shows the next interval in Caption above the grade name, using Anki's localized short
+form (for example, "<1min(s)" in pt-BR and "<1m" in English). At large font scales, the pills grow
+to hold both lines; the front and grade delay reserve that same height.
 
 ### Primary and neutral buttons
 

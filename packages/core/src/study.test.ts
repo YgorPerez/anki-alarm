@@ -1,6 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import {
   cardMemory,
+  nextIntervals,
   Collection,
   replayCard,
   studyQueue,
@@ -381,4 +382,78 @@ test("a buried card leaves study until the next study day starts, and unburying 
 test("burying a card that is missing or gone throws", () => {
   const c = new Collection({ deviceId: "a", now: () => now, random: () => new Uint8Array(16) });
   expect(() => c.buryCard("missing")).toThrow("Invalid card");
+});
+
+test("new-card intervals follow its preset learning steps without writing a review", () => {
+  const { state, cardId, preset } = fixture();
+  preset.fields.learningSteps.value = [2, 20];
+  expect(nextIntervals(state, [], cardId, now)).toEqual({
+    1: 120,
+    2: 660,
+    3: 1200,
+    4: 8 * 86400,
+  });
+  expect(cardMemory(state, [], cardId, now)!.reps).toBe(0);
+  expect(nextIntervals(state, [], "missing", now)).toBeUndefined();
+});
+
+test.each([1, 2, 3] as const)("intervals preview every grade from card state %i", (stateCode) => {
+  const { state, cardId, preset } = fixture();
+  const log: LogEntry[] = [
+    {
+      kind: "snapshot",
+      id: "snapshot",
+      cardId,
+      at: now - 86400_000,
+      state: {
+        state: stateCode,
+        due: now,
+        last_review: now - 5 * 86400_000,
+        stability: 5,
+        difficulty: 5,
+        elapsed_days: 5,
+        scheduled_days: 5,
+        learning_steps: 0,
+        reps: 3,
+        lapses: 1,
+      },
+    },
+  ];
+  const before = structuredClone(log);
+  const intervals = nextIntervals(state, log, cardId, now)!;
+  for (const grade of [1, 2, 3, 4] as const) {
+    // Commit the answer through replay: the displayed interval must describe its actual due date.
+    const answered = replayCard(
+      cardId,
+      [
+        ...log,
+        {
+          kind: "review",
+          id: "answer",
+          cardId,
+          at: now,
+          grade,
+          durationMs: 1,
+          origin: "phone",
+        },
+      ],
+      preset,
+      now,
+    );
+    expect(intervals[grade]).toBe((answered.due.getTime() - now) / 1000);
+    expect(intervals[grade]).toBeGreaterThan(0);
+  }
+  expect(log).toEqual(before);
+});
+
+test("intervals use the card's deck retention override and respond to undo", () => {
+  const { state, cardId } = fixture();
+  const original = nextIntervals(state, [], cardId, now)!;
+  state.decks[0]!.fields.desiredRetention.value = 0.99;
+  expect(nextIntervals(state, [], cardId, now)![4]).toBeLessThan(original[4]);
+  const log: LogEntry[] = [
+    { kind: "review", id: "answer", cardId, at: now, grade: 4, durationMs: 1, origin: "phone" },
+    { kind: "void", id: "undo", cardId, at: now + 1, targetId: "answer" },
+  ];
+  expect(nextIntervals(state, log, cardId, now)).toEqual(nextIntervals(state, [], cardId, now));
 });

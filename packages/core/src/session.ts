@@ -7,6 +7,7 @@ import {
   deckFamily,
   deckPreset,
   isBuried,
+  nextIntervals,
   newPosition,
   replayCard,
   type LogEntry,
@@ -157,6 +158,7 @@ export function alarmSession({ collection, log, deckId, need, ringId, now }: Ala
       pick && note && noteType
         ? {
             ...pick,
+            intervals: nextIntervals(collection, log, pick.card.id, now),
             note,
             noteType,
             deckName,
