@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
+import { pressBack } from "../test/native/react-native.ts";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
 import { expect, test, vi } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Effect } from "effect";
@@ -69,7 +70,8 @@ test.each([1, 2, 3, 4] as const)(
   },
 );
 
-test("Undo voids the last answer and brings its card back to the front", async () => {
+test("Undo restores the front; the back link and system Back leave study", async () => {
+  const exit = vi.fn<() => void>();
   const state = await Effect.runPromise(
     localData((data) =>
       data.changeCollection((c) => {
@@ -86,7 +88,7 @@ test("Undo voids the last answer and brings its card back to the front", async (
         new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" } } })
       }
     >
-      <StudyScreen deckId={deck.id} locale="pt-BR" onExit={() => {}} />
+      <StudyScreen deckId={deck.id} locale="pt-BR" onExit={exit} />
     </QueryClientProvider>,
   );
   expect(screen.getByRole("button", { name: "Desfazer" })).toHaveProperty(
@@ -117,6 +119,11 @@ test("Undo voids the last answer and brings its card back to the front", async (
     nativeEvent: { actionName: "activate" },
   });
   expect(screen.getByLabelText("Verso").props.source.html).toBe(first);
+  await fireEvent.press(screen.getByRole("button", { name: "‹ Undo test" }));
+  await act(async () => {
+    expect(pressBack()).toBe(true);
+  });
+  expect(exit).toHaveBeenCalledTimes(2);
 });
 
 test.each([
