@@ -77,6 +77,17 @@ describe("a new alarm in the editor", () => {
     ).toMatchObject({ deckId: "inglês", need: 8 });
   });
 
+  it("never copies a quick alarm, even when it was saved last", () => {
+    const quick = { ...saved("q", "inglês", 20), quick: true };
+    expect(
+      newAlarmFor("new", { alarms: [...alarms, quick], lastSavedId: "q", deckIds: decks }),
+    ).toMatchObject({ deckId: "alemão", need: 8 });
+    expect(newAlarmFor("new", { alarms: [quick], lastSavedId: "q", deckIds: decks })).toEqual({
+      ...newAlarm("new"),
+      deckId: "alemão",
+    });
+  });
+
   it("starts with the only deck when no alarm is saved", () => {
     expect(newAlarmFor("new", { alarms: [], lastSavedId: null, deckIds: ["inglês"] })).toEqual({
       ...newAlarm("new"),

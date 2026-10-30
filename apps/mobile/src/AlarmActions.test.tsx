@@ -1,8 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react-native/pure";
-import { expect, test } from "vite-plus/test";
+import { act, fireEvent, render, screen } from "@testing-library/react-native/pure";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import { newAlarm, type Alarm } from "@app/core";
 import { HomeScreen } from "./HomeScreen.tsx";
 import { AlarmEditorScreen } from "./AlarmEditorScreen.tsx";
+
+afterEach(() => vi.useRealTimers());
 
 test("Home offers duplicate from the card menu", async () => {
   const alarm = { ...newAlarm("a"), label: "Work" };
@@ -78,4 +80,35 @@ test("swiping deletes the alarm and Undo restores its settings", async () => {
   await fireEvent.press(screen.getByRole("button", { name: "Desfazer" }));
   expect(restored).toEqual([alarm]);
   expect(screen.queryByText("Alarme excluído")).toBeNull();
+});
+
+test("failed deletes keep the card, and a successful delete expires its Undo", async () => {
+  vi.useFakeTimers();
+  const alarm = { ...newAlarm("a"), label: "Work" };
+  let fail = true;
+  await render(
+    <HomeScreen
+      alarms={[alarm]}
+      decks={[]}
+      locale="en"
+      zone="UTC"
+      use24Hour
+      onEdit={() => {}}
+      onAdd={() => {}}
+      onToggle={() => {}}
+      onDelete={async () => {
+        if (fail) throw new Error("offline storage failed");
+      }}
+      onRestore={async () => {}}
+    />,
+  );
+  await fireEvent(screen.getByTestId("swipe-alarm-a"), "responderRelease", {}, { dx: 120, dy: 0 });
+  expect(screen.getByText("Work")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  fail = false;
+  await fireEvent(screen.getByTestId("swipe-alarm-a"), "responderRelease", {}, { dx: 120, dy: 0 });
+  expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+  await act(() => vi.advanceTimersByTime(9000));
+  expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  expect(screen.queryByText("Work")).toBeNull();
 });

@@ -191,3 +191,10 @@ export type { MediaFile, MediaRecord } from "./media.ts";
 export type { NextAlarmRing } from "./alarm.ts";
 
 export { duplicateAlarm } from "./duplicate-alarm.ts";
+export {
+  QUICK_ALARM_MINUTES,
+  quickAlarm,
+  quickAlarmOptions,
+  quickAlarmsDone,
+} from "./quick-alarm.ts";
+export type { QuickAlarmOptions } from "./quick-alarm.ts";

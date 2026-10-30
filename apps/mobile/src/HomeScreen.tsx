@@ -1,7 +1,14 @@
 import { SwipeAlarm } from "./SwipeAlarm.tsx";
 import { Button } from "./controls.tsx";
 import { AlarmCardMenu } from "./AlarmCardMenu.tsx";
-import { nextAlarmRing, timeLeft, type Alarm, type Locale } from "@app/core";
+import {
+  nextAlarmRing,
+  ringsIn,
+  timeLeft,
+  QUICK_ALARM_MINUTES,
+  type Alarm,
+  type Locale,
+} from "@app/core";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AppState,
@@ -12,7 +19,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { clockText, durationText, repeatSummary } from "./alarm-text.ts";
+import { clockText, durationText, repeatSummary, ringsInText } from "./alarm-text.ts";
 import { bold, regular } from "./fonts.ts";
 import { copy } from "./copy.ts";
 import { HomeEmptyState, type DeckSetup } from "./HomeEmptyState.tsx";
@@ -133,6 +140,7 @@ export function AlarmCard({
           </Text>
           <Text style={regular} className="text-label text-muted-foreground">
             {repeatSummary(alarm.rule, { locale, now, zone })}
+            {alarm.quick ? ` · ${t("quick")}` : null}
           </Text>
           {alarm.label ? (
             <Text style={regular} className="text-body text-foreground">
@@ -177,6 +185,7 @@ export function HomeScreen({
   onRefresh,
   onDelete,
   onRestore,
+  onQuickAlarm,
   setup,
 }: {
   alarms: readonly Alarm[];
@@ -194,6 +203,8 @@ export function HomeScreen({
   onRefresh?: () => void;
   onDelete?: (id: string) => Promise<void>;
   onRestore?: (alarm: Alarm) => Promise<void>;
+  /** Adds a quick alarm that many minutes from now. Without it (no saved alarm or deck), no chips. */
+  onQuickAlarm?: (minutes: number, onAdded: (alarm: Alarm) => void) => void;
   /** Given once decks and alarms have loaded; without it Home shows no empty state. */
   setup?: DeckSetup;
 }) {
@@ -203,9 +214,7 @@ export function HomeScreen({
   const [actionError, setActionError] = useState(false);
   const pending = useRef(false);
   const now = useClock();
-  useEffect(() => {
-    if (deleted && now - deleted.at >= 8000 && !busy) setDeleted(null);
-  }, [deleted, now, busy]);
+  const undoAvailable = deleted !== null && (busy || now - deleted.at < 8000);
   const visibleAlarms = alarms.filter((alarm) => !hidden.includes(alarm.id));
   const removeAlarm = async (alarm: Alarm) => {
     if (!onDelete || pending.current) return;
@@ -215,7 +224,7 @@ export function HomeScreen({
     try {
       await onDelete(alarm.id);
       setHidden((ids) => [...ids, alarm.id]);
-      setDeleted({ alarm, at: Date.now() });
+      setDeleted({ alarm, at: now });
     } catch {
       setActionError(true);
     } finally {
@@ -224,7 +233,7 @@ export function HomeScreen({
     }
   };
   const restoreAlarm = async () => {
-    if (!deleted || !onRestore || pending.current) return;
+    if (!deleted || !undoAvailable || !onRestore || pending.current) return;
     pending.current = true;
     setBusy(true);
     setActionError(false);
@@ -242,6 +251,19 @@ export function HomeScreen({
   const needsDeck = setup !== undefined && decks.length === 0;
   const t = copy(locale);
   const next = nextAlarmRing(visibleAlarms, now, zone);
+  // "Rings in …" after a chip adds its alarm, for a few seconds.
+  const [notice, setNotice] = useState<{ text: string; until: number }>();
+  const addQuickAlarm = (minutes: number) => {
+    onQuickAlarm?.(minutes, (alarm) => {
+      const at = Date.now();
+      const left = ringsIn(alarm.rule, at, zone);
+      if (left !== null)
+        setNotice({
+          text: ringsInText(left, locale),
+          until: at + 5000,
+        });
+    });
+  };
   return (
     <View className="flex-1 bg-background">
       <FlatList
@@ -262,6 +284,32 @@ export function HomeScreen({
                   })
                 : t("noEnabledAlarms")}
             </Text>
+            {onQuickAlarm ? (
+              <View className="flex-row flex-wrap gap-2">
+                {QUICK_ALARM_MINUTES.map((minutes) => (
+                  <Pressable
+                    key={minutes}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("quickAlarmLabel", { count: String(minutes) })}
+                    onPress={() => addQuickAlarm(minutes)}
+                    className="min-h-12 items-center justify-center rounded-pill bg-surface px-5"
+                  >
+                    <Text style={bold} className="text-body text-foreground">
+                      {t("quickAlarmChip", { count: String(minutes) })}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            {notice && now < notice.until ? (
+              <Text
+                accessibilityLiveRegion="polite"
+                style={regular}
+                className="text-body text-foreground"
+              >
+                {notice.text}
+              </Text>
+            ) : null}
             {banner}
             {error ? (
               <Text accessibilityRole="alert" className="text-body text-attention">
@@ -304,7 +352,7 @@ export function HomeScreen({
           {t("alarmError")}
         </Text>
       )}
-      {deleted && (
+      {undoAvailable && (
         <View className="absolute bottom-24 left-6 right-6 flex-row items-center justify-between gap-2 rounded-lg bg-surface p-4">
           <Text
             accessibilityRole="alert"
