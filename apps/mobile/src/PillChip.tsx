@@ -20,6 +20,7 @@ export function PillChip({
       className={`min-h-12 justify-center rounded-pill px-5 ${className} ${selected ? "bg-primary-tint" : "bg-surface"}`}
     >
       <Text
+        numberOfLines={1}
         style={selected ? bold : regular}
         className={`text-body ${selected ? "text-primary-ink" : "text-foreground"}`}
       >

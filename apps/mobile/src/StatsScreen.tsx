@@ -62,6 +62,15 @@ export function StatsScreen({
   const stats = data
     ? studyStats(data.collection, data.log, { now: data.now, deckId, days })
     : undefined;
+  const wakeUp =
+    data && !deckId
+      ? wakeUpScopes(
+          wakeUpStats(data.events, data.log, { now: data.now, days }),
+          data.alarms,
+          t,
+          locale,
+        )
+      : undefined;
   return (
     <View
       className="flex-1 bg-background"
@@ -69,9 +78,12 @@ export function StatsScreen({
     >
       <ScrollView contentContainerClassName="gap-6 px-6 pb-6">
         {onExit && <PillChip label={t("back")} onPress={onExit} />}
-        <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
-          {t("stats")}
-        </Text>
+        {/* As a tab, the native header carries the title. */}
+        {onExit && (
+          <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
+            {t("stats")}
+          </Text>
+        )}
         <View className="flex-row flex-wrap gap-2">
           <PillChip label={t("allDecks")} selected={!deckId} onPress={() => setDeckId(undefined)} />
           {data?.collection.decks.map((deck) => (
@@ -93,17 +105,9 @@ export function StatsScreen({
             />
           ))}
         </View>
-        {data && !deckId ? (
-          <Section title={t("wakeUp")} hint={t("wakeUpHint")}>
-            <WakeUpSection
-              scopes={wakeUpScopes(
-                wakeUpStats(data.events, data.log, { now: data.now, days }),
-                data.alarms,
-                t,
-                locale,
-              )}
-              t={t}
-            />
+        {wakeUp ? (
+          <Section title={t("wakeUp")} hint={wakeUp.length ? t("wakeUpHint") : null}>
+            <WakeUpSection scopes={wakeUp} t={t} />
           </Section>
         ) : null}
         {stats ? (
@@ -166,18 +170,21 @@ function Sections({
   locale: Locale;
 }) {
   return studySections(stats, t).map((section) => (
-    <Section key={section.title} title={section.title} hint={section.hint}>
+    <Section key={section.title} title={section.title} hint={section.notice ? null : section.hint}>
       {section.notice ? (
         <Text style={regular} className="text-body text-muted-foreground">
           {section.notice}
         </Text>
-      ) : null}
-      {section.body.kind === "retention" ? (
-        <RetentionTable table={section.body.table} />
       ) : (
-        <StatsChart chart={section.body} theme={theme} locale={locale} />
+        <>
+          {section.body.kind === "retention" ? (
+            <RetentionTable table={section.body.table} />
+          ) : (
+            <StatsChart chart={section.body} theme={theme} locale={locale} />
+          )}
+          {section.legend ? <GradeLegend t={t} theme={theme} /> : null}
+        </>
       )}
-      {section.legend ? <GradeLegend t={t} theme={theme} /> : null}
     </Section>
   ));
 }

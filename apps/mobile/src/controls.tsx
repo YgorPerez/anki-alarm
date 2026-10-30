@@ -27,8 +27,8 @@ export function Button({
       onPress={onPress}
       className={
         primary
-          ? "min-h-12 justify-center rounded-pill bg-primary px-5 py-3 active:opacity-80 disabled:opacity-40"
-          : "min-h-12 justify-center rounded-pill bg-surface px-5 py-3 active:opacity-80 disabled:opacity-40"
+          ? "min-h-12 items-center justify-center rounded-pill bg-primary px-5 py-3 active:opacity-80 disabled:opacity-40"
+          : "min-h-12 items-center justify-center rounded-pill bg-surface px-5 py-3 active:opacity-80 disabled:opacity-40"
       }
     >
       <Text

@@ -48,6 +48,15 @@ export function SettingsButton({
     </Pressable>
   );
 }
+/** Each tab's name, on its button and as its page's title in the native header. */
+export function tabLabels(locale: Locale) {
+  const t = copy(locale);
+  return {
+    index: t("alarms"),
+    decks: t("title"),
+    stats: locale === "pt-BR" ? "Estatísticas" : "Stats",
+  };
+}
 export function TabBar({
   locale,
   active,
@@ -61,12 +70,7 @@ export function TabBar({
   bottom: number;
   colors?: Theme;
 }) {
-  const t = copy(locale);
-  const labels = {
-    index: t("alarms"),
-    decks: t("title"),
-    stats: locale === "pt-BR" ? "Estatísticas" : "Stats",
-  };
+  const labels = tabLabels(locale);
   return (
     <View
       className="flex-row border-t border-border bg-background"
@@ -82,14 +86,12 @@ export function TabBar({
           onPress={() => onSelect(name)}
           className="min-h-16 flex-1 items-center justify-center gap-1 py-2"
         >
-          <View
-            style={{ width: 64, height: 32, borderRadius: 16 }}
-            className={
-              active === name
-                ? "items-center justify-center bg-primary-tint"
-                : "items-center justify-center"
-            }
-          >
+          <View className="h-8 w-16 items-center justify-center">
+            {/* Always mounted and only faded: Android dropped the radius when the fill changed. */}
+            <View
+              style={{ borderRadius: 16, opacity: active === name ? 1 : 0 }}
+              className="absolute inset-0 bg-primary-tint"
+            />
             <Icon
               name={name}
               color={

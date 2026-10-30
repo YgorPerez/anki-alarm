@@ -225,23 +225,26 @@ function HomeHeader({
   const t = copy(locale);
   return (
     <View className="gap-4 pb-4">
-      <View className="items-center gap-2 pb-2">
-        <Text
-          accessibilityRole="header"
-          style={bold}
-          className="text-title text-foreground text-center"
-        >
-          {next
-            ? t("alarmCountdown", { time: countdownText(timeLeft(next.remainingMs), locale) })
-            : t("noEnabledAlarms")}
-        </Text>
-        {next && (
-          <Text style={regular} className="text-body text-muted-foreground text-center">
-            {dayText(next.at, locale, zone)} ·{" "}
-            <Text style={clock}>{timeText(next.at, locale, zone, use24Hour)}</Text>
+      {/* The empty state has its own heading; "no active alarm" above it says the same thing. */}
+      {setup && showEmptyState && !next ? null : (
+        <View className="items-center gap-2 pb-2">
+          <Text
+            accessibilityRole="header"
+            style={bold}
+            className="text-title text-foreground text-center"
+          >
+            {next
+              ? t("alarmCountdown", { time: countdownText(timeLeft(next.remainingMs), locale) })
+              : t("noEnabledAlarms")}
           </Text>
-        )}
-      </View>
+          {next && (
+            <Text style={regular} className="text-body text-muted-foreground text-center">
+              {dayText(next.at, locale, zone)} ·{" "}
+              <Text style={clock}>{timeText(next.at, locale, zone, use24Hour)}</Text>
+            </Text>
+          )}
+        </View>
+      )}
       {banner}
       {error ? (
         <Text style={regular} accessibilityRole="alert" className="text-body text-attention">
