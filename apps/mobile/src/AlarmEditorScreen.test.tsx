@@ -47,10 +47,12 @@ test("a new alarm takes its time from inline wheels, its days from the Repeat sh
   const done = await openEditor(
     newAlarmFor("a", { alarms: [], lastSavedId: null, deckIds: ["inglês"] }),
   );
-  expect(StyleSheet.flatten(screen.getByText("07:00").props.style)).toMatchObject({
-    fontFamily: "Inter_700Bold",
-    fontVariant: ["tabular-nums"],
-  });
+  for (const part of ["07", "00"])
+    for (const value of screen.getAllByText(part, { includeHiddenElements: true }))
+      expect(StyleSheet.flatten(value.props.style)).toMatchObject({
+        fontFamily: "Inter_700Bold",
+        fontVariant: ["tabular-nums"],
+      });
   expect(screen.queryByRole("button", { name: "More options" })).toBeNull();
 
   const hours = screen.getByRole("adjustable", { name: "Hours" });
