@@ -62,6 +62,7 @@ export default defineConfig({
       // The web's Tailwind classes against the theme (`apps/web/src/styles.css`, which imports
       // `@app/design-tokens`) and its shadcn components (`apps/web/components.json`).
       "@shadcn/lint",
+      { name: "mobile-design", specifier: "./scripts/tooling/mobile-radius-plugin.mjs" },
     ],
     settings: {
       shadcn: {
@@ -81,6 +82,10 @@ export default defineConfig({
       "import/no-unassigned-import": ["error", { allow: ["**/*.css"] }],
     },
     overrides: [
+      {
+        files: ["apps/mobile/**"],
+        rules: { "mobile-design/two-radius": "error" },
+      },
       {
         files: ["apps/web/src/**"],
         excludeFiles: ["apps/web/src/ui/shadcn/**"],

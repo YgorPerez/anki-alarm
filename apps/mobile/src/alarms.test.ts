@@ -25,6 +25,8 @@ const alarm: Alarm = {
   awakeCheck: false,
   awakeCheckMinutes: 5,
   readAloud: false,
+  skip: null,
+  quick: false,
 };
 it("saves alarms and replaces the native schedule with every enabled alarm", async () => {
   const native = memoryAlarmService();
@@ -165,4 +167,72 @@ it("re-reads reliability after a settings change and retains onboarding completi
       ),
     ),
   ).toBe(true);
+});
+it("a quick alarm deletes itself once its ring is dismissed, and others stay", async () => {
+  const native = memoryAlarmService();
+  const controller = alarmController(memoryAlarmRepository());
+  const run = <A>(effect: Effect.Effect<A, Error, AlarmService>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(native.layer)));
+  const quick = { ...alarm, id: "q", quick: true };
+  await run(controller.save(alarm));
+  await run(controller.save(quick));
+  const event = (kind: string, id: string) => ({
+    id,
+    kind,
+    alarmId: quick.id,
+    ringId: "ring-1",
+    wallTime: 1000,
+    elapsedRealtime: 500,
+  });
+  const ring: Ring = {
+    id: "ring-1",
+    alarm: quick,
+    startedAt: 1000,
+    phase: "ringing",
+    snoozes: 0,
+    snoozedUntil: null,
+  };
+  native.deliver(event("ringStarted", "event-1"), ring);
+  await run(controller.resume);
+  expect(await Effect.runPromise(controller.list)).toEqual([alarm, quick]);
+  native.deliver(event("dismissed", "event-2"));
+  await run(controller.resume);
+  expect(await Effect.runPromise(controller.list)).toEqual([alarm]);
+  expect(await run(Effect.flatMap(AlarmService, (service) => service.list))).toEqual([alarm]);
+});
+
+it("restoring a deleted alarm through save restores its native schedule", async () => {
+  const native = memoryAlarmService();
+  const controller = alarmController(memoryAlarmRepository());
+  const run = <A>(effect: Effect.Effect<A, Error, AlarmService>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(native.layer)));
+  await run(controller.save(alarm));
+  await run(controller.remove(alarm.id));
+  expect(await run(Effect.flatMap(AlarmService, (service) => service.list))).toEqual([]);
+  const restored = { ...alarm, id: "restored" };
+  await run(controller.save(restored));
+  expect(await run(Effect.flatMap(AlarmService, (service) => service.list))).toEqual([restored]);
+  expect(await Effect.runPromise(controller.list)).toEqual([restored]);
+});
+
+it("resume persists expired skips, including disabled alarms, and schedules the cleared values", async () => {
+  const native = memoryAlarmService();
+  const repository = memoryAlarmRepository();
+  const controller = alarmController(repository);
+  const expired = { ...alarm, skip: 1 };
+  const disabled = { ...alarm, id: "disabled", enabled: false, skip: 1 };
+  const future = { ...alarm, id: "future", skip: 8_000_000_000_000 };
+  // Seed storage directly, as on an app restart or after a sync pull.
+  await Effect.runPromise(Effect.forEach([expired, disabled, future], repository.save));
+  await Effect.runPromise(controller.resume.pipe(Effect.provide(native.layer)));
+  expect(await Effect.runPromise(controller.list)).toEqual([
+    { ...expired, skip: null },
+    { ...disabled, skip: null },
+    future,
+  ]);
+  expect(
+    await Effect.runPromise(
+      Effect.flatMap(AlarmService, (service) => service.list).pipe(Effect.provide(native.layer)),
+    ),
+  ).toEqual([{ ...expired, skip: null }, future]);
 });

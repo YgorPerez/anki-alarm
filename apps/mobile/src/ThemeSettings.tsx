@@ -69,7 +69,7 @@ export function ThemeSettings({ locale, onBack }: { locale: Locale; onBack: () =
         </Text>
         <Pressable
           accessibilityRole="button"
-          className="self-start rounded-full bg-surface px-5 py-3 active:opacity-80"
+          className="self-start rounded-pill bg-surface px-5 py-3 active:opacity-80"
           onPress={() =>
             Alert.alert(t("iconTitle"), t("iconWarning"), [
               { text: t("cancel"), style: "cancel" },
@@ -84,7 +84,7 @@ export function ThemeSettings({ locale, onBack }: { locale: Locale; onBack: () =
         <Pressable
           accessibilityRole="button"
           onPress={() => attempt(resetTheme())}
-          className="self-start rounded-full bg-surface px-5 py-3 active:opacity-80"
+          className="self-start rounded-pill bg-surface px-5 py-3 active:opacity-80"
         >
           <Text style={bold} className="text-label text-foreground">
             {t("reset")}
@@ -128,8 +128,8 @@ function FieldRow({
             onPress={() => attempt(setThemeField(field, swatch))}
             className={
               value === swatch
-                ? "size-11 rounded-full border-4 border-foreground"
-                : "size-11 rounded-full border border-border"
+                ? "size-11 rounded-pill border-4 border-foreground"
+                : "size-11 rounded-pill border border-border"
             }
             style={{ backgroundColor: swatch === "primary" ? choice.primary : swatch }}
           />
@@ -143,7 +143,7 @@ function FieldRow({
           autoCorrect={false}
           maxLength={7}
           style={regular}
-          className="h-11 min-w-28 rounded-full border border-border px-4 text-body text-foreground"
+          className="h-11 min-w-28 rounded-lg border border-border px-4 text-body text-foreground"
           placeholderTextColorClassName="accent-muted-foreground"
         />
       </View>
@@ -155,14 +155,14 @@ function FieldRow({
 function AlarmPreview({ t }: { t: T }) {
   return (
     <ScopedTheme theme="dark">
-      <View className="gap-4 rounded-xl bg-background p-4">
+      <View className="gap-4 rounded-lg bg-background p-4">
         <View className="flex-row items-center justify-between">
           <Text style={regular} className="text-label text-muted-foreground">
             {t("onTheAlarm")}
           </Text>
           <Text
             style={bold}
-            className="rounded-full bg-attention-tint px-3 py-1 text-label text-attention"
+            className="rounded-pill bg-attention-tint px-3 py-1 text-label text-attention"
           >
             {t("cardsLeft")}
           </Text>
@@ -180,7 +180,7 @@ function AlarmPreview({ t }: { t: T }) {
 
 function Grade({ label, pill, ink }: { label: string; pill: string; ink: string }) {
   return (
-    <View className={`h-16 flex-1 items-center justify-center rounded-full ${pill}`}>
+    <View className={`h-16 flex-1 items-center justify-center rounded-pill ${pill}`}>
       <Text style={bold} className={`text-label ${ink}`}>
         {label}
       </Text>

@@ -1,7 +1,4 @@
 import "./global.css";
-
-import { registerRootComponent } from "expo";
-
-import { App } from "./src/App.tsx";
-
-registerRootComponent(App);
+// Expo Router registers the root after our stylesheet.
+// oxlint-disable-next-line import/no-unassigned-import
+import "expo-router/entry";

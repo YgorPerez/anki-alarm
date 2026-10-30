@@ -27,11 +27,7 @@ object AlarmScheduler {
   private fun arm(ctx: Context, id: String, at: Long) {
     am(ctx).setAlarmClock(AlarmManager.AlarmClockInfo(at, showIntent(ctx)), operation(ctx, id))
   }
-  fun next(alarm: JSONObject, now: Long): Long? {
-    val r = alarm.getJSONObject("rule"); val days = r.optJSONArray("repeatDays") ?: JSONArray()
-    return NextRing.calculate(r.getInt("hour"), r.getInt("minute"), (0 until days.length()).map { days.getInt(it) },
-      r.optString("onceDate").takeIf { it.isNotEmpty() }, now, ZoneId.systemDefault().id)
-  }
+  fun next(alarm: JSONObject, now: Long): Long? = NextRing.of(alarm, now, ZoneId.systemDefault().id)
   @Synchronized fun setAlarms(ctx: Context, alarms: JSONArray, policy: JSONObject, now: Long = System.currentTimeMillis()) {
     val previous = AlarmStore.alarms(ctx)
     val sources = (0 until previous.length()).associate { previous.getJSONObject(it).let { a -> a.getString("id") to a.optString("soundSource") } }

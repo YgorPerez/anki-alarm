@@ -1,18 +1,22 @@
-import { AlarmSoundSettings } from "./AlarmSoundSettings.tsx";
-import { AlarmDeckSettings } from "./AlarmDeckSettings.tsx";
-import { AlarmSnoozeSettings } from "./AlarmSnoozeSettings.tsx";
-import { AlarmReadAloudSettings } from "./AlarmReadAloudSettings.tsx";
+import { RuntimeContext, useRuntime } from "./runtime.ts";
+import { useNow } from "./clock.tsx";
+import { regular, bold } from "./fonts.ts";
+import { AlarmSettingsRows } from "./AlarmSettingsRows.tsx";
+import { HomeScreen } from "./HomeScreen.tsx";
+import { useAlarmDecks } from "./AlarmDeckSettings.tsx";
+import { AlarmEditorScreen } from "./AlarmEditorScreen.tsx";
 import { AlarmScreen } from "./AlarmScreen.tsx";
 import { AwakeCheckScreen } from "./AwakeCheckScreen.tsx";
-import { AlarmAwakeCheckSettings } from "./AlarmAwakeCheckSettings.tsx";
 import { ReliabilityScreen } from "./ReliabilityScreen.tsx";
 import { reliabilityCopy } from "./reliability-copy.ts";
 import { UpdateOffer } from "./UpdateOffer.tsx";
 import { AccountPanel } from "./AccountPanel.tsx";
 import { appSync } from "./app-sync.ts";
 import {
-  newAlarm,
-  nextRing,
+  duplicateAlarm,
+  newAlarmFor,
+  quickAlarm,
+  quickAlarmOptions,
   reliabilityChecklist,
   themeFor,
   type Alarm,
@@ -24,27 +28,21 @@ import {
   useFonts,
 } from "@expo-google-fonts/atkinson-hyperlegible";
 import { CollectionScreen } from "./CollectionScreen.tsx";
+import { AnkiDroidScreen } from "./AnkiDroidScreen.tsx";
+import { pickAndImportApkg } from "./apkg.ts";
 import { androidAnkiDroid } from "./ankidroid-android.ts";
 import { syncBackAfterSession } from "./ankidroid.ts";
 import { StatsScreen } from "./StatsScreen.tsx";
-import { statsCopy } from "@app/stats-ui";
+
 import { Effect } from "effect";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useState } from "react";
-import type { ListRenderItemInfo } from "react-native";
-import {
-  Alert,
-  AppState,
-  BackHandler,
-  Pressable,
-  FlatList,
-  Switch,
-  Text,
-  TextInput,
-  View,
-  useColorScheme,
-} from "react-native";
-import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useMemo, useCallback, useEffect, useState, type ReactNode } from "react";
+import { ScreenActivity } from "./screen-activity.ts";
+import { useRouter, useIsFocused, useLocalSearchParams } from "expo-router";
+import { NavigationGate } from "./NavigationGate.tsx";
+import { SettingsScreen } from "./SettingsScreen.tsx";
+import { AppState, Pressable, Text, View, useColorScheme } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { copy } from "./copy.ts";
 import { AlarmService, alarmController, type AwakeCheck, type Ring } from "./alarms.ts";
 import { androidAlarmService, native } from "./alarm-android.ts";
@@ -55,6 +53,7 @@ import { initializeTheme, useThemeChoice } from "./theme.ts";
 import { ScopedTheme } from "uniwind";
 import { queryClient } from "./query.ts";
 import { useUI } from "./ui.ts";
+const timeZoneFormatter = new Intl.DateTimeFormat();
 const repository = {
   list: localData((data) => data.alarms),
   save: (alarm: Alarm) => localData((data) => data.saveAlarm(alarm)),
@@ -64,7 +63,84 @@ const repository = {
   events: localData((data) => data.events),
 };
 
-export function App() {
+function RuntimeProvider({
+  alarms,
+  editor,
+  reliability,
+  children,
+}: {
+  alarms: ReactNode;
+  editor: (id: string, duplicate?: string) => ReactNode;
+  reliability: (onExit: () => void) => ReactNode;
+  children: ReactNode;
+}) {
+  const value = useMemo(() => ({ alarms, editor, reliability }), [alarms, editor, reliability]);
+  return <RuntimeContext value={value}>{children}</RuntimeContext>;
+}
+export function AlarmsRoute() {
+  return <>{useRuntime().alarms}</>;
+}
+export function AlarmEditorRoute() {
+  const { id, duplicate } = useLocalSearchParams<{ id: string; duplicate?: string }>();
+  return <>{useRuntime().editor(id, duplicate)}</>;
+}
+export function ReliabilityRoute() {
+  const router = useRouter();
+  return <>{useRuntime().reliability(() => router.back())}</>;
+}
+export function SettingsRoute() {
+  const router = useRouter();
+  const { locale, setLocale } = useUI();
+  return (
+    <SettingsScreen
+      locale={locale}
+      onReliability={() => router.push("/settings/reliability")}
+      onTheme={() => router.push("/settings/theme")}
+      switchLanguage={() => setLocale(locale === "en" ? "pt-BR" : "en")}
+      account={<AccountPanel sync={appSync} locale={locale} />}
+      update={<UpdateOffer locale={locale} dismissible={false} />}
+    />
+  );
+}
+export function ThemeRoute() {
+  const router = useRouter();
+  return <ThemeSettings locale={useUI().locale} onBack={() => router.back()} />;
+}
+export function DecksRoute() {
+  const router = useRouter();
+  const focused = useIsFocused();
+  return (
+    <ScreenActivity value={focused}>
+      <CollectionScreen
+        locale={useUI().locale}
+        ankiDroid={androidAnkiDroid}
+        onTheme={() => router.push("/settings/theme")}
+      />
+    </ScreenActivity>
+  );
+}
+/** Links an AnkiDroid deck from Home's empty state; the new deck then shows on Home. */
+export function AnkiDroidRoute() {
+  const router = useRouter();
+  return (
+    <AnkiDroidScreen
+      ankiDroid={androidAnkiDroid}
+      locale={useUI().locale}
+      onExit={() => router.back()}
+      onOpen={() => router.back()}
+    />
+  );
+}
+export function StatsRoute() {
+  const scheme = useColorScheme();
+  return (
+    <StatsScreen
+      locale={useUI().locale}
+      theme={themeFor(useThemeChoice(), scheme === "dark" ? "dark" : "light")}
+    />
+  );
+}
+export function App({ children }: { children: ReactNode }) {
   const [fontsLoaded, fontError] = useFonts({
     AtkinsonHyperlegible_400Regular,
     AtkinsonHyperlegible_700Bold,
@@ -72,7 +148,11 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
-        {fontsLoaded || fontError ? <Home /> : <View className="flex-1 bg-background" />}
+        {fontsLoaded || fontError ? (
+          <Home>{children}</Home>
+        ) : (
+          <View className="flex-1 bg-background" />
+        )}
         <StatusBar style="auto" />
       </SafeAreaProvider>
     </QueryClientProvider>
@@ -80,42 +160,35 @@ export function App() {
 }
 const run = <A,>(effect: Effect.Effect<A, Error, AlarmService>) =>
   Effect.runPromise(effect.pipe(Effect.provide(androidAlarmService)));
-
-const currentTime = () => Date.now();
-function Home() {
+function Home({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const [onboarding, setOnboarding] = useState(() => !native.isOnboardingComplete());
-  const [showSettings, setShowSettings] = useState(false);
-  const [showDecks, setShowDecks] = useState(false);
-  const [showStats, setShowStats] = useState(false);
-  const scheme = useColorScheme();
+
   const [controller] = useState(() => alarmController(repository));
   const client = useQueryClient();
-  const [showTheme, setShowTheme] = useState(false);
+
   const alarmsQuery = useQuery({
     queryKey: ["alarms"],
     queryFn: () => Effect.runPromise(controller.list),
   });
   const alarms = alarmsQuery.data ?? [];
-  const { locale, setLocale, confirmedSettings: confirmedList, confirmSetting } = useUI();
+  const {
+    locale,
+    setLocale,
+    confirmedSettings: confirmedList,
+    confirmSetting,
+    setLastSavedAlarm,
+    lastSavedAlarm,
+  } = useUI();
   const confirmedSettings = new Set(confirmedList);
   const [ring, setRing] = useState<Ring | null>(null);
   const [awakeCheck, setAwakeCheck] = useState<AwakeCheck | null>(null);
-  const [editing, setEditing] = useState<Alarm | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
     void initializeTheme().catch(() => setError(copy(locale)("error")));
   }, [locale]);
-  useEffect(() => {
-    if (!showTheme || ring) return undefined;
-    const back = BackHandler.addEventListener("hardwareBackPress", () => {
-      setShowTheme(false);
-      return true;
-    });
-    return () => back.remove();
-  }, [showTheme, ring]);
   const [permissions, setPermissions] = useState(() => native.getPermissions());
   const t = copy(locale);
-  const insets = useSafeAreaInsets();
   const theme = useThemeChoice();
   useEffect(() => {
     const dark = themeFor(theme, "dark");
@@ -140,6 +213,7 @@ function Home() {
         .then((active) => {
           setRing(active.ring);
           setAwakeCheck(active.awakeCheck);
+          void client.invalidateQueries({ queryKey: ["alarms"] });
           // An alarm folded into the ring can raise its N.
           void client.invalidateQueries({ queryKey: ["alarmSession"] });
         })
@@ -172,35 +246,26 @@ function Home() {
     appSync?.syncNow();
     void client.invalidateQueries({ queryKey: ["alarms"] }).finally(() => setRefreshing(false));
   }, [client]);
+  // The editor shows its own failure; a toggle on Home shows it there.
   const save = useCallback(
-    (alarm: Alarm) => {
-      void run(controller.save(alarm))
-        .then(() => {
-          void client.invalidateQueries({ queryKey: ["alarms"] });
-          setEditing(null);
-          setError("");
-        })
-        .catch(() => setError(copy(locale)("alarmError")));
-    },
-    [controller, locale, client],
+    (alarm: Alarm) =>
+      run(controller.save(alarm)).then(() => {
+        void client.invalidateQueries({ queryKey: ["alarms"] });
+        setError("");
+      }),
+    [controller, client],
+  );
+  const toggle = useCallback(
+    (alarm: Alarm) => void save(alarm).catch(() => setError(copy(locale)("alarmError"))),
+    [save, locale],
   );
   const remove = useCallback(
-    (alarmId: string) => {
-      void run(controller.remove(alarmId))
-        .then(() => {
-          void client.invalidateQueries({ queryKey: ["alarms"] });
-          setEditing(null);
-          setError("");
-        })
-        .catch(() => setError(copy(locale)("alarmError")));
-    },
-    [controller, locale, client],
-  );
-  const renderAlarm = useCallback(
-    ({ item }: ListRenderItemInfo<Alarm>) => (
-      <AlarmRow alarm={item} locale={locale} onEdit={setEditing} onSave={save} />
-    ),
-    [locale, save],
+    (alarmId: string) =>
+      run(controller.remove(alarmId)).then(() => {
+        void client.invalidateQueries({ queryKey: ["alarms"] });
+        setError("");
+      }),
+    [controller, client],
   );
   // After each alarm session and awake check: its reviews reach the other devices.
   const afterAlarm = () => {
@@ -208,6 +273,8 @@ function Home() {
       .then((next) => {
         setRing(next.ring);
         setAwakeCheck(next.awakeCheck);
+        // A dismissed quick alarm deleted itself.
+        void client.invalidateQueries({ queryKey: ["alarms"] });
         // After each alarm session or awake check: its reviews reach the other devices, and
         // AnkiDroid when auto sync back is on. A failed sync back retries after the next one.
         appSync?.syncNow();
@@ -215,317 +282,219 @@ function Home() {
       })
       .catch(() => setError(t("alarmError")));
   };
-  if (ring)
-    return (
-      <ScopedTheme theme="dark">
-        <AlarmScreen
-          key={ring.id}
-          ring={ring}
-          locale={locale}
-          layer={androidAlarmService}
-          onDismissed={afterAlarm}
-        />
-      </ScopedTheme>
-    );
-  // A check still waiting for its delay leaves the app as usual.
-  if (awakeCheck?.shownAt)
-    return (
-      <ScopedTheme theme="dark">
-        <AwakeCheckScreen
-          key={awakeCheck.id}
-          check={awakeCheck}
-          locale={locale}
-          layer={androidAlarmService}
-          onPassed={afterAlarm}
-        />
-      </ScopedTheme>
-    );
-  if (onboarding || showSettings)
-    return (
-      <ReliabilityScreen
-        permissions={permissions}
-        onboarding={onboarding}
+  const reliability = (onExit: () => void, setup = false) => (
+    <ReliabilityScreen
+      permissions={permissions}
+      onboarding={setup}
+      locale={locale}
+      layer={androidAlarmService}
+      confirmed={confirmedSettings}
+      onConfirm={confirmSetting}
+      refresh={() => setPermissions(native.getPermissions())}
+      onExit={onExit}
+      switchLanguage={() => setLocale(locale === "en" ? "pt-BR" : "en")}
+    />
+  );
+  const [use24Hour, setUse24Hour] = useState(() => native.is24HourFormat());
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") setUse24Hour(native.is24HourFormat());
+    });
+    return () => subscription.remove();
+  }, []);
+  const zone = timeZoneFormatter.resolvedOptions().timeZone;
+  const takeover = ring ? (
+    <ScopedTheme theme="dark">
+      <AlarmScreen
+        key={ring.id}
+        ring={ring}
         locale={locale}
+        zone={zone}
+        use24Hour={use24Hour}
         layer={androidAlarmService}
-        confirmed={confirmedSettings}
-        onConfirm={confirmSetting}
-        refresh={() => setPermissions(native.getPermissions())}
-        onExit={() => {
-          setOnboarding(false);
-          setShowSettings(false);
-        }}
-        switchLanguage={() => setLocale(locale === "en" ? "pt-BR" : "en")}
-      >
-        <UpdateOffer locale={locale} dismissible={false} />
-      </ReliabilityScreen>
-    );
-  if (showTheme) return <ThemeSettings locale={locale} onBack={() => setShowTheme(false)} />;
-  if (showStats)
-    return (
-      <StatsScreen
-        locale={locale}
-        theme={themeFor(theme, scheme === "dark" ? "dark" : "light")}
-        onExit={() => setShowStats(false)}
+        onDismissed={afterAlarm}
       />
-    );
-  if (showDecks)
-    return (
-      <CollectionScreen
+    </ScopedTheme>
+  ) : awakeCheck?.shownAt ? (
+    <ScopedTheme theme="dark">
+      <AwakeCheckScreen
+        key={awakeCheck.id}
+        check={awakeCheck}
         locale={locale}
-        onExit={() => setShowDecks(false)}
-        onTheme={() => setShowTheme(true)}
-        ankiDroid={androidAnkiDroid}
+        zone={zone}
+        use24Hour={use24Hour}
+        layer={androidAlarmService}
+        onPassed={afterAlarm}
       />
-    );
+    </ScopedTheme>
+  ) : null;
 
-  return (
-    <View
-      className="flex-1 bg-background"
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
-    >
-      <FlatList
-        contentContainerStyle={{ padding: 24, gap: 20 }}
-        data={editing ? [] : alarms}
-        refreshing={refreshing}
-        onRefresh={pullToRefresh}
-        keyExtractor={(alarm) => alarm.id}
-        renderItem={renderAlarm}
-        ListHeaderComponent={
-          <View className="gap-4">
-            <Text className="text-title font-bold text-foreground">{t("alarms")}</Text>
-            <Pressable accessibilityRole="button" onPress={() => setShowDecks(true)}>
-              <Text className="text-body text-primary">{t("title")}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={() => setShowStats(true)}>
-              <Text className="text-body text-primary-ink">{statsCopy(locale)("stats")}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={() => setShowTheme(true)}>
-              <Text className="text-body text-primary-ink">{t("theme")}</Text>
-            </Pressable>
-            {!reliabilityChecklist(permissions, confirmedSettings).ready && (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setShowSettings(true)}
-                className="min-h-12 flex-row items-center justify-between gap-4 rounded-lg bg-surface p-4"
-              >
-                <Text className="shrink text-body text-attention">
-                  {reliabilityCopy(locale)("atRisk")}
-                </Text>
-                <Text className="text-body font-bold text-primary-ink">
-                  {reliabilityCopy(locale)("fix")}
-                </Text>
-              </Pressable>
-            )}
-            {editing ? (
-              <AlarmEditor
-                alarm={editing}
-                locale={locale}
-                onSave={save}
-                onCancel={() => setEditing(null)}
-                saved={alarms.some((a) => a.id === editing.id)}
-                onDelete={remove}
-              />
-            ) : (
-              <>
-                <Pressable
-                  accessibilityRole="button"
-                  className="rounded-pill bg-primary p-4"
-                  onPress={() => setEditing(newAlarm(native.createId()))}
-                >
-                  <Text className="text-body text-primary-foreground">{t("add")}</Text>
-                </Pressable>
-              </>
-            )}
-          </View>
-        }
-        ListFooterComponent={
-          <View className="gap-4">
-            <UpdateOffer locale={locale} />
-            <AccountPanel sync={appSync} locale={locale} />
-            <Text accessibilityRole="alert" className="text-body text-attention">
-              {error || (alarmsQuery.isError ? t("alarmError") : "")}
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              className="min-h-12 justify-center"
-              onPress={() => setShowSettings(true)}
-            >
-              <Text className="text-body text-primary">{reliabilityCopy(locale)("settings")}</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setLocale(locale === "en" ? "pt-BR" : "en")}
-            >
-              <Text className="text-body text-primary">{t("switchLanguage")}</Text>
-            </Pressable>
-          </View>
-        }
-      />
-    </View>
-  );
-}
-function AlarmRow({
-  alarm,
-  locale,
-  onEdit,
-  onSave,
-}: {
-  alarm: Alarm;
-  locale: Locale;
-  onEdit: (alarm: Alarm) => void;
-  onSave: (alarm: Alarm) => void;
-}) {
-  const t = copy(locale);
-  return (
-    <View className="flex-row items-center justify-between border-b border-border py-4">
-      <Pressable accessibilityRole="button" onPress={() => onEdit(alarm)}>
-        <Text className="text-title text-foreground">{`${String(alarm.rule.hour).padStart(2, "0")}:${String(alarm.rule.minute).padStart(2, "0")}`}</Text>
-        <Text className="text-body text-muted-foreground">{alarm.label}</Text>
-      </Pressable>
-      <Switch
-        accessibilityLabel={`${alarm.label}: ${t(alarm.enabled ? "enabled" : "disabled")}`}
-        value={alarm.enabled}
-        onValueChange={(enabled) => onSave({ ...alarm, enabled })}
-      />
-    </View>
-  );
-}
-/**
- * The editor's time and date as a rule that rings again, or null. Outside the component: React
- * Compiler doesn't compile a `throw` inside `try`.
- */
-function parseRule(time: string, date: string, days: readonly number[]): Alarm["rule"] | null {
-  try {
-    if (
-      !/^\d{2}:\d{2}$/.test(time) ||
-      (date &&
-        (!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
-          new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date))
-    )
-      return null;
-    const [hour, minute] = time.split(":").map(Number);
-    const rule = {
-      hour: hour!,
-      minute: minute!,
-      ...(date ? { onceDate: date } : { repeatDays: days }),
-    };
-    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    // nextRing throws on an hour or minute out of range.
-    return nextRing(rule, currentTime(), zone) === null ? null : rule;
-  } catch {
-    return null;
-  }
-}
-function AlarmEditor({
-  alarm,
-  locale,
-  onSave,
-  onCancel,
-  saved,
-  onDelete,
-}: {
-  alarm: Alarm;
-  locale: Locale;
-  onSave: (alarm: Alarm) => void;
-  onCancel: () => void;
-  /** A saved alarm can be deleted; a new one only cancelled. */
-  saved: boolean;
-  onDelete: (alarmId: string) => void;
-}) {
-  const [options, setOptions] = useState(alarm);
-  const [label, setLabel] = useState(alarm.label);
-  const [time, setTime] = useState(
-    `${String(alarm.rule.hour).padStart(2, "0")}:${String(alarm.rule.minute).padStart(2, "0")}`,
-  );
-  const [date, setDate] = useState(alarm.rule.onceDate ?? "");
-  const [days, setDays] = useState<readonly number[]>(alarm.rule.repeatDays ?? []);
-  const [error, setError] = useState("");
-  const t = copy(locale);
-  return (
-    <View className="gap-4">
-      <TextInput
-        accessibilityLabel={t("label")}
-        placeholder={t("label")}
-        value={label}
-        onChangeText={setLabel}
-        className="rounded-lg bg-surface p-4 text-body text-foreground"
-      />
-      <TextInput
-        accessibilityLabel={t("time")}
-        placeholder={t("time")}
-        value={time}
-        onChangeText={setTime}
-        keyboardType="numbers-and-punctuation"
-        className="rounded-lg bg-surface p-4 text-body text-foreground"
-      />
-      <Text className="text-body text-foreground">{t("repeat")}</Text>
-      <View className="flex-row justify-between">
-        {[1, 2, 3, 4, 5, 6, 7].map((day) => (
+  const collectionQuery = useQuery({
+    queryKey: ["collection"],
+    queryFn: () => Effect.runPromise(localData((data) => data.collection)),
+  });
+  const decks = (collectionQuery.data?.decks ?? []).map((deck) => ({
+    id: deck.id,
+    name: deck.fields.name.value,
+  }));
+  const quickOptions = quickAlarmOptions({
+    alarms,
+    lastSavedId: lastSavedAlarm,
+    deckIds: decks.map((deck) => deck.id),
+  });
+
+  const alarmsContent = (
+    <HomeScreen
+      alarms={alarms}
+      decks={decks}
+      locale={locale}
+      zone={zone}
+      use24Hour={use24Hour}
+      onQuickAlarm={
+        quickOptions
+          ? (minutes, onAdded) => {
+              const alarm = quickAlarm(native.createId(), minutes, quickOptions, Date.now(), zone);
+              void save(alarm)
+                .then(() => onAdded(alarm))
+                .catch(() => setError(t("alarmError")));
+            }
+          : undefined
+      }
+      onEdit={(alarm) => router.push({ pathname: "/alarm/[id]", params: { id: alarm.id } })}
+      onAdd={() => router.push({ pathname: "/alarm/[id]", params: { id: "new" } })}
+      onDuplicate={(alarm) =>
+        router.push({ pathname: "/alarm/[id]", params: { id: "new", duplicate: alarm.id } })
+      }
+      onDelete={remove}
+      onRestore={(alarm) => save({ ...alarm, id: native.createId() })}
+      onToggle={toggle}
+      onSkip={toggle}
+      refreshing={refreshing}
+      onRefresh={pullToRefresh}
+      setup={
+        alarmsQuery.data && collectionQuery.data
+          ? {
+              onImport: async () => {
+                const summary = await pickAndImportApkg();
+                await client.invalidateQueries({ queryKey: ["collection"] });
+                return summary;
+              },
+              onLink: () => router.push("/ankidroid"),
+            }
+          : undefined
+      }
+      error={
+        error ||
+        (alarmsQuery.isError ? t("alarmError") : collectionQuery.isError ? t("loadError") : "")
+      }
+      banner={
+        !reliabilityChecklist(permissions, confirmedSettings).ready ? (
           <Pressable
-            key={day}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: days.includes(day) }}
-            onPress={() => {
-              setDate("");
-              setDays(days.includes(day) ? days.filter((d) => d !== day) : [...days, day]);
-            }}
+            accessibilityRole="button"
+            onPress={() => router.push("/settings/reliability")}
+            className="min-h-12 flex-row items-center justify-between gap-4 rounded-lg bg-surface p-4"
           >
-            <Text className={days.includes(day) ? "p-2 text-primary" : "p-2 text-muted-foreground"}>
-              {new Date(Date.UTC(2026, 9, 19 + day - 1)).toLocaleDateString(locale, {
-                weekday: "short",
-                timeZone: "UTC",
-              })}
+            <Text style={regular} className="shrink text-body text-attention">
+              {reliabilityCopy(locale)("atRisk")}
+            </Text>
+            <Text style={bold} className="text-body font-bold text-primary-ink">
+              {reliabilityCopy(locale)("fix")}
             </Text>
           </Pressable>
-        ))}
-      </View>
-      <TextInput
-        accessibilityLabel={t("once")}
-        placeholder={t("once")}
-        value={date}
-        onChangeText={(value) => {
-          setDate(value);
-          setDays([]);
-        }}
-        className="rounded-lg bg-surface p-4 text-body text-foreground"
-      />
-      <AlarmDeckSettings alarm={options} locale={locale} onChange={setOptions} />
-      <AlarmSoundSettings alarm={options} locale={locale} onChange={setOptions} />
-      <AlarmSnoozeSettings alarm={options} locale={locale} onChange={setOptions} />
-      <AlarmAwakeCheckSettings alarm={options} locale={locale} onChange={setOptions} />
-      <AlarmReadAloudSettings alarm={options} locale={locale} onChange={setOptions} />
-      <Text accessibilityRole="alert" className="text-body text-attention">
-        {error}
-      </Text>
-      <Pressable
-        accessibilityRole="button"
-        className="rounded-pill bg-primary p-4"
-        onPress={() => {
-          const rule = parseRule(time, date, days);
-          if (!options.deckId) setError(t("chooseDeck"));
-          else if (rule) onSave({ ...options, label, rule });
-          else setError(t("invalid"));
-        }}
-      >
-        <Text className="text-body text-primary-foreground">{t("save")}</Text>
-      </Pressable>
-      <Pressable accessibilityRole="button" onPress={onCancel}>
-        <Text className="text-body text-foreground">{t("cancel")}</Text>
-      </Pressable>
-      {saved ? (
-        <Pressable
-          accessibilityRole="button"
-          className="min-h-12 justify-center"
-          onPress={() =>
-            Alert.alert(t("deleteAlarmTitle"), t("deleteAlarmBody"), [
-              { text: t("cancel"), style: "cancel" },
-              { text: t("deleteAlarm"), style: "destructive", onPress: () => onDelete(alarm.id) },
-            ])
-          }
+        ) : null
+      }
+    />
+  );
+  // The editor waits on the saved alarms: a new alarm starts with the last saved one's deck and N.
+  const editor = (id: string, duplicate?: string) => (
+    <EditorRoute
+      id={id}
+      duplicate={duplicate}
+      alarms={alarmsQuery.isSuccess ? alarms : null}
+      locale={locale}
+      use24Hour={use24Hour}
+      onSave={(alarm) => save(alarm).then(() => setLastSavedAlarm(alarm.id))}
+      onDelete={remove}
+    />
+  );
+
+  return (
+    <NavigationGate takeover={takeover}>
+      {onboarding ? (
+        reliability(() => setOnboarding(false), true)
+      ) : (
+        <RuntimeProvider
+          alarms={alarmsContent}
+          editor={editor}
+          reliability={(onExit) => reliability(onExit)}
         >
-          <Text className="text-body text-attention">{t("deleteAlarm")}</Text>
-        </Pressable>
-      ) : null}
-    </View>
+          {children}
+        </RuntimeProvider>
+      )}
+    </NavigationGate>
+  );
+}
+/** The editor route: a saved alarm by id, or "new" with Core's defaults. Leaving discards it. */
+function EditorRoute({
+  id,
+  duplicate,
+  alarms,
+  locale,
+  use24Hour,
+  onSave,
+  onDelete,
+}: {
+  id: string;
+  duplicate?: string;
+  /** Null until they're read. */
+  alarms: readonly Alarm[] | null;
+  locale: Locale;
+  use24Hour: boolean;
+  onSave: (alarm: Alarm) => Promise<void>;
+  onDelete: (alarmId: string) => Promise<void>;
+}) {
+  const router = useRouter();
+  const [newId] = useState(() => native.createId());
+  const now = useNow();
+  const lastSavedId = useUI((ui) => ui.lastSavedAlarm);
+  const decks = useAlarmDecks(locale);
+  const [duplicateDraft, setDuplicateDraft] = useState<Alarm | null>(null);
+  const source = alarms?.find((item) => item.id === duplicate);
+  const alarm =
+    duplicateDraft ??
+    (source
+      ? duplicateAlarm(source, newId, now)
+      : alarms === null
+        ? undefined
+        : id === "new"
+          ? decks.data &&
+            newAlarmFor(newId, { alarms, lastSavedId, deckIds: decks.data.map((deck) => deck.id) })
+          : alarms.find((item) => item.id === id));
+  if (!alarm)
+    return (
+      <View className="flex-1 bg-background p-6">
+        <Text style={regular} className="text-body text-foreground">
+          {copy(locale)("loading")}
+        </Text>
+      </View>
+    );
+  const settings = (draft: Alarm, onChange: (alarm: Alarm) => void) => (
+    <AlarmSettingsRows alarm={draft} locale={locale} onChange={onChange} />
+  );
+  return (
+    <AlarmEditorScreen
+      key={alarm.id}
+      alarm={alarm}
+      saved={id !== "new" && !duplicateDraft}
+      onDuplicate={(draft) =>
+        setDuplicateDraft(duplicateAlarm(draft, native.createId(), Date.now()))
+      }
+      locale={locale}
+      hour24={use24Hour}
+      onSave={onSave}
+      onDelete={onDelete}
+      onClose={() => router.back()}
+      options={settings}
+    />
   );
 }

@@ -1,3 +1,4 @@
+import { PillChip } from "./PillChip.tsx";
 import { studyStats, wakeUpStats, type Locale, type StudyStats, type Theme } from "@app/core";
 import {
   STATS_PERIODS,
@@ -9,7 +10,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
 import { useEffect, useState, type ReactNode } from "react";
-import { BackHandler, Pressable, ScrollView, Text, View } from "react-native";
+import { BackHandler, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { localData } from "./database.ts";
 import { GradeLegend, RetentionTable, StatsChart } from "./StatsCharts.tsx";
@@ -26,7 +27,7 @@ export function StatsScreen({
   locale: Locale;
   /** The derived theme of the mode on screen, for chart paint. */
   theme: Theme;
-  onExit: () => void;
+  onExit?: () => void;
 }) {
   const t = statsCopy(locale);
   const insets = useSafeAreaInsets();
@@ -50,6 +51,7 @@ export function StatsScreen({
     }),
   });
   useEffect(() => {
+    if (!onExit) return undefined;
     const handler = BackHandler.addEventListener("hardwareBackPress", () => {
       onExit();
       return true;
@@ -66,14 +68,14 @@ export function StatsScreen({
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
       <ScrollView contentContainerClassName="gap-6 p-6">
-        <Chip label={t("back")} onPress={onExit} />
+        {onExit && <PillChip label={t("back")} onPress={onExit} />}
         <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
           {t("stats")}
         </Text>
         <View className="flex-row flex-wrap gap-2">
-          <Chip label={t("allDecks")} selected={!deckId} onPress={() => setDeckId(undefined)} />
+          <PillChip label={t("allDecks")} selected={!deckId} onPress={() => setDeckId(undefined)} />
           {data?.collection.decks.map((deck) => (
-            <Chip
+            <PillChip
               key={deck.id}
               label={deck.fields.name.value}
               selected={deck.id === deckId}
@@ -83,7 +85,7 @@ export function StatsScreen({
         </View>
         <View className="flex-row flex-wrap gap-2">
           {STATS_PERIODS.map((period) => (
-            <Chip
+            <PillChip
               key={period.days}
               label={t(period.label)}
               selected={period.days === days}
@@ -111,7 +113,7 @@ export function StatsScreen({
             <Text accessibilityRole="alert" style={regular} className="text-body text-destructive">
               {t("loadError")}
             </Text>
-            <Chip
+            <PillChip
               label={t("retry")}
               onPress={() => {
                 void query.refetch();
@@ -125,32 +127,6 @@ export function StatsScreen({
         )}
       </ScrollView>
     </View>
-  );
-}
-
-function Chip({
-  label,
-  selected = false,
-  onPress,
-}: {
-  label: string;
-  selected?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      className={`min-h-12 justify-center self-start rounded-full px-5 active:opacity-80 ${selected ? "bg-primary-tint" : "bg-surface"}`}
-    >
-      <Text
-        style={selected ? bold : regular}
-        className={`text-body ${selected ? "text-primary-ink" : "text-foreground"}`}
-      >
-        {label}
-      </Text>
-    </Pressable>
   );
 }
 

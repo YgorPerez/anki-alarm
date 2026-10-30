@@ -1,5 +1,12 @@
 import { Context, Effect, Layer } from "effect";
-import { RING_POLICY, type Alarm, type AlarmPermissions, type ReliabilityKind } from "@app/core";
+import {
+  quickAlarmsDone,
+  clearExpiredSkip,
+  RING_POLICY,
+  type Alarm,
+  type AlarmPermissions,
+  type ReliabilityKind,
+} from "@app/core";
 
 /** Where native's active ring is: sounding, in its session, or silenced by a snooze. */
 export const RING_PHASES = ["ringing", "session", "snoozed"] as const;
@@ -89,8 +96,17 @@ export function alarmController(repository: AlarmRepository) {
   /** Native schedules exactly the enabled alarms it's given, and unschedules the rest. */
   const rearm = Effect.gen(function* () {
     const service = yield* AlarmService;
+    const alarms = yield* repository.list;
+    const now = Date.now();
+    const current = [];
+    for (const alarm of alarms) {
+      const cleared = clearExpiredSkip(alarm, now);
+      // The repository stamps this edit and queues it for sync, like any local save.
+      if (cleared !== alarm) yield* repository.save(cleared);
+      current.push(cleared);
+    }
     yield* service.setAlarms(
-      (yield* repository.list).filter((item) => item.enabled),
+      current.filter((item) => item.enabled),
       RING_POLICY,
     );
   });
@@ -104,6 +120,10 @@ export function alarmController(repository: AlarmRepository) {
       const events = yield* service.drainJournal;
       yield* repository.ingest(events);
       yield* service.ack(events.map((event) => event.id));
+      // A quick alarm deletes itself once its ring is dismissed; the delete syncs.
+      const done = quickAlarmsDone(yield* repository.list, yield* repository.events);
+      for (const alarmId of done) yield* repository.remove(alarmId);
+      if (done.length > 0) yield* rearm;
       return { ring: yield* service.getRing, awakeCheck: yield* service.getAwakeCheck };
     }),
   };

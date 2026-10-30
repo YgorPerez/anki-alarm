@@ -6,6 +6,21 @@ import { copy } from "./copy.ts";
 import { Stepper } from "./controls.tsx";
 import { localData } from "./database.ts";
 
+/** The decks an alarm can ring with, by name, as the editor lists them. */
+export function useAlarmDecks(locale: Locale) {
+  return useQuery({
+    queryKey: ["collection"],
+    networkMode: "always",
+    queryFn: () => Effect.runPromise(localData((data) => data.collection)),
+    select: (collection) =>
+      collection.decks
+        .map((deck) => ({ id: deck.id, name: deck.fields.name.value }))
+        // Hermes has no toSorted; the array is freshly mapped.
+        // oxlint-disable-next-line unicorn/no-array-sort
+        .sort((a, b) => a.name.localeCompare(b.name, locale)),
+  });
+}
+
 /** The alarm editor's deck (subdecks ring with their parent) and N. */
 export function AlarmDeckSettings({
   alarm,
@@ -17,16 +32,8 @@ export function AlarmDeckSettings({
   onChange: (alarm: Alarm) => void;
 }) {
   const t = copy(locale);
-  const collection = useQuery({
-    queryKey: ["collection"],
-    networkMode: "always",
-    queryFn: () => Effect.runPromise(localData((data) => data.collection)),
-  });
-  const decks = (collection.data?.decks ?? [])
-    .map((deck) => ({ id: deck.id, name: deck.fields.name.value }))
-    // Hermes has no toSorted; the array is freshly mapped.
-    // oxlint-disable-next-line unicorn/no-array-sort
-    .sort((a, b) => a.name.localeCompare(b.name, locale));
+  const collection = useAlarmDecks(locale);
+  const decks = collection.data ?? [];
   return (
     <View className="gap-4">
       <Text className="text-body font-bold text-foreground">{t("alarmDeck")}</Text>

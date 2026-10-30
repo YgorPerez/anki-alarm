@@ -59,6 +59,12 @@ export type {
 
 export {
   nextRing,
+  nextAlarmRing,
+  clearExpiredSkip,
+  skipNextRing,
+  skipOffer,
+  undoSkip,
+  upcomingRing,
   newAlarm,
   RING_POLICY,
   RAMP_CHOICES,
@@ -74,6 +80,16 @@ export {
   awakeCheckAfter,
   AWAKE_CHECK_DELAYS,
 } from "./alarm.ts";
+export {
+  savedRule,
+  EVERY_DAY,
+  newAlarmFor,
+  onceRule,
+  ringsIn,
+  timeLeft,
+  WEEKDAYS,
+} from "./alarm-editor.ts";
+export type { RingsIn } from "./alarm-editor.ts";
 export {
   alarmSession,
   awakeCheckSession,
@@ -184,3 +200,14 @@ export {
   stampMedia,
 } from "./media.ts";
 export type { MediaFile, MediaRecord } from "./media.ts";
+
+export type { NextAlarmRing } from "./alarm.ts";
+
+export { duplicateAlarm } from "./duplicate-alarm.ts";
+export {
+  QUICK_ALARM_MINUTES,
+  quickAlarm,
+  quickAlarmOptions,
+  quickAlarmsDone,
+} from "./quick-alarm.ts";
+export type { QuickAlarmOptions } from "./quick-alarm.ts";

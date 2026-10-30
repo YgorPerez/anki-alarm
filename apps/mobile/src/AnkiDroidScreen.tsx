@@ -1,3 +1,5 @@
+import { useContext } from "react";
+import { ScreenActivity } from "./screen-activity.ts";
 import {
   ankiDroidAccess,
   linkableAnkiDroidDecks,
@@ -41,13 +43,15 @@ export function AnkiDroidScreen({
   const exit = useEffectEvent(() => {
     if (!session.busy.current) onExit();
   });
+  const screenActive = useContext(ScreenActivity);
   useEffect(() => {
+    if (!screenActive) return undefined;
     const back = BackHandler.addEventListener("hardwareBackPress", () => {
       exit();
       return true;
     });
     return () => back.remove();
-  }, []);
+  }, [screenActive]);
   return (
     <View
       className="flex-1 bg-background"
