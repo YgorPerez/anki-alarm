@@ -3,11 +3,11 @@ import { newAlarm } from "@app/core";
 import { expect, test } from "vite-plus/test";
 import { HomeScreen } from "./HomeScreen.tsx";
 
-test("Home without decks guides to import or link, and + leads there instead of the editor", async () => {
+test("Home with remaining alarms but no decks guides to import or link, and + leads there instead of the editor", async () => {
   const actions: string[] = [];
   await render(
     <HomeScreen
-      alarms={[]}
+      alarms={[{ ...newAlarm("remaining"), deckId: "deleted-deck" }]}
       decks={[]}
       locale="pt-BR"
       zone="UTC"

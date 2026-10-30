@@ -276,7 +276,7 @@ export function HomeScreen({
                 {error}
               </Text>
             ) : null}
-            {setup && !visibleAlarms.length ? (
+            {setup && (needsDeck || !visibleAlarms.length) ? (
               <HomeEmptyState
                 locale={locale}
                 hasDecks={decks.length > 0}
