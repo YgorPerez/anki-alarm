@@ -390,6 +390,7 @@ function useStudySession(deckId: string, onExit: () => void) {
       setUndone(undefined);
       setRevealedId(undefined);
       await client.invalidateQueries({ queryKey: ["study", deckId] });
+      await client.invalidateQueries({ queryKey: ["reviewLog"] });
     } catch {
       setError(true);
     }
@@ -408,6 +409,7 @@ function useStudySession(deckId: string, onExit: () => void) {
       setUndone(last.cardId);
       setRevealedId(undefined);
       await client.invalidateQueries({ queryKey: ["study", deckId] });
+      await client.invalidateQueries({ queryKey: ["reviewLog"] });
     } catch {
       setError(true);
     }

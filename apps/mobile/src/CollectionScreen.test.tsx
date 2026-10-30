@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { localData } from "./database.ts";
 import { fireEvent, render, screen } from "@testing-library/react-native/pure";
 import { describe, expect, test, vi } from "vite-plus/test";
 
@@ -52,4 +54,24 @@ test("Study opens the selected deck through the navigation boundary", async () =
   await fireEvent.press(screen.getByRole("button", { name: "Estudar" }));
   expect(study).toHaveBeenCalledWith(expect.any(String));
   expect(screen.getByRole("header", { name: "Navigation deck" })).toBeTruthy();
+});
+
+test("returning from study refreshes the deck's remaining counts", async () => {
+  await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Count refresh");
+        c.addBasicNote(deck.id, "casa", "house");
+      }),
+    ),
+  );
+  await show();
+  await fireEvent.press(await screen.findByRole("button", { name: /Count refresh/ }));
+  expect(await screen.findByLabelText("1 novos")).toBeTruthy();
+  await fireEvent.press(screen.getByRole("button", { name: "Estudar" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Mostrar resposta" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Fácil" }));
+  await screen.findByText("Nenhum cartão disponível agora. Os limites diários se aplicam.");
+  await fireEvent.press(screen.getByRole("button", { name: "‹ Count refresh" }));
+  expect(await screen.findByLabelText("0 novos")).toBeTruthy();
 });
