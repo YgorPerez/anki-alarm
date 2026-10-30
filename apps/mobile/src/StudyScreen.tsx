@@ -52,7 +52,7 @@ export function StudyScreen({
   const insets = useSafeAreaInsets();
   const dark = useColorScheme() === "dark";
   const study = useStudySession(deckId, onExit);
-  const { query, busy, error, canUndo, undo, card } = study;
+  const { query, busy, error, canUndo, undo } = study;
   const [editing, setEditing] = useState<string>();
   const deckName = query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value;
   const frame = { paddingTop: insets.top, paddingBottom: insets.bottom };
