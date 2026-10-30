@@ -63,6 +63,12 @@ class AnkiDroidModule : Module() {
       provider(promise) { AnkiDroidReader(context.contentResolver).read(deckId.toLong()).toString() }
     }
 
+    AsyncFunction("suspend") { noteId: Double, ord: Int, promise: Promise ->
+      provider(promise) {
+        AnkiDroidReader(context.contentResolver).suspendCard(noteId.toLong(), ord)?.toString() ?: "null"
+      }
+    }
+
     AsyncFunction("cards") { noteIds: List<Double>, promise: Promise ->
       provider(promise) { AnkiDroidReader(context.contentResolver).cards(noteIds.map { it.toLong() }).toString() }
     }

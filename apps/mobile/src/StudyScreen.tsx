@@ -1,3 +1,4 @@
+import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { intervalText } from "./interval-text.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
 import { StudyCounts } from "./StudyCounts.tsx";
@@ -10,6 +11,7 @@ import {
   nextStudyCard,
   nextIntervals,
   studyCounts,
+  type Card,
   type Grade,
   type Locale,
   type LogEntry,
@@ -66,12 +68,19 @@ export function StudyScreen({
     <View className="flex-1 bg-background" style={frame}>
       <StudyNavigation
         counts={study.counts}
+        items={
+          card
+            ? [
+                { id: "editNote", label: t("editNote"), onPress: () => setEditing(card.id) },
+                ...suspensionItems(locale, study.suspend),
+              ]
+            : []
+        }
         title={deckName ?? t("study")}
         busy={busy}
         locale={locale}
         onExit={onExit}
         onUndo={canUndo ? undo : undefined}
-        onEdit={card ? () => setEditing(card.id) : undefined}
       />
       <StudyFeedback
         locale={locale}
@@ -167,22 +176,21 @@ function StudyFeedback({
 
 function StudyNavigation({
   counts,
+  items,
   title,
   busy,
   locale,
   onExit,
   onUndo,
-  onEdit,
 }: {
   counts: ReturnType<typeof studyCounts> | undefined;
+  items: Parameters<typeof StudyMenu>[0]["items"];
   title: string;
   busy: boolean;
   locale: Locale;
   onExit: () => void;
   onUndo: (() => Promise<void>) | undefined;
-  onEdit: (() => void) | undefined;
 }) {
-  const t = copy(locale);
   return (
     <View className="flex-row items-center justify-between px-4">
       <Pressable
@@ -207,11 +215,7 @@ function StudyNavigation({
       >
         <Text className="text-body text-foreground">↶</Text>
       </Pressable>
-      <StudyMenu
-        items={onEdit ? [{ id: "editNote", label: t("editNote"), onPress: onEdit }] : []}
-        locale={locale}
-        busy={busy}
-      />
+      <StudyMenu items={items} locale={locale} busy={busy} />
     </View>
   );
 }
@@ -435,6 +439,23 @@ function useStudySession(deckId: string, onExit: () => void) {
     lock.current = false;
     setBusy(false);
   }
+  /** Takes the current card out without an answer (suspend, bury); the next one comes. */
+  async function leaveCard(change: (target: Card) => Promise<void>) {
+    if (!card || lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setError(false);
+    try {
+      await change(card);
+      setRevealedId(undefined);
+      setUndone(undefined);
+      await refresh();
+    } catch {
+      setError(true);
+    }
+    lock.current = false;
+    setBusy(false);
+  }
   async function undo() {
     const last = answers.at(-1);
     if (!last || lock.current) return;
@@ -470,6 +491,8 @@ function useStudySession(deckId: string, onExit: () => void) {
     revealed,
     reveal: () => setRevealedId(cardId),
     answer,
+    suspend: (scope: SuspendScope) =>
+      leaveCard((target) => suspendStudyCard(target, scope, client)),
     canUndo: answers.length > 0,
     undo,
     refresh,

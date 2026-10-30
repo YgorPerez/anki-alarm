@@ -2,6 +2,7 @@ import { requireNativeModule } from "expo";
 
 /** AnkiDroid's ContentProvider. JSON strings follow Core's `AnkiDroidDeck` and `AnkiDroidSource`. */
 interface NativeAnkiDroid {
+  suspend: (noteId: number, ord: number) => Promise<string>;
   status: () => { versionCode: number; permission: "granted" | "denied" } | null;
   requestPermission: () => "granted" | "prompted" | "settings";
   decks: () => Promise<string>;

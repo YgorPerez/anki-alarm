@@ -1,7 +1,8 @@
+import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
-import { useQuery } from "@tanstack/react-query";
-import { awakeCheckSession, RING_POLICY, type Grade, type Locale } from "@app/core";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { awakeCheckSession, RING_POLICY, type Card, type Grade, type Locale } from "@app/core";
 import { Effect, type Layer } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
@@ -111,6 +112,7 @@ export function AwakeCheckScreen({
             <StudyMenu
               items={[
                 { id: "editNote", label: t("editNote"), onPress: () => setEditing(next.card.id) },
+                ...suspensionItems(locale, prompt.suspend),
               ]}
               locale={locale}
               busy={prompt.busy}
@@ -148,6 +150,7 @@ function useAwakeCheck(
   onPassed: () => void,
   gradeDelayMs: number,
 ) {
+  const client = useQueryClient();
   const { busy, error, guarded } = useGuarded();
   const shownAt = useRef(0);
   const signal = signalWith(layer);
@@ -175,6 +178,15 @@ function useAwakeCheck(
     // When the card appeared, on the monotonic clock: the answer's time taken.
     if (cardId) shownAt.current = performance.now();
   }, [cardId]);
+  /** Takes the current card out without an answer (suspend, bury): the check stays, with another card. */
+  const leaveCard = (change: (target: Card) => Promise<void>) =>
+    guarded(async () => {
+      const target = session?.next?.card;
+      if (!target) return;
+      await change(target);
+      card.hide();
+      await query.refetch();
+    });
   const pass = async () => {
     await signal((service) => service.awakeCheckPassed(check.id));
     onPassed();
@@ -191,6 +203,8 @@ function useAwakeCheck(
     error: error || query.isError,
     card,
     pass: () => guarded(pass),
+    suspend: (scope: SuspendScope) =>
+      leaveCard((target) => suspendStudyCard(target, scope, client)),
     refetch: () => query.refetch(),
     answer: (grade: Grade) =>
       guarded(async () => {

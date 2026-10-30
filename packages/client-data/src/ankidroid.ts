@@ -3,6 +3,8 @@ import type { SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import {
   syncBackPlan,
   syncBackQueue,
+  syncBackSuspensions,
+  type SyncBackSuspension,
   type AnkiDroidCard,
   type AnkiDroidLink,
   type AnkiDroidSource,
@@ -21,6 +23,8 @@ import { inBatches, query, type CommandRejected, type StorageFailed } from "./sq
  * a failure is the provider's own error.
  */
 export interface AnkiDroidProvider {
+  /** Suspends and reads back the card; null when deleted. */
+  suspend: (action: SyncBackSuspension) => Effect.Effect<AnkiDroidCard | null, Error>;
   /** An AnkiDroid deck with its subdecks, notes, note types and cards. */
   readDeck: (ankiDeckId: number) => Effect.Effect<AnkiDroidSource, Error>;
   /** Every card of these AnkiDroid notes, with scheduling. */
@@ -116,6 +120,12 @@ export function ankiDroidEngine(deps: Deps) {
               const baseline = syncBackQueue(c.snapshot(), log, deps.deviceId, new Set())
                 .filter((a) => linked.claimed.includes(a.deckId))
                 .map((a) => a.entryId);
+              const importedNotes = new Set(source.notes.map((n) => n.id));
+              baseline.push(
+                ...syncBackSuspensions(c.snapshot(), deps.deviceId, new Set())
+                  .filter((a) => importedNotes.has(a.noteId))
+                  .map((a) => a.entryId),
+              );
               return { ...linked, baseline };
             },
             (linked) =>
@@ -144,7 +154,8 @@ export function ankiDroidEngine(deps: Deps) {
       );
       const queue = syncBackQueue(state, log, deps.deviceId, sent);
       const summary: SyncBackSummary = { sent: 0, held: 0, gone: 0, snapshots: 0 };
-      if (!queue.length) return summary;
+      const suspensions = syncBackSuspensions(state, deps.deviceId, sent);
+      if (!queue.length && !suspensions.length) return summary;
       const cards = yield* provider.cards([...new Set(queue.map((a) => a.noteId))]);
       const plan = syncBackPlan(state, log, queue, cards, seen, deps.now());
       const reps = new Map(cards.map((c) => [key(c), c.reps]));
@@ -173,6 +184,13 @@ export function ankiDroidEngine(deps: Deps) {
           }),
         );
         summary.sent++;
+      }
+      // Answers go first: suspending beforehand would hold their writeback indefinitely.
+      for (const action of suspensions) {
+        const after = yield* provider.suspend(action);
+        if (after && after.queue !== -1)
+          return yield* new AnswerNotRecorded({ message: "AnkiDroid didn't suspend the card" });
+        yield* deps.write(markSent([action.entryId]));
       }
       return summary;
     });

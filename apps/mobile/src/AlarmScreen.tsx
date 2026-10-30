@@ -1,9 +1,11 @@
+import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   alarmSession,
   awakeCheckAfter,
+  type Card,
   readAloudFor,
   ringNeed,
   snoozeOffer,
@@ -180,6 +182,7 @@ function CardStage({
           <StudyMenu
             items={[
               { id: "editNote", label: t("editNote"), onPress: () => setEditing(next.card.id) },
+              ...suspensionItems(locale, alarm.suspend),
             ]}
             locale={locale}
             busy={alarm.busy}
@@ -390,6 +393,7 @@ function useAlarmSession(
   gradeDelayMs: number,
 ) {
   const [started, setStarted] = useState(false);
+  const client = useQueryClient();
   const { busy, error, setError, guarded } = useGuarded();
   // The ring as a signal just left it, until the caller passes native's next one.
   const [local, setLocal] = useState<{ from: Ring; ring: Ring }>();
@@ -463,6 +467,22 @@ function useAlarmSession(
   const activity = () => {
     void signal((service) => service.activity(ring.id)).catch(() => setError(true));
   };
+  /**
+   * Takes the current card out of the session without an answer (suspend, bury): progress stays
+   * and the next card comes, read aloud.
+   */
+  const leaveCard = (change: (target: Card) => Promise<void>) =>
+    guarded(async () => {
+      const target = session?.next?.card;
+      if (!target) return;
+      await signal((service) => service.activity(ring.id));
+      stopReading();
+      await change(target);
+      card.hide();
+      const { data } = await query.refetch();
+      shownAt.current = performance.now();
+      read(data?.next);
+    });
   const finish = async (awakeCheck = true) => {
     const after = awakeCheck ? awakeCheckAfter(ring.alarm) : null;
     await signal((service) => service.dismiss(ring.id, after));
@@ -502,6 +522,8 @@ function useAlarmSession(
       card.reveal();
       activity();
     },
+    suspend: (scope: SuspendScope) =>
+      leaveCard((target) => suspendStudyCard(target, scope, client)),
     activity,
     refetch: () => query.refetch(),
     answer: (grade: Grade) =>
