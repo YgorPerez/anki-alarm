@@ -50,12 +50,7 @@ export function replayEntries(
 ): MemoryState {
   const entries = [...cardLog].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
   const voided = new Set(entries.filter((e) => e.kind === "void").map((e) => e.targetId));
-  const scheduler = fsrs({
-    request_retention: preset.fields.desiredRetention.value,
-    w: preset.fields.fsrsParameters.value,
-    enable_fuzz: false,
-    learning_steps: preset.fields.learningSteps.value.map((n) => `${n}m` as const),
-  });
+  const scheduler = schedulerFor(preset);
   let state = createEmptyCard(new Date(now));
   for (const entry of entries) {
     if (voided.has(entry.id)) continue;
@@ -85,6 +80,32 @@ export function replayEntries(
   }
   return state;
 }
+function schedulerFor(preset: Preset) {
+  return fsrs({
+    request_retention: preset.fields.desiredRetention.value,
+    w: preset.fields.fsrsParameters.value,
+    enable_fuzz: false,
+    learning_steps: preset.fields.learningSteps.value.map((n) => `${n}m` as const),
+  });
+}
+
+/** Seconds until each grade's due date, using the card's own preset, without adding reviews. */
+export function nextIntervals(
+  collection: CollectionState,
+  log: readonly LogEntry[],
+  cardId: string,
+  now: number,
+): Record<Grade, number> | undefined {
+  const card = collection.cards.find((c) => c.id === cardId);
+  const deck = collection.decks.find((d) => d.id === card?.fields.deckId.value);
+  const preset = deck && deckPreset(collection, deck);
+  if (!preset) return undefined;
+  const memory = replayCard(cardId, log, preset, now);
+  const choices = schedulerFor(preset).repeat(memory, new Date(now));
+  const seconds = (grade: Grade) => (choices[grade].card.due.getTime() - now) / 1000;
+  return { 1: seconds(1), 2: seconds(2), 3: seconds(3), 4: seconds(4) };
+}
+
 /** A card's memory state under its deck's preset, or undefined when the card is gone. */
 export function cardMemory(
   collection: CollectionState,

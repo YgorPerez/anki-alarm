@@ -1,5 +1,6 @@
 import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
+import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   alarmSession,
@@ -105,43 +106,7 @@ export function AlarmScreen({
     <SnoozeLink offer={offer} busy={alarm.busy} locale={locale} onPress={alarm.snooze} />
   );
   if (stage === "card" && session?.next)
-    return (
-      <AlarmFrame
-        studying
-        top={
-          <View className="min-h-12 flex-row items-center justify-between px-4">
-            <View className="shrink">
-              <Text
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.5}
-                className="text-body text-foreground"
-                style={regular}
-              >
-                {time(now)} · <Progress session={session} locale={locale} />
-              </Text>
-            </View>
-            {offer && (
-              <SnoozeLink
-                compact
-                offer={offer}
-                busy={alarm.busy}
-                locale={locale}
-                onPress={alarm.snooze}
-              />
-            )}
-            <StudyMenu
-              items={suspensionItems(locale, alarm.suspend)}
-              locale={locale}
-              busy={alarm.busy}
-            />
-            {alarm.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
-          </View>
-        }
-      >
-        <SessionCard next={session.next} alarm={alarm} locale={locale} />
-      </AlarmFrame>
-    );
+    return <CardStage next={session.next} alarm={alarm} locale={locale} time={time(now)} />;
   return (
     <AlarmFrame
       top={
@@ -154,6 +119,78 @@ export function AlarmScreen({
       <View className="flex-1" />
       <StageAction stage={stage} alarm={alarm} locale={locale} />
       {snooze}
+    </AlarmFrame>
+  );
+}
+
+/**
+ * A session's card under the compact header: time, progress, Snooze and the card menu. Edit note
+ * opens the editor in place of the card; Back returns to the card.
+ */
+function CardStage({
+  next,
+  alarm,
+  locale,
+  time,
+}: {
+  next: NonNullable<Session["next"]>;
+  alarm: ReturnType<typeof useAlarmSession>;
+  locale: Locale;
+  time: string;
+}) {
+  const t = copy(locale);
+  const { session, offer } = alarm;
+  const [editing, setEditing] = useState<string>();
+  if (editing)
+    return (
+      <AlarmFrame studying top={null}>
+        <StudyNoteEditor
+          cardId={editing}
+          locale={locale}
+          onSaved={alarm.refetch}
+          onClose={() => setEditing(undefined)}
+          onActivity={alarm.activity}
+        />
+      </AlarmFrame>
+    );
+  return (
+    <AlarmFrame
+      studying
+      top={
+        <View className="min-h-12 flex-row items-center justify-between px-4">
+          <View className="shrink">
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.5}
+              className="text-body text-foreground"
+              style={regular}
+            >
+              {time} · {session && <Progress session={session} locale={locale} />}
+            </Text>
+          </View>
+          {offer && (
+            <SnoozeLink
+              compact
+              offer={offer}
+              busy={alarm.busy}
+              locale={locale}
+              onPress={alarm.snooze}
+            />
+          )}
+          <StudyMenu
+            items={[
+              { id: "editNote", label: t("editNote"), onPress: () => setEditing(next.card.id) },
+              ...suspensionItems(locale, alarm.suspend),
+            ]}
+            locale={locale}
+            busy={alarm.busy}
+          />
+          {alarm.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
+        </View>
+      }
+    >
+      <SessionCard next={next} alarm={alarm} locale={locale} />
     </AlarmFrame>
   );
 }
@@ -425,6 +462,10 @@ function useAlarmSession(
   );
 
   /** A deck with no cards can't give the awake check a card, so that dismissal skips it. */
+  /** A tap or edit in the session: quiets the ring again and restarts its idle time. */
+  const activity = () => {
+    void signal((service) => service.activity(ring.id)).catch(() => setError(true));
+  };
   const finish = async (awakeCheck = true) => {
     const after = awakeCheck ? awakeCheckAfter(ring.alarm) : null;
     await signal((service) => service.dismiss(ring.id, after));
@@ -462,7 +503,7 @@ function useAlarmSession(
     reveal: () => {
       if (!cardId) return;
       card.reveal();
-      void signal((service) => service.activity(ring.id)).catch(() => setError(true));
+      activity();
     },
     suspend: (scope: SuspendScope) =>
       guarded(async () => {
@@ -476,6 +517,8 @@ function useAlarmSession(
         shownAt.current = performance.now();
         read(data?.next);
       }),
+    activity,
+    refetch: () => query.refetch(),
     answer: (grade: Grade) =>
       guarded(async () => {
         if (!cardId || !card.revealed) return;

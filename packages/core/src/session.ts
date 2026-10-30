@@ -3,7 +3,14 @@ import { Rating, State, type Grade } from "ts-fsrs";
 import type { Alarm } from "./alarm.ts";
 import type { Card, CollectionState } from "./collection.ts";
 import { deckLanguage } from "./read-aloud.ts";
-import { deckFamily, deckPreset, newPosition, replayCard, type LogEntry } from "./study.ts";
+import {
+  deckFamily,
+  deckPreset,
+  nextIntervals,
+  newPosition,
+  replayCard,
+  type LogEntry,
+} from "./study.ts";
 
 /**
  * Fixed session timings and rules. `gradeDelaySeconds` keeps the grades hidden for a moment after
@@ -145,6 +152,7 @@ export function alarmSession({ collection, log, deckId, need, ringId, now }: Ala
       pick && note && noteType
         ? {
             ...pick,
+            intervals: nextIntervals(collection, log, pick.card.id, now),
             note,
             noteType,
             deckName,
