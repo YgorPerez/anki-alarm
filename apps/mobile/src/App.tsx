@@ -1,12 +1,9 @@
+import { AlarmSettingsRows } from "./AlarmSettingsRows.tsx";
 import { HomeScreen } from "./HomeScreen.tsx";
-import { AlarmSoundSettings } from "./AlarmSoundSettings.tsx";
-import { AlarmDeckSettings, useAlarmDecks } from "./AlarmDeckSettings.tsx";
+import { useAlarmDecks } from "./AlarmDeckSettings.tsx";
 import { AlarmEditorScreen } from "./AlarmEditorScreen.tsx";
-import { AlarmSnoozeSettings } from "./AlarmSnoozeSettings.tsx";
-import { AlarmReadAloudSettings } from "./AlarmReadAloudSettings.tsx";
 import { AlarmScreen } from "./AlarmScreen.tsx";
 import { AwakeCheckScreen } from "./AwakeCheckScreen.tsx";
-import { AlarmAwakeCheckSettings } from "./AlarmAwakeCheckSettings.tsx";
 import { ReliabilityScreen } from "./ReliabilityScreen.tsx";
 import { reliabilityCopy } from "./reliability-copy.ts";
 import { UpdateOffer } from "./UpdateOffer.tsx";
@@ -487,13 +484,7 @@ function EditorRoute({
       </View>
     );
   const settings = (draft: Alarm, onChange: (alarm: Alarm) => void) => (
-    <View className="gap-6">
-      <AlarmDeckSettings alarm={draft} locale={locale} onChange={onChange} />
-      <AlarmSoundSettings alarm={draft} locale={locale} onChange={onChange} />
-      <AlarmSnoozeSettings alarm={draft} locale={locale} onChange={onChange} />
-      <AlarmAwakeCheckSettings alarm={draft} locale={locale} onChange={onChange} />
-      <AlarmReadAloudSettings alarm={draft} locale={locale} onChange={onChange} />
-    </View>
+    <AlarmSettingsRows alarm={draft} locale={locale} onChange={onChange} />
   );
   return (
     <AlarmEditorScreen

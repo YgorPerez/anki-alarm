@@ -236,7 +236,7 @@ export function AlarmEditorScreen({
 }
 
 /** "Name — current value ›": opens the sheet that sets it. */
-function EditorRow({
+export function EditorRow({
   label,
   value,
   onPress,
@@ -252,7 +252,7 @@ function EditorRow({
       onPress={onPress}
       className="min-h-16 flex-row items-center justify-between gap-4 px-4 py-3"
     >
-      <Text style={regular} className="text-body text-foreground">
+      <Text style={regular} className="shrink text-body text-foreground">
         {label}
       </Text>
       <Text style={regular} className="shrink text-right text-body text-muted-foreground">
