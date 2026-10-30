@@ -131,6 +131,7 @@ export function AlarmCard({
         }}
       />
       <AnswerControls
+        intervals={next.intervals}
         revealed={reveal.revealed}
         gradesShown={reveal.gradesShown}
         busy={busy}
