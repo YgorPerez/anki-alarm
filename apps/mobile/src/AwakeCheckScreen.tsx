@@ -1,3 +1,4 @@
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
 import { StudyAnnotations } from "./StudyAnnotations.tsx";
 import { studyMenuItems, takeStudyAction, useStudyChange } from "./study-menu.ts";
@@ -238,7 +239,7 @@ function useAwakeCheck(
         card.hide();
         await Promise.all([
           query.refetch(),
-          client.invalidateQueries({ queryKey: ["collection"] }),
+          client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY }),
         ]);
       }),
     answer: (grade: Grade) =>

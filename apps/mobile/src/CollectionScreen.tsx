@@ -1,3 +1,4 @@
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import { useNow } from "./clock.tsx";
 import { StudyCounts } from "./StudyCounts.tsx";
 import { useContext } from "react";
@@ -57,7 +58,7 @@ const plain = (html: string | undefined) =>
 
 function useCollectionData() {
   const query = useQuery({
-    queryKey: ["collection"],
+    queryKey: COLLECTION_QUERY_KEY,
     queryFn: () => Effect.runPromise(localData((data) => data.collection)),
   });
   const log = useQuery({
@@ -135,8 +136,8 @@ export function CollectionScreen({
     try {
       await Effect.runPromise(localData(task));
       await Promise.all(
-        ["collection", "reviewLog", "study"].map((key) =>
-          queryClient.invalidateQueries({ queryKey: [key] }),
+        [COLLECTION_QUERY_KEY, ["reviewLog"], ["study"]].map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey }),
         ),
       );
       onSaved();
@@ -156,7 +157,7 @@ export function CollectionScreen({
     setNotice(t("importing"));
     try {
       const summary = await pickAndImportApkg();
-      await queryClient.invalidateQueries({ queryKey: ["collection"] });
+      await queryClient.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY });
       setNotice(
         summary
           ? t("imported", {

@@ -1,3 +1,4 @@
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import { intervalText } from "./interval-text.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
 import { StudyAnnotations } from "./StudyAnnotations.tsx";
@@ -469,7 +470,7 @@ function useStudySession(deckId: string, onExit: () => void) {
     await guarded(async () => {
       setUndone(await history.undo());
       setRevealedId(undefined);
-      await Promise.all([refresh(), client.invalidateQueries({ queryKey: ["collection"] })]);
+      await Promise.all([refresh(), client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY })]);
     });
   }
   return {

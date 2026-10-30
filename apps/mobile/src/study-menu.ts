@@ -1,3 +1,4 @@
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { Card, Locale, Note, StudyAction, UndoStep } from "@app/core";
 import { Effect } from "effect";
@@ -77,7 +78,7 @@ export function studyMenuItems({
 /** Takes a card-menu action, refreshes the collection and resolves with the step that undoes it. */
 export const takeStudyAction = async (action: StudyAction, client: QueryClient) => {
   const step = await Effect.runPromise(localData((data) => data.studyAction(action)));
-  await client.invalidateQueries({ queryKey: ["collection"] });
+  await client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY });
   return step;
 };
 

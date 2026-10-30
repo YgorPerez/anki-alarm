@@ -1,3 +1,4 @@
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
 import { StudyAnnotations } from "./StudyAnnotations.tsx";
 import { studyMenuItems, takeStudyAction, useStudyChange } from "./study-menu.ts";
@@ -561,7 +562,7 @@ function useAlarmSession(
         const { data } = await query.refetch();
         shownAt.current = performance.now();
         read(data?.next);
-        await client.invalidateQueries({ queryKey: ["collection"] });
+        await client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY });
       }),
     dismiss: () => guarded(() => finish(false)),
   };
