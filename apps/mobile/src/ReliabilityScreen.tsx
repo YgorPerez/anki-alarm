@@ -103,7 +103,7 @@ export function ReliabilityScreen({
       className="flex-1 bg-background"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      <ScrollView contentContainerClassName="gap-6 p-6">
+      <ScrollView contentContainerClassName={onboarding ? "gap-6 p-6" : "gap-6 px-6 pb-6"}>
         <View className="gap-2">
           <View className="flex-row items-center justify-between gap-4">
             <Text

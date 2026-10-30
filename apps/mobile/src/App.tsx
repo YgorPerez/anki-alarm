@@ -52,6 +52,7 @@ import { androidAlarmService, native } from "./alarm-android.ts";
 import { localData } from "./database.ts";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigationTheme } from "./navigation-theme.ts";
+import { BelowHeader } from "./navigation.tsx";
 import { ThemeSettings } from "./ThemeSettings.tsx";
 import { initializeTheme, useThemeChoice } from "./theme.ts";
 import { ScopedTheme } from "uniwind";
@@ -90,7 +91,7 @@ export function AlarmEditorRoute() {
 }
 export function ReliabilityRoute() {
   const router = useRouter();
-  return <>{useRuntime().reliability(() => router.back())}</>;
+  return <BelowHeader>{useRuntime().reliability(() => router.back())}</BelowHeader>;
 }
 export function SettingsRoute() {
   const router = useRouter();
@@ -108,19 +109,25 @@ export function SettingsRoute() {
 }
 export function ThemeRoute() {
   const router = useRouter();
-  return <ThemeSettings locale={useUI().locale} onBack={() => router.back()} />;
+  return (
+    <BelowHeader>
+      <ThemeSettings locale={useUI().locale} onBack={() => router.back()} />
+    </BelowHeader>
+  );
 }
 export function DecksRoute() {
   const router = useRouter();
   const focused = useIsFocused();
   return (
     <ScreenActivity value={focused}>
-      <CollectionScreen
-        locale={useUI().locale}
-        onStudy={(deckId) => router.push({ pathname: "/study/[deckId]", params: { deckId } })}
-        ankiDroid={androidAnkiDroid}
-        onTheme={() => router.push("/settings/theme")}
-      />
+      <BelowHeader>
+        <CollectionScreen
+          locale={useUI().locale}
+          onStudy={(deckId) => router.push({ pathname: "/study/[deckId]", params: { deckId } })}
+          ankiDroid={androidAnkiDroid}
+          onTheme={() => router.push("/settings/theme")}
+        />
+      </BelowHeader>
     </ScreenActivity>
   );
 }
@@ -145,10 +152,12 @@ export function AnkiDroidRoute() {
 export function StatsRoute() {
   const scheme = useColorScheme();
   return (
-    <StatsScreen
-      locale={useUI().locale}
-      theme={themeFor(useThemeChoice(), scheme === "dark" ? "dark" : "light")}
-    />
+    <BelowHeader>
+      <StatsScreen
+        locale={useUI().locale}
+        theme={themeFor(useThemeChoice(), scheme === "dark" ? "dark" : "light")}
+      />
+    </BelowHeader>
   );
 }
 export function App({ children }: { children: ReactNode }) {

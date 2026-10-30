@@ -46,7 +46,7 @@ export function ThemeSettings({ locale, onBack }: { locale: Locale; onBack: () =
       className="flex-1 bg-background"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      <ScrollView contentContainerClassName="gap-6 p-6">
+      <ScrollView contentContainerClassName="gap-6 px-6 pb-6">
         <Pressable
           accessibilityRole="button"
           onPress={onBack}

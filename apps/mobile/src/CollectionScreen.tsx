@@ -413,7 +413,7 @@ function CollectionPage({ children }: { children: ReactNode }) {
       className="flex-1 bg-background"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      <ScrollView contentContainerClassName="gap-6 p-6" keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerClassName="gap-6 px-6 pb-6" keyboardShouldPersistTaps="handled">
         {children}
       </ScrollView>
     </KeyboardAvoidingView>

@@ -1,5 +1,7 @@
 import type { Theme, Locale } from "@app/core";
+import { useMemo, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
+import { SafeAreaInsetsContext, useSafeAreaInsets } from "react-native-safe-area-context";
 import type { LucideIcon } from "lucide-react-native";
 import AlarmClock from "lucide-react-native/icons/alarm-clock";
 import ChartNoAxesColumn from "lucide-react-native/icons/chart-no-axes-column";
@@ -18,6 +20,12 @@ const icons: Record<string, LucideIcon> = {
 function Icon({ name, color }: { name: string; color: string }) {
   const Glyph = icons[name] ?? ChartNoAxesColumn;
   return <Glyph size={24} color={color} strokeWidth={1.8} />;
+}
+/** The native header already clears the status bar, so screens below it must not clear it again. */
+export function BelowHeader({ children }: { children: ReactNode }) {
+  const insets = useSafeAreaInsets();
+  const below = useMemo(() => ({ ...insets, top: 0 }), [insets]);
+  return <SafeAreaInsetsContext.Provider value={below}>{children}</SafeAreaInsetsContext.Provider>;
 }
 export function SettingsButton({
   locale,

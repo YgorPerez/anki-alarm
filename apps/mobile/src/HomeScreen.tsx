@@ -225,7 +225,7 @@ function HomeHeader({
   const t = copy(locale);
   return (
     <View className="gap-4 pb-4">
-      <View className="items-center gap-2 py-8">
+      <View className="items-center gap-2 pb-2">
         <Text
           accessibilityRole="header"
           style={bold}
@@ -317,7 +317,7 @@ export function HomeScreen({
         ref={list}
         data={visibleAlarms}
         keyExtractor={(alarm) => alarm.id}
-        contentContainerStyle={{ padding: 24, gap: 16, paddingBottom: 112 }}
+        contentContainerStyle={{ paddingHorizontal: 24, gap: 16, paddingBottom: 112 }}
         refreshing={refreshing ?? false}
         onRefresh={onRefresh}
         ListHeaderComponent={

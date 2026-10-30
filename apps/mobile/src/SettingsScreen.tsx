@@ -24,7 +24,7 @@ export function SettingsScreen({
   const t = copy(locale);
   const r = reliabilityCopy(locale);
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-6 p-6">
+    <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-6 px-6 pb-6">
       <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
         {r("settings")}
       </Text>

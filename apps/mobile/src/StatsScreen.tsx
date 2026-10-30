@@ -67,7 +67,7 @@ export function StatsScreen({
       className="flex-1 bg-background"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      <ScrollView contentContainerClassName="gap-6 p-6">
+      <ScrollView contentContainerClassName="gap-6 px-6 pb-6">
         {onExit && <PillChip label={t("back")} onPress={onExit} />}
         <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
           {t("stats")}

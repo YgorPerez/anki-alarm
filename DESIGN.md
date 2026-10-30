@@ -268,6 +268,8 @@ The alarm's grade delay keeps the same space reserved. Card height never jumps o
 
 Phone screens use Expo Router with three bottom tabs, in order: Alarmes, Baralhos, Estatísticas
 (Alarms, Decks, Stats). Every tab has a Settings gear at the top. Study sits outside this tab layout.
+Screens under the native header (tabs, Settings) start right below it: no second status bar inset,
+no top padding.
 On a deck page, the name, today's counts and Estudar / Study come before the AnkiDroid panel and
 editing options. Settings groups alarm reliability,
 theme, language, account and the update offer; theme and reliability open within its stack. The web
@@ -335,8 +337,8 @@ atingido"), then three tabular counts: new in `easy-ink`, learning in `again-ink
 
 ### Alarm Home
 
-A centered Title countdown replaces the live clock, with the next ring's day and time in muted
-Body below it. With nothing enabled, the same space says "Nenhum alarme ativo" / "No active
+A centered Title countdown replaces the live clock, right under the Settings gear's bar with no
+top padding, with the next ring's day and time in muted Body below it. With nothing enabled, the same space says "Nenhum alarme ativo" / "No active
 alarms". Days, hours and minutes appear only when nonzero; a partial minute rounds up. Minutes
 beside hours drop their unit and read as on a clock ("7 h 30", "7 h 05"); otherwise they keep it
 ("45 min", "1 d 30 min").
