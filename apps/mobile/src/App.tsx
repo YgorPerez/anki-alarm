@@ -144,6 +144,7 @@ export function App({ children }: { children: ReactNode }) {
   const [fontsLoaded, fontError] = useFonts({
     AtkinsonHyperlegible_400Regular,
     AtkinsonHyperlegible_700Bold,
+    Inter_700Bold: require("../assets/fonts/Inter_700Bold.ttf"),
   });
   return (
     <QueryClientProvider client={queryClient}>

@@ -206,7 +206,8 @@ does none of these is a neutral.
 
 ## Typography
 
-Atkinson Hyperlegible everywhere, regular and bold, bundled with both apps. It was drawn for low
+Atkinson Hyperlegible for text, regular and bold, bundled with both apps. The phone alarm editor's
+inline time wheels use bundled Inter Bold and tabular figures (#94, #97). It was drawn for low
 vision: I, l and 1 differ, 0 is slashed, and letters keep open shapes. That is the "half asleep,
 no glasses" case. On the phone, sizes are in sp and follow the system font size; layouts must hold
 at 1.3×.
@@ -301,6 +302,11 @@ atingido"), then three tabular counts: new in `easy-ink`, learning in `again-ink
 `primary-ink`; a zero is muted. Subdecks indent 20px. Rows are 64px with a hairline between them.
 
 ### Alarm editor
+
+The phone editor starts with looping hour and minute wheels in Inter Bold, with a smaller AM/PM
+wheel only when the phone uses 12-hour time. The selected values use foreground ink; neighboring
+values are quieter. Rows grow with system font scale and snap to whole values. Each wheel is one
+adjustable accessibility control with a spoken value and increment/decrement actions.
 
 The phone editor has no top bar. Its settings scroll above a fixed, full-width bottom bar with a
 hairline top border and safe-area padding. Cancelar / Cancel is a neutral pill; Salvar / Save is

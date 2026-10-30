@@ -223,6 +223,13 @@ session** is a special mode of it on the phone.
 
 ### Phone alarm editor
 
+- Inline looping hour and minute wheels set the draft at the top of the editor, replacing the
+  native time dialog. They snap to whole values and follow the phone's 12/24 h setting; only
+  12 h shows an AM/PM wheel. Each column wraps independently, preserving the other values.
+  The wheels use bundled Inter Bold with tabular figures. TalkBack exposes each column's
+  current value and increment/decrement actions. Row height follows system font scale;
+  the settings scroll above the fixed actions.
+
 - No top bar. A fixed bottom bar holds neutral Cancelar / Cancel and solid Salvar / Save while the
   settings scroll above it. Saving turns the alarm on.
 - Cancel and Android system Back leave immediately when the draft matches the opened alarm. With

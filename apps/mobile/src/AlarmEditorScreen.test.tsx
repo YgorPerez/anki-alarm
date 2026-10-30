@@ -1,6 +1,6 @@
 /* oxlint-disable eslint/no-await-in-loop -- Presses land one after another, as a thumb does them. */
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react-native/pure";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { newAlarm, newAlarmFor, type Alarm, type Locale } from "@app/core";
 import { alerts, answerAlert, pressBack, toasts } from "../test/native/react-native.ts";
 import { answerPicker, pickers } from "../test/native/datetimepicker.ts";
@@ -42,18 +42,24 @@ async function openEditor(
   return done;
 }
 
-test("a new alarm takes its time from the native picker, its days from the Repeat sheet, and says when it rings", async () => {
+test("a new alarm takes its time from inline wheels, its days from the Repeat sheet, and says when it rings", async () => {
   const done = await openEditor(
     newAlarmFor("a", { alarms: [], lastSavedId: null, deckIds: ["inglês"] }),
   );
   expect(screen.queryByRole("button", { name: "More options" })).toBeNull();
 
-  await fireEvent.press(screen.getByRole("button", { name: "Time, 07:00" }));
-  // 12/24 h is left to the system.
-  expect(pickers.at(-1)).toMatchObject({ mode: "time" });
-  expect(pickers.at(-1)?.is24Hour).toBeUndefined();
-  await act(() => answerPicker(new Date(2026, 9, 28, 6, 30)));
-  screen.getByRole("button", { name: "Time, 06:30" });
+  const hours = screen.getByRole("adjustable", { name: "Hours" });
+  const minutes = screen.getByRole("adjustable", { name: "Minutes" });
+  // The native scroll offset is in points; rows are 76 points at the default font scale.
+  await fireEvent(hours, "momentumScrollEnd", { nativeEvent: { contentOffset: { y: 6 * 76 } } });
+  await fireEvent(minutes, "momentumScrollEnd", { nativeEvent: { contentOffset: { y: 30 * 76 } } });
+  expect(screen.getByRole("adjustable", { name: "Hours" }).props.accessibilityValue.text).toBe(
+    "06",
+  );
+  expect(screen.getByRole("adjustable", { name: "Minutes" }).props.accessibilityValue.text).toBe(
+    "30",
+  );
+  expect(screen.queryByRole("adjustable", { name: "AM/PM" })).toBeNull();
 
   await fireEvent.press(screen.getByRole("button", { name: "Repeat, Weekdays" }));
   await fireEvent.press(screen.getByRole("button", { name: "Every day" }));
@@ -109,7 +115,7 @@ test("a one-off date comes from the calendar, and no days at all rings once at t
 test("editing keeps the alarm's id, Back closes a sheet first, and leaving asks before discarding changes", async () => {
   const alarm: Alarm = { ...newAlarm("a"), deckId: "inglês", label: "Trabalho", enabled: false };
   const done = await openEditor(alarm, { saved: true, hour24: false });
-  screen.getByRole("button", { name: /^Time, 7:00\sAM$/ });
+  screen.getByRole("adjustable", { name: "AM/PM" });
 
   await fireEvent.press(screen.getByRole("button", { name: "Label, Trabalho" }));
   await fireEvent.changeText(screen.getByLabelText("Label"), "Folga");
@@ -124,8 +130,12 @@ test("editing keeps the alarm's id, Back closes a sheet first, and leaving asks 
   expect(done).toMatchObject({ saved: [], closed: 1 });
 
   const edited = await openEditor(alarm, { saved: true });
-  await fireEvent.press(screen.getByRole("button", { name: "Time, 07:00" }));
-  await act(() => answerPicker(new Date(2026, 9, 28, 23, 48)));
+  await fireEvent(screen.getByRole("adjustable", { name: "Hours" }), "momentumScrollEnd", {
+    nativeEvent: { contentOffset: { y: 23 * 76 } },
+  });
+  await fireEvent(screen.getByRole("adjustable", { name: "Minutes" }), "momentumScrollEnd", {
+    nativeEvent: { contentOffset: { y: 48 * 76 } },
+  });
   await fireEvent.press(screen.getByRole("button", { name: "Save" }));
   // Saving an alarm that was off turns it on, so the notice is true.
   expect(edited.saved).toEqual([
@@ -243,4 +253,76 @@ test("reselecting the same repeat days leaves without a discard prompt", async (
   await fireEvent.press(screen.getByRole("button", { name: "Cancel" }));
   expect(done.closed).toBe(1);
   expect(alerts).toHaveLength(before);
+});
+
+test("12-hour wheels expose AM/PM and preserve noon and midnight through accessibility adjustments", async () => {
+  const alarm = {
+    ...newAlarm("a"),
+    deckId: "deck",
+    rule: { hour: 23, minute: 59, repeatDays: [1, 2, 3, 4, 5] },
+  };
+  const done = await openEditor(alarm, { hour24: false });
+  expect(screen.getByRole("adjustable", { name: "Hours" }).props.accessibilityValue.text).toBe(
+    "11",
+  );
+  expect(screen.getByRole("adjustable", { name: "AM/PM" }).props.accessibilityValue.text).toBe(
+    "PM",
+  );
+  await fireEvent(screen.getByRole("adjustable", { name: "Hours" }), "accessibilityAction", {
+    nativeEvent: { actionName: "increment" },
+  });
+  // Changing the hour wheel preserves the independently selected period.
+  expect(screen.getByRole("adjustable", { name: "Hours" }).props.accessibilityValue.text).toBe(
+    "12",
+  );
+  await fireEvent(screen.getByRole("adjustable", { name: "AM/PM" }), "accessibilityAction", {
+    nativeEvent: { actionName: "decrement" },
+  });
+  await fireEvent(screen.getByRole("adjustable", { name: "Minutes" }), "accessibilityAction", {
+    nativeEvent: { actionName: "increment" },
+  });
+  await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+  expect(done.saved[0]?.rule).toEqual({ hour: 0, minute: 0, repeatDays: [1, 2, 3, 4, 5] });
+});
+
+test("24-hour scrolling wraps and rounds to whole minutes, and Save uses the current draft even before momentum ends", async () => {
+  const alarm = {
+    ...newAlarm("a"),
+    deckId: "deck",
+    rule: { hour: 23, minute: 59, repeatDays: [1, 2, 3, 4, 5] },
+  };
+  const done = await openEditor(alarm, { locale: "pt-BR" });
+  expect(screen.queryByRole("adjustable", { name: "AM/PM" })).toBeNull();
+  await fireEvent(screen.getByRole("adjustable", { name: "Horas" }), "scroll", {
+    nativeEvent: { contentOffset: { y: 72 * 76 } },
+  });
+  await fireEvent(screen.getByRole("adjustable", { name: "Minutos" }), "scroll", {
+    nativeEvent: { contentOffset: { y: 193.7 * 76 } },
+  });
+  expect(screen.getByRole("adjustable", { name: "Horas" }).props.accessibilityValue.text).toBe(
+    "00",
+  );
+  expect(screen.getByRole("adjustable", { name: "Minutos" }).props.accessibilityValue.text).toBe(
+    "14",
+  );
+  await fireEvent.press(screen.getByRole("button", { name: "Salvar" }));
+  expect(done.saved[0]?.rule).toEqual({ hour: 0, minute: 14, repeatDays: [1, 2, 3, 4, 5] });
+});
+
+test("a slow drag settles without momentum and keeps a subsequent change to the other wheel", async () => {
+  vi.useFakeTimers();
+  try {
+    const done = await openEditor({ ...newAlarm("a"), deckId: "deck" });
+    await fireEvent(screen.getByRole("adjustable", { name: "Hours" }), "scrollEndDrag", {
+      nativeEvent: { contentOffset: { y: 8 * 76 } },
+    });
+    await fireEvent(screen.getByRole("adjustable", { name: "Minutes" }), "momentumScrollEnd", {
+      nativeEvent: { contentOffset: { y: 20 * 76 } },
+    });
+    await act(() => vi.advanceTimersByTimeAsync(150));
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    expect(done.saved[0]?.rule).toEqual({ hour: 8, minute: 20, repeatDays: [1, 2, 3, 4, 5] });
+  } finally {
+    vi.useRealTimers();
+  }
 });
