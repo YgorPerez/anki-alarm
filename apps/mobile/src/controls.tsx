@@ -144,54 +144,74 @@ export function Choice<T extends string>({
   );
 }
 
-/** A whole number between `min` and `max`, set with − and +. */
-export function Stepper({
-  label,
-  value,
-  text,
-  min,
-  max,
-  fewer,
-  more,
-  onChange,
-}: {
-  label: string;
+type StepperControlProps = {
   value: number;
   /** The value as shown, e.g. "3 cards". */
   text: string;
+  /** The value as spoken, when `text` alone would be unclear. */
+  spoken?: string;
   min: number;
   max: number;
   /** The − and + buttons' accessible names. */
   fewer: string;
   more: string;
+  /** On a `surface` block the buttons fill with the ground instead. */
+  onSurface?: boolean;
   onChange: (value: number) => void;
-}) {
-  const step = (delta: number) => onChange(Math.min(max, Math.max(min, value + delta)));
+};
+
+/** A whole number between `min` and `max`, set with − and +, under its label. */
+export function Stepper({ label, ...control }: StepperControlProps & { label: string }) {
   return (
     <>
       <Text className="text-body font-bold text-foreground">{label}</Text>
-      <View className="flex-row items-center gap-4">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={fewer}
-          disabled={value <= min}
-          onPress={() => step(-1)}
-          className="min-h-12 min-w-12 items-center justify-center rounded-pill bg-surface"
-        >
-          <ThemedIcon icon={Minus} />
-        </Pressable>
-        <Text className="text-body text-foreground">{text}</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={more}
-          disabled={value >= max}
-          onPress={() => step(1)}
-          className="min-h-12 min-w-12 items-center justify-center rounded-pill bg-surface"
-        >
-          <ThemedIcon icon={Plus} />
-        </Pressable>
-      </View>
+      <StepperControl {...control} />
     </>
+  );
+}
+
+/** The − value + row, for a caller that places its own label. */
+export function StepperControl({
+  value,
+  text,
+  spoken,
+  min,
+  max,
+  fewer,
+  more,
+  onSurface = false,
+  onChange,
+}: StepperControlProps) {
+  const step = (delta: number) => onChange(Math.min(max, Math.max(min, value + delta)));
+  const buttonClassName = onSurface
+    ? "min-h-12 min-w-12 items-center justify-center rounded-pill bg-background"
+    : "min-h-12 min-w-12 items-center justify-center rounded-pill bg-surface";
+  return (
+    <View className="flex-row items-center gap-4">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={fewer}
+        accessibilityState={{ disabled: value <= min }}
+        disabled={value <= min}
+        onPress={() => step(-1)}
+        className={buttonClassName}
+      >
+        <ThemedIcon icon={Minus} />
+      </Pressable>
+      <Text accessibilityLabel={spoken} className="text-body text-foreground">
+        {text}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={more}
+        accessibilityState={{ disabled: value >= max }}
+        disabled={value >= max}
+        onPress={() => step(1)}
+        className={buttonClassName}
+      >
+        <ThemedIcon icon={Plus} />
+      </Pressable>
+    </View>
   );
 }
 

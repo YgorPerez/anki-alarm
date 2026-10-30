@@ -116,7 +116,9 @@ export const AppState = {
 
 export const useColorScheme = () => "light";
 
-export const useWindowDimensions = () => ({ width: 400, height: 800, scale: 2, fontScale: 1 });
+/** What the phone reports; a test may change `fontScale`, and puts it back. */
+export const windowDimensions = { width: 400, height: 800, scale: 2, fontScale: 1 };
+export const useWindowDimensions = () => windowDimensions;
 
 /** Virtualized list host: renders supplied rows and slots without native scrolling. */
 export function FlatList<T>({

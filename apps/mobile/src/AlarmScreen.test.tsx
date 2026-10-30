@@ -1,3 +1,4 @@
+import { StyleSheet } from "react-native";
 import { pressBack } from "../test/native/react-native.ts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
 import { expect, test, vi } from "vite-plus/test";
@@ -168,6 +169,10 @@ test("the ring's clock is Home's: the system's 12 or 24 h setting, in the phone'
       use24Hour: false,
     });
     expect(screen.getByText("6:05")).toBeTruthy();
+    expect(StyleSheet.flatten(screen.getByText("6:05").props.style)).toMatchObject({
+      fontFamily: "Inter_700Bold",
+      fontVariant: ["tabular-nums"],
+    });
     expect(screen.getByText("AM")).toBeTruthy();
   } finally {
     vi.useRealTimers();
@@ -186,7 +191,10 @@ test("a snoozed ring shows when it rings again on the same clock, in the same fo
       { zone: "America/Sao_Paulo", use24Hour: false },
       { phase: "snoozed", snoozes: 1, snoozedUntil: Date.parse("2026-10-29T09:14:00Z") },
     );
-    expect(screen.getByText("6:14")).toBeTruthy();
+    expect(StyleSheet.flatten(screen.getByText("6:14").props.style)).toMatchObject({
+      fontFamily: "Inter_700Bold",
+      fontVariant: ["tabular-nums"],
+    });
     expect(screen.getByText("AM")).toBeTruthy();
     await screen.findByText(/^Vai tocar de novo às 6:14 AM com \d+ cartões\.$/);
   } finally {

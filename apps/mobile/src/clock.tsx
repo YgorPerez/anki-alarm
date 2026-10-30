@@ -2,9 +2,9 @@ import type { Locale } from "@app/core";
 import { useEffect, useState } from "react";
 import { AppState, Text, View, useWindowDimensions } from "react-native";
 import { timeParts } from "./alarm-text.ts";
-import { bold, regular } from "./fonts.ts";
+import { CLOCK_EMS, clock, fittedClockSize, regular } from "./fonts.ts";
 
-// The clock Home and the alarm screens share: the system's 12 or 24 h setting, in the phone's zone.
+// The clock the alarm screens share: the system's 12 or 24 h setting, in the phone's zone.
 
 /** The wall clock each second. Resamples on resume as well, so sleeping never leaves it stale. */
 export function useNow() {
@@ -23,34 +23,20 @@ export function useNow() {
   return now;
 }
 
-/**
- * The big clock: bold tabular figures, with AM/PM apart so it can wrap. The figures shrink to fit
- * the width at large font scales; everything else follows the system's scale.
- */
-export function Clock({
-  at,
-  locale,
-  zone,
-  use24Hour,
+/** A time's Inter figures, with AM/PM apart in Atkinson so it can wrap. */
+export function ClockFigures({
+  parts,
+  fontSize,
+  className = "text-foreground",
 }: {
-  at: number;
-  locale: Locale;
-  zone: string;
-  use24Hour: boolean;
+  parts: ReturnType<typeof timeParts>;
+  fontSize: number;
+  className?: string;
 }) {
-  const parts = timeParts(at, locale, zone, use24Hour);
   const period = parts.find((part) => part.type === "dayPeriod")?.value;
-  const { width, fontScale } = useWindowDimensions();
   return (
     <View className="flex-row flex-wrap items-baseline gap-2">
-      <Text
-        className="text-foreground"
-        style={{
-          ...bold,
-          fontSize: Math.min(68, (width - 48) / (3.5 * fontScale)),
-          fontVariant: ["tabular-nums"],
-        }}
-      >
+      <Text className={className} style={{ ...clock, fontSize }}>
         {parts
           .filter((part) => part.type !== "dayPeriod")
           .map((part) => part.value)
@@ -63,5 +49,32 @@ export function Clock({
         </Text>
       )}
     </View>
+  );
+}
+
+// The screen's side margins.
+const PAGE_MARGINS = 48;
+
+/**
+ * The big clock. The figures shrink to fit the width at large font scales; everything else follows
+ * the system's scale.
+ */
+export function Clock({
+  at,
+  locale,
+  zone,
+  use24Hour,
+}: {
+  at: number;
+  locale: Locale;
+  zone: string;
+  use24Hour: boolean;
+}) {
+  const { width, fontScale } = useWindowDimensions();
+  return (
+    <ClockFigures
+      parts={timeParts(at, locale, zone, use24Hour)}
+      fontSize={fittedClockSize(width - PAGE_MARGINS, CLOCK_EMS.screen, fontScale, 68)}
+    />
   );
 }

@@ -1,16 +1,24 @@
-import { EVERY_DAY, WEEKDAYS, type AlarmRule, type Locale, type RingsIn } from "@app/core";
+import {
+  EVERY_DAY,
+  savedRule,
+  WEEKDAYS,
+  type AlarmRule,
+  type Locale,
+  type RingsIn,
+} from "@app/core";
 import { copy } from "./copy.ts";
 
-/** An alarm's time as the phone shows it: "06:30" on a 24 h phone, "6:30 AM" on a 12 h one. */
-export const clockText = (hour: number, minute: number, use24Hour: boolean, locale: Locale) =>
+const repeatDateFormat = (locale: Locale) =>
   new Intl.DateTimeFormat(locale, {
-    hour: use24Hour ? "2-digit" : "numeric",
-    minute: "2-digit",
-    hour12: !use24Hour,
     timeZone: "UTC",
-  })
-    .format(Date.UTC(2000, 0, 1, hour, minute))
-    .replace(/\s+/g, " ");
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+const REPEAT_DATE_FORMATS: Record<Locale, Intl.DateTimeFormat> = {
+  "pt-BR": repeatDateFormat("pt-BR"),
+  en: repeatDateFormat("en"),
+};
 
 export function timeParts(at: number, locale: Locale, zone: string, use24Hour: boolean) {
   return new Intl.DateTimeFormat(locale, {
@@ -29,12 +37,42 @@ export function timeText(at: number, locale: Locale, zone: string, use24Hour: bo
     .replace(/\s+/g, " ");
 }
 
+/** The parts of an alarm's wall time, which has no date or zone of its own. */
+export const clockParts = (hour: number, minute: number, use24Hour: boolean, locale: Locale) =>
+  timeParts(Date.UTC(2000, 0, 1, hour, minute), locale, "UTC", use24Hour);
+
+/** An alarm's time as the phone shows it: "06:30" on a 24 h phone, "6:30 AM" on a 12 h one. */
+export const clockText = (hour: number, minute: number, use24Hour: boolean, locale: Locale) =>
+  timeText(Date.UTC(2000, 0, 1, hour, minute), locale, "UTC", use24Hour);
+
 const weekdayNames = {
   "pt-BR": ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"],
   en: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
 } as const;
 /** A weekday's short name ("Mon", "Seg"), ISO numbering. */
 export const weekdayName = (day: number, locale: Locale) => weekdayNames[locale][day - 1]!;
+
+const weekdayLetters = {
+  "pt-BR": ["S", "T", "Q", "Q", "S", "S", "D"],
+  en: ["M", "T", "W", "T", "F", "S", "S"],
+} as const;
+/** A weekday's one letter ("M", "S"), ISO numbering. Letters repeat, so speak `weekdayName`. */
+export const weekdayLetter = (day: number, locale: Locale) => weekdayLetters[locale][day - 1]!;
+
+/** The order day letters read in, on Home and in the editor. */
+export const WEEK_FROM_SUNDAY = [7, 1, 2, 3, 4, 5, 6] as const;
+
+/** How many cards an alarm asks for: "1 card", "3 cards". */
+export const needText = (need: number, locale: Locale) => {
+  const t = copy(locale);
+  return need === 1 ? t("oneCard") : t("needCount", { count: String(need) });
+};
+
+/** A one-off's date in the locale's medium style, "Oct 30, 2026". */
+export const onceDateText = (date: string, locale: Locale) =>
+  new Intl.DateTimeFormat(locale, { timeZone: "UTC", dateStyle: "medium" }).format(
+    Date.parse(`${date}T12:00:00Z`),
+  );
 
 /** The civil date `at` falls on in `zone`, as YYYY-MM-DD. */
 const civilDate = (at: number, zone: string) =>
@@ -50,9 +88,42 @@ export function sameDays(days: readonly number[], expected: readonly number[]) {
   return days.length === expected.length && expected.every((day) => selected.has(day));
 }
 
+function nearDay(date: string, now: number, zone: string) {
+  const today = civilDate(now, zone);
+  if (date === today) return "today";
+  // Advance the civil day, including days containing a DST transition.
+  const tomorrow = new Date(Date.parse(`${today}T12:00:00Z`) + 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  return date === tomorrow ? "tomorrow" : null;
+}
+
+/**
+ * The editor's summary line. Repeating days read as in `repeatSummary`; a one-off, or no days at
+ * all, names the day it rings: "Amanhã · sáb, 31 out", "qui, 5 nov".
+ */
+export function repeatLine(
+  rule: AlarmRule,
+  context: { locale: Locale; now: number; zone: string },
+) {
+  const { locale, now, zone } = context;
+  const date =
+    rule.onceDate ?? (rule.repeatDays?.length ? null : savedRule(rule, now, zone)?.onceDate);
+  if (!date) return repeatSummary(rule, context);
+  const parts = REPEAT_DATE_FORMATS[locale].formatToParts(Date.parse(`${date}T12:00:00Z`));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value.replace(".", "") ?? "";
+  const day =
+    locale === "en"
+      ? `${part("weekday")}, ${part("month")} ${part("day")}`
+      : `${part("weekday")}, ${part("day")} ${part("month")}`;
+  const near = nearDay(date, now, zone);
+  return near ? `${copy(locale)(near)} · ${day}` : day;
+}
+
 /**
  * How an alarm repeats, in a few words: "Weekdays", "Mon, Wed", "Tomorrow", a date, or "Once"
- * for no days and no date yet. Home's cards and the editor's Repeat row both show it.
+ * for no days and no date yet. Home's cards show it.
  */
 export function repeatSummary(
   rule: Pick<AlarmRule, "repeatDays" | "onceDate">,
@@ -60,16 +131,8 @@ export function repeatSummary(
 ) {
   const t = copy(locale);
   if (rule.onceDate) {
-    const today = civilDate(now, zone);
-    if (rule.onceDate === today) return t("today");
-    // Advance the civil day, including days containing a DST transition.
-    const tomorrow = new Date(Date.parse(`${today}T12:00:00Z`) + 86_400_000)
-      .toISOString()
-      .slice(0, 10);
-    if (rule.onceDate === tomorrow) return t("tomorrow");
-    return new Intl.DateTimeFormat(locale, { timeZone: "UTC", dateStyle: "medium" }).format(
-      Date.parse(`${rule.onceDate}T12:00:00Z`),
-    );
+    const near = nearDay(rule.onceDate, now, zone);
+    return near ? t(near) : onceDateText(rule.onceDate, locale);
   }
   const days = rule.repeatDays ?? [];
   if (days.length === 0) return t("repeatOnce");
@@ -83,7 +146,7 @@ export function repeatSummary(
 }
 
 /** A wait such as "7 h 12 min" or "1 d 8 h", from Core's `timeLeft`/`ringsIn`. */
-export function durationText({ days, hours, minutes }: RingsIn, locale: Locale) {
+function durationText({ days, hours, minutes }: RingsIn, locale: Locale) {
   const t = copy(locale);
   return [
     days ? t("durationDays", { count: String(days) }) : "",
@@ -92,6 +155,16 @@ export function durationText({ days, hours, minutes }: RingsIn, locale: Locale) 
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+/**
+ * Home's shorter wait: "7 h 30", "1 d 8 h 05". Minutes beside hours read as on a clock, so they drop
+ * their unit; alone, or beside days only, they keep it: "45 min", "1 d 30 min".
+ */
+export function countdownText(left: RingsIn, locale: Locale) {
+  if (!left.hours || !left.minutes) return durationText(left, locale);
+  const wholeHours = durationText({ ...left, minutes: 0 }, locale);
+  return `${wholeHours} ${String(left.minutes).padStart(2, "0")}`;
 }
 
 /** "Rings in 7 h 12 min": the notice after saving an alarm. */

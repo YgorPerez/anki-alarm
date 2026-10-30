@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { appendFileSync } from "node:fs";
 import { relative } from "node:path";
 import { ciScope } from "./affected.ts";
 
@@ -20,15 +19,13 @@ const changed = base
       .filter(Boolean)
   : [];
 // Shared configuration, tooling and native modules affect the whole workspace.
-const { all, mobile } = ciScope(base, changed);
+const { all } = ciScope(base, changed);
 const selected: { name: string; path: string }[] = JSON.parse(
   exec("pnpm", ["--filter", all ? "*" : `...[${base}]`, "list", "--depth", "-1", "--json"]),
 );
 const paths = selected.map((pkg) => relative(process.cwd(), pkg.path)).filter(Boolean);
-if (process.env["GITHUB_OUTPUT"])
-  appendFileSync(process.env["GITHUB_OUTPUT"], `mobile=${mobile}\n`);
 if (process.argv.includes("--plan")) {
-  console.log(JSON.stringify({ paths, mobile, all }));
+  console.log(JSON.stringify({ paths, all }));
 } else if (paths.length || all) {
   run(["check", "--no-lint", ...(all ? [] : paths)]);
   // Vitest's default project names are package names; apps with a custom config name theirs.

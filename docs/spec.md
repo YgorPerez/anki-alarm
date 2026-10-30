@@ -72,8 +72,8 @@ Core.
   committed baseline that can only go down. CI fails when a file goes over its limit. This covers
   oxlint, fallow and React Doctor.
 - CI on a pull request runs only the packages the diff affects and their dependents
-  (`...[origin/main]`); main and tags run everything. Maestro runs on main and tags, and on a pull
-  request only when it touches `apps/mobile` or `modules/`.
+  (`...[origin/main]`); main and tags run everything. Maestro has its own E2E workflow, because the
+  APK build is slow: it runs on main and tags, or by hand on a branch, and doesn't gate pull requests.
 
 ### Release
 
@@ -281,6 +281,39 @@ session** is a special mode of it on the phone.
   It rings again at the occurrence after; the skip syncs like the other properties and clears
   itself once the skipped time has passed. Decided in #78.
 
+### Phone alarm editor
+
+- Inline looping hour and minute wheels set the draft at the top of the editor, replacing the
+  native time dialog. They snap to whole values and follow the phone's 12/24 h setting; only
+  12 h shows an AM/PM wheel. Each column wraps independently, preserving the other values.
+  The wheels use bundled Inter Bold with tabular figures. TalkBack exposes each column's
+  current value and increment/decrement actions. Row height follows system font scale;
+  the settings scroll above the fixed actions.
+- Below the wheels, a summary line with a calendar icon says how the alarm repeats ("Dias úteis",
+  "Amanhã · sáb, 31 out"). Tapping it opens a sheet with Todo dia / Every day, Dias úteis /
+  Weekdays and the one-off date. A preset clears the date and a date clears the days.
+- Tappable day letters follow, Sunday first, on the page. Each is a 48dp target and TalkBack speaks
+  its day's short name. Tapping one updates the summary and the draft, and clears a one-off date.
+  With no days and no date, the summary names the day it will ring once.
+- A name field sits on the page under the letters; it replaces the Name row and its sheet.
+- The cards block comes next: the deck name on up to two lines opens the deck choice, and a stepper
+  on the page sets N from 1 to Core's limit.
+- Two-line rows follow, name above current value: Som / Sound (no switch), Vibração / Vibration,
+  Adiar / Snooze, Teste de despertar / Awake check and Ler em voz alta / Read aloud. A switch flips
+  its setting without opening anything; a tap elsewhere on the row opens its sheet. The Sound sheet
+  no longer holds vibration, which has its own sheet.
+
+- No top bar. A fixed bottom bar holds neutral Cancelar / Cancel and solid Salvar / Save while the
+  settings scroll above it. Saving turns the alarm on.
+- Cancel and Android system Back leave immediately when the draft matches the opened alarm. With
+  unsaved changes they ask "Descartar alterações?" / "Discard changes?". Keeping the draft stays
+  in the editor; discarding leaves without saving. Back closes an open settings sheet first.
+- Saved alarms show Pular o próximo / Skip next, Duplicar alarme / Duplicate alarm and Excluir
+  alarme / Delete alarm at the end of the scroll. New alarms show none of these actions. Skip is
+  available for enabled repeating alarms, can be undone (also once the alarm is off), and is saved
+  with the draft. Delete
+  still asks for confirmation; Duplicate opens a new draft with the current settings.
+
 ### Ringing
 
 - Scheduled as exact alarms with `AlarmManager.setAlarmClock`, so they show as the next alarm in
@@ -370,7 +403,9 @@ reviews (ADR 0001), so the web shows them too.
 - **Look:** a plain black page with the card's words at full size. Lilac primary for action (Good,
   Start, progress), peach for attention (cards left, snooze cost, a card that came back), one hue
   per grade (Again rose, Hard yellow, Easy teal; Good is solid primary), the same in study and
-  stats. Atkinson Hyperlegible on both apps.
+  stats. Atkinson Hyperlegible for general text on both apps. Phone clock times use bundled Inter
+  bold with tabular figures and an unslashed zero on Home, in the alarm editor, and for large
+  ringing, snoozed and native lock-screen clocks (#94, #95).
 - **Alarm screen:** always dark, one fixed layout: clock, progress segments, the card with no box,
   four grade pills at the thumb, snooze as a link apart from them. Cards render in Anki's night
   mode.
@@ -383,6 +418,35 @@ reviews (ADR 0001), so the web shows them too.
 - **Tokens:** `packages/design-tokens` (`tokens.css` for both apps, `web.css` for the web), in the
   shape from `docs/research/design-tokens.md`, with a test that keeps them in step with DESIGN.md.
 - The throwaway prototype is `prototypes/design/index.html`.
+
+### Phone alarm Home
+
+Home shows a countdown to the earliest enabled alarm ("Alarme em 7 h 30" / "Alarm in 7 h 30"), with
+its day and time underneath. It counts days, hours and minutes, rounding a partial minute up.
+Minutes beside hours drop their unit ("7 h 05"); otherwise they keep it ("45 min", "1 d 30 min"). With no upcoming enabled alarm it says "Nenhum alarme ativo" / "No active
+alarms". The countdown refreshes while Home is open and when the app resumes.
+
+Compact cards show a large Inter time, seven day letters, Sunday first, with selected days
+emphasized (a date for a one-off), one line with the name or deck followed by the card count, and an independent
+switch. Skipped occurrences remain marked, on screen and in the card's TalkBack label, including on
+disabled cards; disabled times use muted
+text without dimming the entire card. Long-press opens Skip next (or Undo skip), Duplicate and
+Delete. TalkBack has a named long-press action for the same menu. Swipe to delete and Undo remain
+available. Decided in #94; implemented in #100.
+
+The + stays at the bottom right, at the thumb. A tap adds an alarm. A long press, or a named TalkBack
+action, offers the quick alarms +10, +20 and +30 min, when there is a saved alarm with a deck to
+copy from; otherwise + only adds. "Toca em 10 min" / "Rings in 10 min" appears above +, so it shows
+mid-scroll too.
+
+After an alarm is first saved on this phone, a hint near + explains the long press. Dismissing it or
+opening the quick alarms ends it for good on this phone. Its state is local (MMKV) and doesn't sync.
+
+The + keeps its position with four or more alarms. It can cover at most one card's switch while the
+list scrolls, and a tap there only opens a new alarm, so it never changes an alarm by accident. Any
+switch comes clear with a short scroll, and the list's bottom padding clears + for the last card.
+A count-dependent position would move the thumb's target and leave the phone's bottom corner, which
+#94 keeps. Decided in #101.
 
 ## Out of scope for the first release
 

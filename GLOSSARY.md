@@ -49,8 +49,8 @@ _Avoid_: deck options (that's the screen), options group
 **Pull.** Bringing new notes, edits and AnkiDroid's newer card states into a linked deck. Always
 runs a sync back first.
 
-**Quick alarm.** A one-off alarm from Home's +10, +20 or +30 min chips, with the deck, N and sound
-of the most recently saved alarm. It deletes itself once its ring is dismissed.
+**Quick alarm.** A one-off alarm from long-pressing Home's +, at +10, +20 or +30 min, with the deck,
+N and sound of the most recently saved alarm. It deletes itself once its ring is dismissed.
 
 **Read aloud.** An alarm option that reads each card's front during the session.
 

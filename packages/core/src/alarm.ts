@@ -294,15 +294,27 @@ export function upcomingRing(alarm: Alarm, now: number, zone: string): number | 
   return at !== null && at === alarm.skip ? nextRing(alarm.rule, at, zone) : at;
 }
 
+/** The next occurrence of a repeating alarm, whether or not it's on; null for a one-off. */
+function nextRepeat(alarm: Alarm, now: number, zone: string): number | null {
+  if (alarm.rule.onceDate || !alarm.rule.repeatDays?.length) return null;
+  return nextRing(alarm.rule, now, zone);
+}
+
 /**
- * What the alarm's menu offers: skipping the next ring of an enabled repeating alarm, or undoing a
- * skip that is still ahead. Null for one-off and disabled alarms.
+ * What the alarm's menu offers: undoing a skip that is still ahead, on or off, or skipping the next
+ * ring of an enabled repeating alarm. Null otherwise.
  */
 export function skipOffer(alarm: Alarm, now: number, zone: string): "skip" | "undo" | null {
-  if (!alarm.enabled || alarm.rule.onceDate || !alarm.rule.repeatDays?.length) return null;
-  const at = nextRing(alarm.rule, now, zone);
+  const at = nextRepeat(alarm, now, zone);
   if (at === null) return null;
-  return at === alarm.skip ? "undo" : "skip";
+  if (at === alarm.skip) return "undo";
+  return alarm.enabled ? "skip" : null;
+}
+
+/** When the alarm rings after a skip that is still ahead, on or off; null with no such skip. */
+export function ringAfterSkip(alarm: Alarm, now: number, zone: string): number | null {
+  const at = nextRepeat(alarm, now, zone);
+  return at !== null && at === alarm.skip ? nextRing(alarm.rule, at, zone) : null;
 }
 
 /** Skips the alarm's next occurrence; it rings again at the one after. */

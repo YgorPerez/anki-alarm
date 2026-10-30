@@ -54,7 +54,7 @@ colors:
   destructive-dark: "#ff6b6b"
 typography:
   clock:
-    fontFamily: "Atkinson Hyperlegible"
+    fontFamily: "Inter" # Phone only; the web's clock stays Atkinson Hyperlegible. See Typography.
     fontSize: "68px"
     fontWeight: 700
     lineHeight: "76px"
@@ -206,14 +206,26 @@ does none of these is a neutral.
 
 ## Typography
 
-Atkinson Hyperlegible everywhere, regular and bold, bundled with both apps. It was drawn for low
-vision: I, l and 1 differ, 0 is slashed, and letters keep open shapes. That is the "half asleep,
-no glasses" case. On the phone, sizes are in sp and follow the system font size; layouts must hold
-at 1.3×.
+Atkinson Hyperlegible regular and bold is bundled with both apps for general text. It was drawn
+for low vision: I, l and 1 differ, 0 is slashed, and letters keep open shapes. That is the "half
+asleep, no glasses" case.
+
+On the phone, every time uses bundled Inter bold with tabular figures and an unslashed zero: on Home
+(alarm cards and the next ring's time under the countdown), in the editor, and the large times on
+ringing, snoozed and native lock-screen screens. Other text, including progress counts, stays
+Atkinson. The web keeps Atkinson. Decided in #94; implemented in #95.
+
+AM/PM follows what it sits beside. Next to a time you read (the large clock, Home's cards) it's
+Atkinson Body in `muted-foreground`. Inline in a sentence (under Home's countdown) it's part of the
+time. In the editor it's a wheel you set like the others, so it stays Inter.
+
+Sizes on the phone are in sp and follow the system font size; layouts must hold at 1.3×. The
+native lock-screen font resource requires an APK rebuild; an OTA update alone cannot install it.
 
 ### Hierarchy
 
-- **Clock** 68/76 bold, tabular figures: the alarm's time, the snoozed-until time, "5 de 5".
+- **Clock** 68/76 bold, tabular figures: Inter for phone clock times, including the alarm's time
+  and the snoozed-until time. Progress such as "5 de 5" stays Atkinson.
 - **Title** 30/36 bold: a screen's name (Baralhos).
 - **Question** 28/35 bold: a card's front on the alarm, plus big one-line statements ("Adiado.").
 - **Answer** 23/32 regular, in `answer`: the revealed back.
@@ -273,8 +285,9 @@ web, popovers and dialogs may take one soft shadow.
 ## Shapes
 
 The phone uses two radii: **pill to press, 16px to contain**. Buttons, grades, chips, toggles and
-segments use `rounded-pill` (999px). Cards, fields, sheets, dialogs and banners use `rounded-lg`
-(16px), including containers that open a screen when tapped. Hairlines are 1px.
+segments use `rounded-pill` (999px). Cards, boxed fields, sheets, dialogs and banners use
+`rounded-lg` (16px), including containers that open a screen when tapped. The alarm editor's name
+field has no box, so no radius: it's text on a hairline. Hairlines are 1px.
 
 `vp lint apps/mobile` enforces this scale with zero violations. Use these two classes rather than
 radius aliases, arbitrary values or dynamic class names. Inline `borderRadius` and corner radius
@@ -319,6 +332,55 @@ is answered.
 Name in Body, optional second line in Label (`muted-foreground`, or `attention` for "Limite diário
 atingido"), then three tabular counts: new in `easy-ink`, learning in `again-ink`, due in bold
 `primary-ink`; a zero is muted. Subdecks indent 20px. Rows are 64px with a hairline between them.
+
+### Alarm Home
+
+A centered Title countdown replaces the live clock, with the next ring's day and time in muted
+Body below it. With nothing enabled, the same space says "Nenhum alarme ativo" / "No active
+alarms". Days, hours and minutes appear only when nonzero; a partial minute rounds up. Minutes
+beside hours drop their unit and read as on a clock ("7 h 30", "7 h 05"); otherwise they keep it
+("45 min", "1 d 30 min").
+
+Cards use a 16px surface, a large Inter time (44sp, reduced as needed on narrow screens), seven
+Caption day letters, Sunday first, with selected days in bold `foreground` (they aren't pressable,
+so not lilac), and one ellipsized Label line: name or deck, then the card count. A one-off shows its date instead of day letters. The full summary, including a
+skip, stays in the card's accessibility label. The switch sits beside the content and remains independent.
+Disabled times and day letters use muted ink; the card keeps full opacity. A skipped ring keeps
+its peach marker until that occurrence passes, even when disabled.
+
+Tap opens the editor. Long-press opens Skip next / Undo skip, Duplicate and destructive Delete;
+TalkBack exposes the same menu as a named accessibility action. There is no overflow button.
+Swipe deletion keeps its Undo. The list scrolls, day letters can wrap, and the countdown wraps
+with system font scale, including 1.3×. Decided in #94; implemented in #100.
+
+The + is a solid primary pill fixed at the bottom right, whatever the number of alarms; the list's
+bottom padding lets the last card's switch clear it. Long-press opens +10, +20 and +30 min in the
+card menu's sheet, and TalkBack gets a named action for it. Above +, short notices use a 16px
+`surface`; the one-time hint uses `primary-tint`, right-aligned, with a 48dp × to dismiss it.
+
+### Alarm editor
+
+The phone editor starts with looping hour and minute wheels in Inter Bold, with a smaller AM/PM
+wheel only when the phone uses 12-hour time. The selected values use foreground ink; neighboring
+values are quieter. Rows grow with system font scale and snap to whole values. Each wheel is one
+adjustable accessibility control with a spoken value and increment/decrement actions.
+
+Under the wheels, on the ground with no box: the repeat summary in Body with a muted calendar icon,
+seven day letters, and the name field, Body text on a hairline. Letters are 48dp pills, Sunday first; a selected one is
+`primary-ink` bold on `primary-tint`, the rest are foreground with no fill. Their row runs 12dp past
+the 24dp margin so seven targets fit a 360dp phone, and wraps on anything narrower.
+
+Then two `surface` blocks. The cards block: a Label "Cartões de" over the deck name in Body bold,
+at most two lines, then a hairline and N's label beside a 48dp − value + stepper whose buttons fill
+with the ground. The settings block: rows at least 64dp tall with a hairline between them, the name
+in Body above the value in Label `muted-foreground`. A row's text takes all the width left of its
+switch, which sits after a short hairline, so a label can't break mid-word at 1.3×.
+
+The phone editor has no top bar. Its settings scroll above a fixed, full-width bottom bar with a
+hairline top border and safe-area padding. Cancelar / Cancel is a neutral pill; Salvar / Save is
+the solid primary pill. Both share the width equally and follow system font scale. Saved alarms
+place Skip next, Duplicate and destructive Delete at the end of the scroll, apart from Save.
+Cancel and system Back ask before discarding changed values; Back closes a settings sheet first.
 
 ### Navigation
 

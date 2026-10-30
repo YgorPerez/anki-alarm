@@ -6,6 +6,7 @@ import {
   nextAlarmRing,
   onceRule,
   ringsIn,
+  sameAlarmValues,
   timeLeft,
 } from "./index.ts";
 
@@ -46,6 +47,13 @@ describe("rings in", () => {
     expect(timeLeft(next.remainingMs)).toEqual(ringsIn(alarm.rule, now, zone));
     expect(timeLeft(40_000)).toEqual({ days: 0, hours: 0, minutes: 1 });
     expect(timeLeft(24 * 3_600_000)).toEqual({ days: 1, hours: 0, minutes: 0 });
+  });
+
+  it("splits a countdown into minutes, hours and days, rounding a part of a minute up", () => {
+    expect(timeLeft(45 * 60_000)).toEqual({ days: 0, hours: 0, minutes: 45 });
+    expect(timeLeft(7.5 * 3_600_000)).toEqual({ days: 0, hours: 7, minutes: 30 });
+    expect(timeLeft(50 * 3_600_000 + 60_000)).toEqual({ days: 2, hours: 2, minutes: 1 });
+    expect(timeLeft(24 * 3_600_000 - 30_000)).toEqual({ days: 1, hours: 0, minutes: 0 });
   });
 
   it("is null for a rule that never rings again", () => {
@@ -108,6 +116,22 @@ describe("a new alarm in the editor", () => {
       deckId: null,
       need: 5,
     });
+  });
+});
+
+describe("same alarm values", () => {
+  const alarm = { ...newAlarm("a"), rule: { hour: 6, minute: 30, repeatDays: [1, 3] } };
+
+  it("ignores key order, also inside the rule, and the order of repeat days", () => {
+    const { id, ...rest } = alarm;
+    const reordered = { ...rest, id, rule: { repeatDays: [3, 1], minute: 30, hour: 6 } };
+    expect(sameAlarmValues(alarm, reordered)).toBe(true);
+  });
+
+  it("tells changed values apart", () => {
+    expect(sameAlarmValues(alarm, { ...alarm, label: "Trabalho" })).toBe(false);
+    const otherDays = { ...alarm, rule: { ...alarm.rule, repeatDays: [1, 4] } };
+    expect(sameAlarmValues(alarm, otherDays)).toBe(false);
   });
 });
 

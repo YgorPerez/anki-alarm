@@ -52,7 +52,8 @@ class DirectBootTest {
     val labels = texts(content)
     assertTrue(labels.any { it.text.toString() == "Unlock to start" })
     assertTrue(labels.any { it.text.toString() == "Português" })
-    assertTrue(labels.any { it is android.widget.TextClock })
+    val clock = labels.single { it is android.widget.TextClock }
+    assertEquals("tnum", clock.fontFeatureSettings)
     assertEquals(android.graphics.Color.parseColor("#120d1c"),
       (content.getChildAt(0).background as android.graphics.drawable.ColorDrawable).color)
     assertFalse(labels.any { it.isClickable })

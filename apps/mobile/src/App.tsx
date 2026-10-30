@@ -29,6 +29,7 @@ import {
   AtkinsonHyperlegible_700Bold,
   useFonts,
 } from "@expo-google-fonts/atkinson-hyperlegible";
+import { Inter_700Bold } from "@expo-google-fonts/inter/700Bold";
 import { CollectionScreen } from "./CollectionScreen.tsx";
 import { AnkiDroidScreen } from "./AnkiDroidScreen.tsx";
 import { pickAndImportApkg } from "./apkg.ts";
@@ -50,6 +51,7 @@ import { AlarmService, alarmController, type AwakeCheck, type Ring } from "./ala
 import { androidAlarmService, native } from "./alarm-android.ts";
 import { localData } from "./database.ts";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigationTheme } from "./navigation-theme.ts";
 import { ThemeSettings } from "./ThemeSettings.tsx";
 import { initializeTheme, useThemeChoice } from "./theme.ts";
 import { ScopedTheme } from "uniwind";
@@ -153,6 +155,7 @@ export function App({ children }: { children: ReactNode }) {
   const [fontsLoaded, fontError] = useFonts({
     AtkinsonHyperlegible_400Regular,
     AtkinsonHyperlegible_700Bold,
+    Inter_700Bold,
   });
   return (
     <QueryClientProvider client={queryClient}>
@@ -188,6 +191,8 @@ function Home({ children }: { children: ReactNode }) {
     confirmSetting,
     setLastSavedAlarm,
     lastSavedAlarm,
+    quickHintSeen,
+    setQuickHintSeen,
   } = useUI();
   const confirmedSettings = new Set(confirmedList);
   const [ring, setRing] = useState<Ring | null>(null);
@@ -369,6 +374,8 @@ function Home({ children }: { children: ReactNode }) {
             }
           : undefined
       }
+      quickHint={lastSavedAlarm !== null && !quickHintSeen}
+      onQuickHintSeen={setQuickHintSeen}
       onEdit={(alarm) => router.push({ pathname: "/alarm/[id]", params: { id: alarm.id } })}
       onAdd={() => router.push({ pathname: "/alarm/[id]", params: { id: "new" } })}
       onDuplicate={(alarm) =>
@@ -443,7 +450,7 @@ function Home({ children }: { children: ReactNode }) {
     </NavigationGate>
   );
 }
-/** The editor route: a saved alarm by id, or "new" with Core's defaults. Leaving discards it. */
+/** The editor route: a saved alarm by id, or "new" with Core's defaults. Leaving asks before discarding changes. */
 function EditorRoute({
   id,
   duplicate,
@@ -468,6 +475,7 @@ function EditorRoute({
   const lastSavedId = useUI((ui) => ui.lastSavedAlarm);
   const decks = useAlarmDecks(locale);
   const [duplicateDraft, setDuplicateDraft] = useState<Alarm | null>(null);
+  const iconColor = useNavigationTheme()["muted-foreground"];
   const source = alarms?.find((item) => item.id === duplicate);
   const alarm =
     duplicateDraft ??
@@ -494,6 +502,7 @@ function EditorRoute({
     <AlarmEditorScreen
       key={alarm.id}
       alarm={alarm}
+      iconColor={iconColor}
       saved={id !== "new" && !duplicateDraft}
       onDuplicate={(draft) =>
         setDuplicateDraft(duplicateAlarm(draft, native.createId(), Date.now()))

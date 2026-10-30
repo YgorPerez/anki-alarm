@@ -67,6 +67,7 @@ export {
   nextRing,
   nextAlarmRing,
   clearExpiredSkip,
+  ringAfterSkip,
   skipNextRing,
   skipOffer,
   undoSkip,
@@ -92,6 +93,7 @@ export {
   newAlarmFor,
   onceRule,
   ringsIn,
+  sameAlarmValues,
   timeLeft,
   WEEKDAYS,
 } from "./alarm-editor.ts";
