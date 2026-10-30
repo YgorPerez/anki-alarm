@@ -2,7 +2,7 @@ import type { Locale } from "@app/core";
 import { useEffect, useState } from "react";
 import { AppState, Text, View, useWindowDimensions } from "react-native";
 import { timeParts } from "./alarm-text.ts";
-import { bold, regular } from "./fonts.ts";
+import { clock, regular } from "./fonts.ts";
 
 // The clock Home and the alarm screens share: the system's 12 or 24 h setting, in the phone's zone.
 
@@ -46,9 +46,8 @@ export function Clock({
       <Text
         className="text-foreground"
         style={{
-          ...bold,
+          ...clock,
           fontSize: Math.min(68, (width - 48) / (3.5 * fontScale)),
-          fontVariant: ["tabular-nums"],
         }}
       >
         {parts

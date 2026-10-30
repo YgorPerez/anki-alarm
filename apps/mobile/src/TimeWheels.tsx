@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import type { Locale } from "@app/core";
 import { copy } from "./copy.ts";
-import { timeFont } from "./fonts.ts";
+import { clock } from "./fonts.ts";
 
 /** Inline wall time. Each column wraps independently; minutes never carry into hours. */
 export function TimeWheels({
@@ -42,7 +42,7 @@ export function TimeWheels({
         fontSize={fontSize}
         onChange={(value) => onChange(hour24 ? value : value + (hour >= 12 ? 12 : 0), minute)}
       />
-      <Text accessible={false} style={[timeFont, { fontSize }]} className="text-foreground">
+      <Text accessible={false} style={[clock, { fontSize }]} className="text-foreground">
         :
       </Text>
       <Wheel
@@ -141,7 +141,7 @@ function Wheel({
           <Text
             key={index}
             style={[
-              timeFont,
+              clock,
               {
                 height: rowHeight,
                 lineHeight: rowHeight,

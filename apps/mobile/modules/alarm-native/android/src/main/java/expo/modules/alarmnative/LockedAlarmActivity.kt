@@ -62,8 +62,9 @@ class LockedAlarmActivity : Activity() {
     }
     layout.addView(TextClock(this).apply {
       format12Hour = "HH:mm"; format24Hour = "HH:mm"
+      fontFeatureSettings = "tnum"
       textSize = 68f; setTextColor(foreground); gravity = Gravity.CENTER
-      typeface = androidx.core.content.res.ResourcesCompat.getFont(this@LockedAlarmActivity, R.font.atkinson_bold)
+      typeface = androidx.core.content.res.ResourcesCompat.getFont(this@LockedAlarmActivity, R.font.inter_bold)
     })
     for ((text, size, color) in listOf(
       Triple(AlarmStore.ring(this)!!.getJSONObject("alarm").optString("label"), 28f, foreground),

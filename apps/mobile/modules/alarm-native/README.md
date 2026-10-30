@@ -100,8 +100,11 @@ re-reads permissions, and an active ring takes priority over onboarding and Sett
 
 `setAppearance({ background, foreground, primary }, locale)` on the Effect service mirrors hex
 colors and `pt-BR`/`en` into device-protected storage. Home sends the chosen dark background,
-foreground and primary ink whenever the theme or locale changes. The native activity bundles Atkinson
-Hyperlegible and Android strings, uses a live clock, and offers no silence or snooze action.
+foreground and primary ink whenever the theme or locale changes. The native activity bundles Inter bold for its live clock (tabular figures, unslashed zero),
+Atkinson Hyperlegible for other text, and Android strings. It offers no silence or snooze action.
+The Inter font resource requires an APK rebuild; OTA updates cannot add Android resources.
+`INTER-FONT-LICENSE` carries Inter's SIL Open Font License. Its `inter_bold.ttf` is the same file as
+`@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf`, loaded by the React Native app.
 
 Custom sounds are copied atomically before scheduling. If the provider permission expires, keep
 the last complete copy; without a copy the service tries the system alarm URI and ToneGenerator.

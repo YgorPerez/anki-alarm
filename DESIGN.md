@@ -54,7 +54,7 @@ colors:
   destructive-dark: "#ff6b6b"
 typography:
   clock:
-    fontFamily: "Atkinson Hyperlegible"
+    fontFamily: "Inter"
     fontSize: "68px"
     fontWeight: 700
     lineHeight: "76px"
@@ -206,15 +206,21 @@ does none of these is a neutral.
 
 ## Typography
 
-Atkinson Hyperlegible for text, regular and bold, bundled with both apps. The phone alarm editor's
-inline time wheels use bundled Inter Bold and tabular figures (#94, #97). It was drawn for low
-vision: I, l and 1 differ, 0 is slashed, and letters keep open shapes. That is the "half asleep,
-no glasses" case. On the phone, sizes are in sp and follow the system font size; layouts must hold
-at 1.3×.
+Atkinson Hyperlegible regular and bold is bundled with both apps for general text. It was drawn
+for low vision: I, l and 1 differ, 0 is slashed, and letters keep open shapes.
+
+On the phone, clock times use bundled Inter bold with tabular figures and an unslashed zero:
+Home's clock and alarm rows, the editor's time, and the large times on ringing, snoozed and native
+lock-screen screens. Other text, including progress counts and AM/PM beside the large clock,
+stays Atkinson. The web keeps Atkinson. Decided in #94; implemented in #95.
+
+Sizes on the phone are in sp and follow the system font size; layouts must hold at 1.3×. The
+native lock-screen font resource requires an APK rebuild; an OTA update alone cannot install it.
 
 ### Hierarchy
 
-- **Clock** 68/76 bold, tabular figures: the alarm's time, the snoozed-until time, "5 de 5".
+- **Clock** 68/76 bold, tabular figures: Inter for phone clock times, including the alarm's time
+  and the snoozed-until time. Progress such as "5 de 5" stays Atkinson.
 - **Title** 30/36 bold: a screen's name (Baralhos).
 - **Question** 28/35 bold: a card's front on the alarm, plus big one-line statements ("Adiado.").
 - **Answer** 23/32 regular, in `answer`: the revealed back.
