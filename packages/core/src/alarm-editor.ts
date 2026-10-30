@@ -62,3 +62,17 @@ export function onceRule(hour: number, minute: number, now: number, zone: string
   );
   return { hour, minute, onceDate: `${parts["year"]}-${parts["month"]}-${parts["day"]}` };
 }
+
+/**
+ * The rule the editor saves. No days and no date rings once, at the time's next occurrence. Null
+ * when it would never ring (a date that has passed).
+ */
+export function savedRule(rule: AlarmRule, now: number, zone: string): AlarmRule | null {
+  const { hour, minute, onceDate, repeatDays = [] } = rule;
+  const next = onceDate
+    ? { hour, minute, onceDate }
+    : repeatDays.length
+      ? { hour, minute, repeatDays }
+      : onceRule(hour, minute, now, zone);
+  return ringsIn(next, now, zone) ? next : null;
+}

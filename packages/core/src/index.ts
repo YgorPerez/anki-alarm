@@ -79,7 +79,15 @@ export {
   awakeCheckAfter,
   AWAKE_CHECK_DELAYS,
 } from "./alarm.ts";
-export { EVERY_DAY, newAlarmFor, onceRule, ringsIn, timeLeft, WEEKDAYS } from "./alarm-editor.ts";
+export {
+  savedRule,
+  EVERY_DAY,
+  newAlarmFor,
+  onceRule,
+  ringsIn,
+  timeLeft,
+  WEEKDAYS,
+} from "./alarm-editor.ts";
 export type { RingsIn } from "./alarm-editor.ts";
 export {
   alarmSession,

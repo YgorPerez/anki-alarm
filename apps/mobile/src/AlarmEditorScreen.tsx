@@ -1,12 +1,4 @@
-import {
-  onceRule,
-  ringsIn,
-  timeLeft,
-  upcomingRing,
-  type Alarm,
-  type AlarmRule,
-  type Locale,
-} from "@app/core";
+import { savedRule, timeLeft, upcomingRing, type Alarm, type Locale } from "@app/core";
 import { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import { useState, type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, ToastAndroid, View } from "react-native";
@@ -22,20 +14,6 @@ import { Clock } from "./clock.tsx";
 const deviceZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 /** A wall time as an instant in UTC, which Clock shows with zone "UTC". */
 const utcTime = (hour: number, minute: number) => Date.UTC(2000, 0, 1, hour, minute);
-
-/**
- * The rule the editor saves. No days and no date rings once, at the time's next occurrence. Null
- * when it would never ring (a date that has passed).
- */
-function savedRule(rule: AlarmRule, now: number, zone: string): AlarmRule | null {
-  const { hour, minute, onceDate, repeatDays = [] } = rule;
-  const next = onceDate
-    ? { hour, minute, onceDate }
-    : repeatDays.length
-      ? { hour, minute, repeatDays }
-      : onceRule(hour, minute, now, zone);
-  return ringsIn(next, now, zone) ? next : null;
-}
 
 /**
  * The alarm editor, a screen of its own: the time large at the top, rows that open sheets, Save
