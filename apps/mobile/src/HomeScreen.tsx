@@ -1,5 +1,6 @@
 import {
   nextAlarmRing,
+  timeLeft,
   skipNextRing,
   skipOffer,
   undoSkip,
@@ -7,7 +8,7 @@ import {
   type Alarm,
   type Locale,
 } from "@app/core";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AppState,
   FlatList,
@@ -18,8 +19,10 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { clockText, durationText, repeatSummary } from "./alarm-text.ts";
 import { bold, regular } from "./fonts.ts";
 import { copy } from "./copy.ts";
+import { HomeEmptyState, type DeckSetup } from "./HomeEmptyState.tsx";
 
 type Deck = { id: string; name: string };
 
@@ -62,9 +65,6 @@ function dayText(at: number, locale: Locale, zone: string) {
     month: "short",
   }).format(at);
 }
-function ruleTime(alarm: Alarm) {
-  return Date.UTC(2000, 0, 1, alarm.rule.hour, alarm.rule.minute);
-}
 
 export function HomeClock({
   now,
@@ -104,38 +104,6 @@ export function HomeClock({
   );
 }
 
-function repeatSummary(alarm: Alarm, now: number, locale: Locale, zone: string) {
-  const t = copy(locale);
-  if (alarm.rule.onceDate) {
-    const date = (at: number) =>
-      new Intl.DateTimeFormat("en-CA", {
-        timeZone: zone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(at);
-    if (alarm.rule.onceDate === date(now)) return t("today");
-    // Advance the civil day, including days containing a DST transition.
-    const today = date(now);
-    const tomorrow = new Date(Date.parse(today + "T12:00:00Z") + 86400000)
-      .toISOString()
-      .slice(0, 10);
-    if (alarm.rule.onceDate === tomorrow) return t("tomorrow");
-    return new Intl.DateTimeFormat(locale, { timeZone: "UTC", dateStyle: "medium" }).format(
-      Date.parse(alarm.rule.onceDate + "T12:00:00Z"),
-    );
-  }
-  const days = [...new Set(alarm.rule.repeatDays)].toSorted((a, b) => a - b);
-  if (days.join() === "1,2,3,4,5") return t("weekdays");
-  if (days.length === 7) return t("everyDay");
-  if (days.join() === "6,7") return t("weekends");
-  const names =
-    locale === "pt-BR"
-      ? ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-      : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  return days.map((day) => names[day - 1]).join(", ");
-}
-
 /** The card's "⋯" menu: skip the next ring of a repeating alarm, or undo the skip. */
 function SkipMenu({
   alarm,
@@ -164,7 +132,7 @@ function SkipMenu({
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={t("moreOptions", { alarm: name })}
+        accessibilityLabel={t("alarmMoreOptions", { alarm: name })}
         onPress={() => setOpen(true)}
         className="min-h-12 min-w-12 items-center justify-center rounded-pill"
       >
@@ -213,7 +181,7 @@ export function AlarmCard({
   onSkip?: (alarm: Alarm) => void;
 }) {
   const t = copy(locale);
-  const time = timeText(ruleTime(alarm), locale, "UTC", use24Hour);
+  const time = clockText(alarm.rule.hour, alarm.rule.minute, use24Hour, locale);
   const ringsAfterSkip =
     skipOffer(alarm, now, zone) === "undo" ? upcomingRing(alarm, now, zone) : null;
   return (
@@ -236,7 +204,7 @@ export function AlarmCard({
             {time}
           </Text>
           <Text style={regular} className="text-label text-muted-foreground">
-            {repeatSummary(alarm, now, locale, zone)}
+            {repeatSummary(alarm.rule, { locale, now, zone })}
           </Text>
           {ringsAfterSkip !== null && (
             <Text style={regular} className="text-label text-attention">
@@ -287,6 +255,7 @@ export function HomeScreen({
   error,
   refreshing,
   onRefresh,
+  setup,
 }: {
   alarms: readonly Alarm[];
   decks: readonly Deck[];
@@ -302,16 +271,18 @@ export function HomeScreen({
   error?: string;
   refreshing?: boolean;
   onRefresh?: () => void;
+  /** Given once decks and alarms have loaded; without it Home shows no empty state. */
+  setup?: DeckSetup;
 }) {
   const now = useClock();
+  const list = useRef<FlatList<Alarm>>(null);
+  const needsDeck = setup !== undefined && decks.length === 0;
   const t = copy(locale);
   const next = nextAlarmRing(alarms, now, zone);
-  const minutes = next ? Math.ceil(next.remainingMs / 60000) : 0;
-  const left =
-    minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
   return (
     <View className="flex-1 bg-background">
       <FlatList
+        ref={list}
         data={alarms}
         keyExtractor={(alarm) => alarm.id}
         contentContainerStyle={{ padding: 24, gap: 16, paddingBottom: 112 }}
@@ -322,7 +293,10 @@ export function HomeScreen({
             <HomeClock now={now} locale={locale} zone={zone} use24Hour={use24Hour} />
             <Text style={regular} className="text-body text-muted-foreground">
               {next
-                ? t("nextAlarm", { time: timeText(next.at, locale, zone, use24Hour), left })
+                ? t("nextAlarm", {
+                    time: timeText(next.at, locale, zone, use24Hour),
+                    left: durationText(timeLeft(next.remainingMs), locale),
+                  })
                 : t("noEnabledAlarms")}
             </Text>
             {banner}
@@ -330,6 +304,14 @@ export function HomeScreen({
               <Text accessibilityRole="alert" className="text-body text-attention">
                 {error}
               </Text>
+            ) : null}
+            {setup && !alarms.length ? (
+              <HomeEmptyState
+                locale={locale}
+                hasDecks={decks.length > 0}
+                setup={setup}
+                onAdd={onAdd}
+              />
             ) : null}
           </View>
         }
@@ -350,7 +332,8 @@ export function HomeScreen({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t("add")}
-        onPress={onAdd}
+        // Without a deck, + leads to the empty state at the top instead of the editor.
+        onPress={needsDeck ? () => list.current?.scrollToOffset({ offset: 0 }) : onAdd}
         className="absolute bottom-4 right-6 min-h-16 min-w-20 items-center justify-center rounded-pill bg-primary px-6 py-4"
       >
         <Text style={bold} className="text-question text-primary-foreground">

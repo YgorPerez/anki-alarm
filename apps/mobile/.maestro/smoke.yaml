@@ -17,6 +17,8 @@ appId: dev.ygorperez.ankialarm
 - tapOn: "Pular por agora|Skip for now"
 - tapOn: "(?i)pular por agora|skip for now"
 - assertVisible: "Seus alarmes podem não tocar|Your alarms may not ring"
+# Without a deck, Home guides to getting one.
+- assertVisible: "Importe um baralho para criar seu primeiro alarme|Import a deck to create your first alarm"
 - tapOn:
     id: "tab-decks"
 - tapOn: "Criar baralho|Create deck"
@@ -56,9 +58,13 @@ appId: dev.ygorperez.ankialarm
 - tapOn: "Português"
 - assertVisible: "Ajustes"
 - back
+# With a deck and no alarm, Home invites the first one.
+- assertVisible: "Crie seu primeiro alarme|Create your first alarm"
 - assertVisible: "Novo alarme|New alarm"
 - tapOn: "Novo alarme|New alarm"
+- assertVisible: "Repetir.*|Repeat.*"
 - back
+- assertNotVisible: "Repetir.*|Repeat.*"
 - assertVisible: "Novo alarme|New alarm"
 # Back unwinds a deck; an inactive deck must not keep Stats from leaving the app.
 - tapOn:

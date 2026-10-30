@@ -2,7 +2,7 @@
 // Native ships Flow source and a Jest preset only, so the phone's Vitest swaps it for this, as the
 // Jest preset swaps its native views for mocks. The host names are the ones React Native Testing
 // Library looks for. Add an export when a screen under test imports something new.
-import { createElement, type ReactNode } from "react";
+import { createElement, useEffect, type ReactNode } from "react";
 
 type Props = Record<string, unknown> & {
   children?: ReactNode;
@@ -20,11 +20,6 @@ export const TextInput = host("TextInput");
 export const ScrollView = host("RCTScrollView");
 export const Switch = host("RCTSwitch");
 export const KeyboardAvoidingView = View;
-/** Renders its content only while visible, as React Native's Modal does. */
-export function Modal({ visible = true, children, ...props }: Props & { visible?: boolean }) {
-  return visible ? createElement("Modal", props, children) : null;
-}
-
 /** A View that answers presses, as React Native's Pressable renders one. */
 export function Pressable({ children, disabled, ...props }: Props) {
   return createElement(
@@ -83,6 +78,36 @@ export const BackHandler = {
     };
   },
 };
+/**
+ * A Modal shows its children while visible. Android Back asks it to close, before the screen
+ * under it hears Back, as it does on the phone.
+ */
+export function Modal({
+  visible = true,
+  onRequestClose,
+  children,
+  ...props
+}: Props & { visible?: boolean; onRequestClose?: () => void }) {
+  useEffect(() => {
+    if (!visible) return undefined;
+    return BackHandler.addEventListener("hardwareBackPress", () => {
+      onRequestClose?.();
+      return true;
+    }).remove;
+  }, [visible, onRequestClose]);
+  return visible ? createElement("Modal", props, children) : null;
+}
+
+/** Toasts a screen showed, newest last. */
+export const toasts: string[] = [];
+export const ToastAndroid = {
+  SHORT: 0,
+  LONG: 1,
+  show: (message: string) => {
+    toasts.push(message);
+  },
+};
+
 // The app stays in the foreground during a test.
 export const AppState = {
   currentState: "active",

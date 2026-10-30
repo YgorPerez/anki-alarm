@@ -48,6 +48,11 @@ test("Home shows localized alarm details, edits, adds and refreshes next ring af
   await act(() => vi.advanceTimersByTime(60000));
   expect(screen.getByText("11:19")).toBeTruthy();
   expect(screen.getByText("Next 7:00 AM · in 7 h 41 min")).toBeTruthy();
+  // Past a day, the wait counts days, as the editor's "Rings in" does.
+  await result.rerender(
+    view([{ ...alarm, rule: { hour: 8, minute: 0, repeatDays: [6] } }], "pt-BR"),
+  );
+  expect(screen.getByText("Próximo 08:00 · em 1 d 8 h 41 min")).toBeTruthy();
   await result.rerender(view([], "en"));
   expect(screen.getByText("No alarms enabled")).toBeTruthy();
 });
@@ -122,7 +127,7 @@ test("the card menu skips the next ring of a repeating alarm, shows the ring aft
 
   await result.rerender(view([saved.at(-1)!]));
   expect(screen.getByText("Pulado · toca seg., 2 de nov.")).toBeTruthy();
-  expect(screen.getByText("Próximo 06:30 · em 79 h 12 min")).toBeTruthy();
+  expect(screen.getByText("Próximo 06:30 · em 3 d 7 h 12 min")).toBeTruthy();
   await fireEvent.press(screen.getByRole("button", { name: "Mais opções: Trabalho" }));
   await fireEvent.press(screen.getByRole("button", { name: "Desfazer pulo" }));
   expect(saved.at(-1)?.skip).toBeNull();
@@ -137,7 +142,7 @@ test("the card menu skips the next ring of a repeating alarm, shows the ring aft
   await act(() => vi.setSystemTime(new Date("2026-10-30T07:00:00Z")));
   await act(() => vi.advanceTimersByTime(1000));
   expect(screen.queryByText(/Pulado/)).toBeNull();
-  expect(screen.getByText("Próximo 06:30 · em 71 h 30 min")).toBeTruthy();
+  expect(screen.getByText("Próximo 06:30 · em 2 d 23 h 30 min")).toBeTruthy();
 });
 
 test("the card menu is only for enabled repeating alarms", async () => {
