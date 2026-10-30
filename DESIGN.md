@@ -210,7 +210,7 @@ Atkinson Hyperlegible regular and bold is bundled with both apps for general tex
 for low vision: I, l and 1 differ, 0 is slashed, and letters keep open shapes.
 
 On the phone, clock times use bundled Inter bold with tabular figures and an unslashed zero:
-Home's clock and alarm rows, the editor's time, and the large times on ringing, snoozed and native
+Home's alarm cards, the editor's time, and the large times on ringing, snoozed and native
 lock-screen screens. Other text, including progress counts and AM/PM beside the large clock,
 stays Atkinson. The web keeps Atkinson. Decided in #94; implemented in #95.
 
@@ -306,6 +306,24 @@ is answered.
 Name in Body, optional second line in Label (`muted-foreground`, or `attention` for "Limite diário
 atingido"), then three tabular counts: new in `easy-ink`, learning in `again-ink`, due in bold
 `primary-ink`; a zero is muted. Subdecks indent 20px. Rows are 64px with a hairline between them.
+
+### Alarm Home
+
+A centered Title countdown replaces the live clock, with the next ring's day and time in muted
+Body below it. With nothing enabled, the same space says "Nenhum alarme ativo" / "No active
+alarms". Days, hours and minutes appear only when nonzero; a partial minute rounds up.
+
+Cards use a 16px surface, a large Inter time (44sp, reduced as needed on narrow screens), seven
+Caption day letters with selected days bold, and one ellipsized Label line: name or deck, then
+the card count. A one-off shows its date instead of day letters. The full summary, including a
+skip, stays in the card's accessibility label. The switch sits beside the content and remains independent.
+Disabled times and day letters use muted ink; the card keeps full opacity. A skipped ring keeps
+its peach marker until that occurrence passes, even when disabled.
+
+Tap opens the editor. Long-press opens Skip next / Undo skip, Duplicate and destructive Delete;
+TalkBack exposes the same menu as a named accessibility action. There is no overflow button.
+Swipe deletion keeps its Undo. The list scrolls, day letters can wrap, and the countdown wraps
+with system font scale, including 1.3×. Decided in #94; implemented in #100.
 
 ### Alarm editor
 

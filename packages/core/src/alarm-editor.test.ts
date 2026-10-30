@@ -48,6 +48,13 @@ describe("rings in", () => {
     expect(timeLeft(24 * 3_600_000)).toEqual({ days: 1, hours: 0, minutes: 0 });
   });
 
+  it("splits a countdown into minutes, hours and days, rounding a part of a minute up", () => {
+    expect(timeLeft(45 * 60_000)).toEqual({ days: 0, hours: 0, minutes: 45 });
+    expect(timeLeft(7.5 * 3_600_000)).toEqual({ days: 0, hours: 7, minutes: 30 });
+    expect(timeLeft(50 * 3_600_000 + 60_000)).toEqual({ days: 2, hours: 2, minutes: 1 });
+    expect(timeLeft(24 * 3_600_000 - 30_000)).toEqual({ days: 1, hours: 0, minutes: 0 });
+  });
+
   it("is null for a rule that never rings again", () => {
     expect(ringsIn({ hour: 8, minute: 0, onceDate: "2026-10-01" }, now, zone)).toBeNull();
   });
