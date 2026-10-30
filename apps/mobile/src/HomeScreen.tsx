@@ -1,3 +1,6 @@
+import { SwipeAlarm } from "./SwipeAlarm.tsx";
+import { Button } from "./controls.tsx";
+import { AlarmCardMenu } from "./AlarmCardMenu.tsx";
 import {
   nextAlarmRing,
   skipNextRing,
@@ -14,7 +17,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AppState,
   FlatList,
-  Modal,
   Pressable,
   Switch,
   Text,
@@ -106,61 +108,6 @@ export function HomeClock({
   );
 }
 
-/** The card's "⋯" menu: skip the next ring of a repeating alarm, or undo the skip. */
-function SkipMenu({
-  alarm,
-  name,
-  locale,
-  now,
-  zone,
-  onSkip,
-}: {
-  alarm: Alarm;
-  name: string;
-  locale: Locale;
-  now: number;
-  zone: string;
-  onSkip: (alarm: Alarm) => void;
-}) {
-  const t = copy(locale);
-  const [open, setOpen] = useState(false);
-  const offer = skipOffer(alarm, now, zone);
-  if (!offer) return null;
-  const choose = () => {
-    setOpen(false);
-    onSkip(offer === "skip" ? skipNextRing(alarm, now, zone) : undoSkip(alarm));
-  };
-  return (
-    <>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t("alarmMoreOptions", { alarm: name })}
-        onPress={() => setOpen(true)}
-        className="min-h-12 min-w-12 items-center justify-center rounded-pill"
-      >
-        <Text style={bold} className="text-body text-muted-foreground">
-          ⋯
-        </Text>
-      </Pressable>
-      <Modal transparent animationType="fade" visible={open} onRequestClose={() => setOpen(false)}>
-        <Pressable className="flex-1 justify-end bg-black/50 p-4" onPress={() => setOpen(false)}>
-          <View className="rounded-lg bg-surface p-2">
-            <Pressable
-              accessibilityRole="button"
-              onPress={choose}
-              className="min-h-12 justify-center rounded-pill px-4"
-            >
-              <Text style={regular} className="text-body text-foreground">
-                {t(offer === "skip" ? "skipNext" : "undoSkip")}
-              </Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
-    </>
-  );
-}
-
 export function AlarmCard({
   alarm,
   deckName,
@@ -171,6 +118,7 @@ export function AlarmCard({
   onEdit,
   onToggle,
   onSkip,
+  onDuplicate,
 }: {
   alarm: Alarm;
   deckName?: string;
@@ -181,11 +129,12 @@ export function AlarmCard({
   onEdit: (alarm: Alarm) => void;
   onToggle: (alarm: Alarm) => void;
   onSkip?: (alarm: Alarm) => void;
+  onDuplicate?: (alarm: Alarm) => void;
 }) {
   const t = copy(locale);
   const time = clockText(alarm.rule.hour, alarm.rule.minute, use24Hour, locale);
-  const ringsAfterSkip =
-    skipOffer(alarm, now, zone) === "undo" ? upcomingRing(alarm, now, zone) : null;
+  const offer = skipOffer(alarm, now, zone);
+  const ringsAfterSkip = offer === "undo" ? upcomingRing(alarm, now, zone) : null;
   return (
     <View
       className={
@@ -224,16 +173,24 @@ export function AlarmCard({
             {alarm.need === 1 ? t("oneCard") : t("needCount", { count: String(alarm.need) })}
           </Text>
         </Pressable>
-        {onSkip && (
-          <SkipMenu
-            alarm={alarm}
-            name={alarm.label || time}
-            locale={locale}
-            now={now}
-            zone={zone}
-            onSkip={onSkip}
-          />
-        )}
+        <AlarmCardMenu
+          name={alarm.label || time}
+          locale={locale}
+          items={[
+            ...(onSkip && offer
+              ? [
+                  {
+                    label: t(offer === "skip" ? "skipNext" : "undoSkip"),
+                    onPress: () =>
+                      onSkip(offer === "skip" ? skipNextRing(alarm, now, zone) : undoSkip(alarm)),
+                  },
+                ]
+              : []),
+            ...(onDuplicate
+              ? [{ label: t("duplicateAlarm"), onPress: () => onDuplicate(alarm) }]
+              : []),
+          ]}
+        />
         <Switch
           accessibilityLabel={`${alarm.label || time}: ${t(alarm.enabled ? "enabled" : "disabled")}`}
           value={alarm.enabled}
@@ -254,10 +211,13 @@ export function HomeScreen({
   onAdd,
   onToggle,
   onSkip,
+  onDuplicate,
   banner,
   error,
   refreshing,
   onRefresh,
+  onDelete,
+  onRestore,
   onQuickAlarm,
   setup,
 }: {
@@ -271,20 +231,61 @@ export function HomeScreen({
   onToggle: (alarm: Alarm) => void;
   /** Saves the alarm with its next ring skipped, or the skip undone. */
   onSkip?: (alarm: Alarm) => void;
+  onDuplicate?: (alarm: Alarm) => void;
   banner?: ReactNode;
   error?: string;
   refreshing?: boolean;
   onRefresh?: () => void;
+  onDelete?: (id: string) => Promise<void>;
+  onRestore?: (alarm: Alarm) => Promise<void>;
   /** Adds a quick alarm that many minutes from now. Without it (no saved alarm or deck), no chips. */
   onQuickAlarm?: (minutes: number, onAdded: (alarm: Alarm) => void) => void;
   /** Given once decks and alarms have loaded; without it Home shows no empty state. */
   setup?: DeckSetup;
 }) {
+  const [deleted, setDeleted] = useState<{ alarm: Alarm; at: number } | null>(null);
+  const [hidden, setHidden] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState(false);
+  const pending = useRef(false);
   const now = useClock();
+  const undoAvailable = deleted !== null && (busy || now - deleted.at < 8000);
+  const visibleAlarms = alarms.filter((alarm) => !hidden.includes(alarm.id));
+  const removeAlarm = async (alarm: Alarm) => {
+    if (!onDelete || pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setActionError(false);
+    try {
+      await onDelete(alarm.id);
+      setHidden((ids) => [...ids, alarm.id]);
+      setDeleted({ alarm, at: now });
+    } catch {
+      setActionError(true);
+    } finally {
+      pending.current = false;
+      setBusy(false);
+    }
+  };
+  const restoreAlarm = async () => {
+    if (!deleted || !undoAvailable || !onRestore || pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setActionError(false);
+    try {
+      await onRestore(deleted.alarm);
+      setDeleted(null);
+    } catch {
+      setActionError(true);
+    } finally {
+      pending.current = false;
+      setBusy(false);
+    }
+  };
   const list = useRef<FlatList<Alarm>>(null);
   const needsDeck = setup !== undefined && decks.length === 0;
   const t = copy(locale);
-  const next = nextAlarmRing(alarms, now, zone);
+  const next = nextAlarmRing(visibleAlarms, now, zone);
   // "Rings in …" after a chip adds its alarm, for a few seconds.
   const [notice, setNotice] = useState<{ text: string; until: number }>();
   const addQuickAlarm = (minutes: number) => {
@@ -302,7 +303,7 @@ export function HomeScreen({
     <View className="flex-1 bg-background">
       <FlatList
         ref={list}
-        data={alarms}
+        data={visibleAlarms}
         keyExtractor={(alarm) => alarm.id}
         contentContainerStyle={{ padding: 24, gap: 16, paddingBottom: 112 }}
         refreshing={refreshing ?? false}
@@ -350,7 +351,7 @@ export function HomeScreen({
                 {error}
               </Text>
             ) : null}
-            {setup && !alarms.length ? (
+            {setup && !visibleAlarms.length ? (
               <HomeEmptyState
                 locale={locale}
                 hasDecks={decks.length > 0}
@@ -361,19 +362,50 @@ export function HomeScreen({
           </View>
         }
         renderItem={({ item }) => (
-          <AlarmCard
-            alarm={item}
-            deckName={decks.find((d) => d.id === item.deckId)?.name}
-            locale={locale}
-            now={now}
-            zone={zone}
-            use24Hour={use24Hour}
-            onEdit={onEdit}
-            onToggle={onToggle}
-            onSkip={onSkip}
-          />
+          <SwipeAlarm
+            id={item.id}
+            onDelete={() => {
+              void removeAlarm(item);
+            }}
+          >
+            <AlarmCard
+              alarm={item}
+              deckName={decks.find((d) => d.id === item.deckId)?.name}
+              locale={locale}
+              now={now}
+              zone={zone}
+              use24Hour={use24Hour}
+              onEdit={onEdit}
+              onToggle={onToggle}
+              onSkip={onSkip}
+              onDuplicate={onDuplicate}
+            />
+          </SwipeAlarm>
         )}
       />
+      {actionError && (
+        <Text accessibilityRole="alert" className="text-body text-destructive">
+          {t("alarmError")}
+        </Text>
+      )}
+      {undoAvailable && (
+        <View className="absolute bottom-24 left-6 right-6 flex-row items-center justify-between gap-2 rounded-lg bg-surface p-4">
+          <Text
+            accessibilityRole="alert"
+            style={regular}
+            className="shrink text-body text-foreground"
+          >
+            {t("alarmDeleted")}
+          </Text>
+          <Button
+            label={t("undoAlarmDelete")}
+            disabled={busy}
+            onPress={() => {
+              void restoreAlarm();
+            }}
+          />
+        </View>
+      )}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t("add")}
