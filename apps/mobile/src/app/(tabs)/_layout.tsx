@@ -3,7 +3,8 @@ import { Tabs, useRouter } from "expo-router";
 import type { BottomTabBarProps } from "expo-router/tabs";
 import { useUI } from "../../ui.ts";
 import { bold } from "../../fonts.ts";
-import { SettingsButton, TabBar, tabLabels } from "../../navigation.tsx";
+import { SettingsButton, TabBar } from "../../navigation.tsx";
+import { tabLabels } from "../../tab-labels.ts";
 import { useNavigationTheme } from "../../navigation-theme.ts";
 
 function SettingsGear() {

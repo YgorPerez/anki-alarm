@@ -7,8 +7,8 @@ import AlarmClock from "lucide-react-native/icons/alarm-clock";
 import ChartNoAxesColumn from "lucide-react-native/icons/chart-no-axes-column";
 import Layers from "lucide-react-native/icons/layers";
 import Settings from "lucide-react-native/icons/settings";
-import { copy } from "./copy.ts";
 import { reliabilityCopy } from "./reliability-copy.ts";
+import { tabLabels } from "./tab-labels.ts";
 import { bold, regular } from "./fonts.ts";
 
 const icons: Record<string, LucideIcon> = {
@@ -47,15 +47,6 @@ export function SettingsButton({
       <Icon name="settings" color={color} />
     </Pressable>
   );
-}
-/** Each tab's name, on its button and as its page's title in the native header. */
-export function tabLabels(locale: Locale) {
-  const t = copy(locale);
-  return {
-    index: t("alarms"),
-    decks: t("title"),
-    stats: locale === "pt-BR" ? "Estatísticas" : "Stats",
-  };
 }
 export function TabBar({
   locale,
