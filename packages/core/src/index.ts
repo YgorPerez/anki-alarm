@@ -118,6 +118,7 @@ export type {
 export {
   replayCard,
   studyQueue,
+  studyCounts,
   nextStudyCard,
   studyDayStart,
   checkLogEntry,

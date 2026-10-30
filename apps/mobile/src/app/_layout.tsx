@@ -17,6 +17,7 @@ function Routes() {
     >
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="settings" />
+      <Stack.Screen name="study/[deckId]" />
     </Stack>
   );
 }

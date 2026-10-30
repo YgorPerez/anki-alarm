@@ -2,6 +2,10 @@ import { translator, type Locale, type Messages } from "@app/core";
 const messages = {
   "pt-BR": {
     study: "Estudar",
+    studyActions: "Ações do cartão",
+    studyNew: "{count} novos",
+    studyLearning: "{count} aprendendo",
+    studyReview: "{count} revisões",
     reveal: "Mostrar resposta",
     revealHint: "Toque para ver a resposta",
     awakeCardProgress: "0 de 1 · {seconds} s",
@@ -177,6 +181,10 @@ const messages = {
   },
   en: {
     study: "Study",
+    studyActions: "Card actions",
+    studyNew: "{count} new",
+    studyLearning: "{count} learning",
+    studyReview: "{count} reviews",
     reveal: "Show answer",
     revealHint: "Tap to see the answer",
     awakeCardProgress: "0 of 1 · {seconds} s",

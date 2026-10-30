@@ -181,7 +181,7 @@ export function deckFamily(collection: CollectionState, deckId: string) {
  * The cards to study now in a deck and its subdecks, as Anki studies them. Each card schedules
  * with its own deck's preset; the daily limits are the studied deck's.
  */
-export function studyQueue(
+function studyCandidates(
   collection: CollectionState,
   log: readonly LogEntry[],
   deckId: string,
@@ -239,7 +239,7 @@ export function studyQueue(
       else if (before.state === State.Review) reviewCount++;
     }
   }
-  return cards
+  const queue = cards
     .map((card) => ({
       card,
       memory: replayCard(card.id, entries.get(card.id) ?? [], presetOf(card), now),
@@ -259,6 +259,42 @@ export function studyQueue(
           : a.memory.due.getTime() - b.memory.due.getTime()) ||
         a.card.id.localeCompare(b.card.id),
     );
+  return {
+    queue,
+    newRemaining: Math.max(0, preset.fields.newPerDay.value - newCount),
+    reviewRemaining: Math.max(0, preset.fields.reviewsPerDay.value - reviewCount),
+  };
+}
+
+export function studyQueue(
+  collection: CollectionState,
+  log: readonly LogEntry[],
+  deckId: string,
+  now: number,
+  dayStart = studyDayStart(now),
+) {
+  return studyCandidates(collection, log, deckId, now, dayStart).queue;
+}
+
+/** Cards available now, including subdecks, capped by the studied deck's remaining daily limits. */
+export function studyCounts(
+  collection: CollectionState,
+  log: readonly LogEntry[],
+  deckId: string,
+  now: number,
+) {
+  const { queue, newRemaining, reviewRemaining } = studyCandidates(collection, log, deckId, now);
+  const counts = { new: 0, learning: 0, review: 0 };
+  for (const { memory } of queue) {
+    if (memory.state === State.New) counts.new++;
+    else if (memory.state === State.Review) counts.review++;
+    else counts.learning++;
+  }
+  return {
+    ...counts,
+    new: Math.min(counts.new, newRemaining),
+    review: Math.min(counts.review, reviewRemaining),
+  };
 }
 
 /**

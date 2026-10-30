@@ -1,9 +1,12 @@
+import { StudyMenu } from "./StudyMenu.tsx";
+import { StudyCounts } from "./StudyCounts.tsx";
 import { useContext } from "react";
 import { ScreenActivity } from "./screen-activity.ts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   renderCard,
   nextStudyCard,
+  studyCounts,
   type Grade,
   type Locale,
   type LogEntry,
@@ -49,6 +52,7 @@ export function StudyScreen({
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
       <StudyNavigation
+        counts={study.counts}
         title={deckName ?? t("study")}
         busy={busy}
         locale={locale}
@@ -102,7 +106,14 @@ function StudyReview({
               ...(deckName === undefined ? {} : { deckName }),
             }}
           />
-          <AnswerControls revealed={revealed} busy={busy} locale={locale} onAnswer={answer} />
+          <AnswerControls
+            onReveal={reveal}
+            gradeHeight={56}
+            revealed={revealed}
+            busy={busy}
+            locale={locale}
+            onAnswer={answer}
+          />
         </>
       ) : (
         <Text className="text-body text-attention">
@@ -140,12 +151,14 @@ function StudyFeedback({
 }
 
 function StudyNavigation({
+  counts,
   title,
   busy,
   locale,
   onExit,
   onUndo,
 }: {
+  counts: ReturnType<typeof studyCounts> | undefined;
   title: string;
   busy: boolean;
   locale: Locale;
@@ -164,18 +177,19 @@ function StudyNavigation({
           ‹ {title}
         </Text>
       </Pressable>
-      {onUndo && (
-        <Pressable
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={() => {
-            void onUndo();
-          }}
-          className="min-h-12 justify-center px-2"
-        >
-          <Text className="text-body text-foreground">{editingCopy(locale)("undo")}</Text>
-        </Pressable>
-      )}
+      {counts && <StudyCounts counts={counts} locale={locale} />}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={editingCopy(locale)("undo")}
+        disabled={busy || !onUndo}
+        onPress={() => {
+          void onUndo?.();
+        }}
+        className="min-h-12 min-w-12 items-center justify-center px-2"
+      >
+        <Text className="text-body text-foreground">↶</Text>
+      </Pressable>
+      <StudyMenu items={[]} locale={locale} busy={busy} />
     </View>
   );
 }
@@ -248,26 +262,42 @@ const gradeText = { 1: "text-again", 2: "text-hard", 3: "text-good-foreground", 
 export function AnswerControls({
   revealed,
   gradesShown = true,
+  gradeHeight = 64,
+  onReveal,
   busy,
   locale,
   onAnswer,
 }: {
   revealed: boolean;
   gradesShown?: boolean;
+  gradeHeight?: 56 | 64;
+  onReveal?: () => void;
   busy: boolean;
   locale: Locale;
   onAnswer: (grade: Grade) => Promise<void>;
 }) {
   const t = copy(locale);
   const rows = gradeRows(useWindowDimensions());
-  const height = rows.length === 1 ? 64 : 140;
+  const height = rows.length * gradeHeight + (rows.length - 1) * 12;
   if (!revealed || !gradesShown)
     return (
-      <View style={{ height }} className="items-center justify-center px-4">
-        {!revealed && (
-          <Text accessibilityLiveRegion="polite" className="text-label text-muted-foreground">
-            {t("revealHint")}
-          </Text>
+      <View style={{ height }} className="items-center justify-center">
+        {!revealed && onReveal ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={onReveal}
+            style={{ height: gradeHeight, alignSelf: "stretch" }}
+            className="items-center justify-center bg-surface"
+          >
+            <Text className="text-body text-foreground">{t("reveal")}</Text>
+          </Pressable>
+        ) : (
+          !revealed && (
+            <Text accessibilityLiveRegion="polite" className="text-label text-muted-foreground">
+              {t("revealHint")}
+            </Text>
+          )
         )}
       </View>
     );
@@ -283,7 +313,8 @@ export function AnswerControls({
               onPress={() => {
                 void onAnswer(grade);
               }}
-              className={`h-16 flex-1 items-center justify-center rounded-pill px-1 ${gradeClasses[grade]}`}
+              style={{ height: gradeHeight }}
+              className={`flex-1 items-center justify-center rounded-pill px-1 ${gradeClasses[grade]}`}
             >
               <Text className={`text-body ${gradeText[grade]}`} style={bold}>
                 {t(gradeLabels[grade])}
@@ -340,6 +371,12 @@ function useStudySession(deckId: string, onExit: () => void) {
     });
     return () => handler.remove();
   }, [onExit, screenActive]);
+  async function refresh() {
+    await Promise.all([
+      client.invalidateQueries({ queryKey: ["study", deckId] }),
+      client.invalidateQueries({ queryKey: ["reviewLog"] }),
+    ]);
+  }
   async function answer(grade: Grade) {
     if (!cardId || !revealed || lock.current) return;
     lock.current = true;
@@ -358,7 +395,7 @@ function useStudySession(deckId: string, onExit: () => void) {
       setAnswers((list) => [...list, entry]);
       setUndone(undefined);
       setRevealedId(undefined);
-      await client.invalidateQueries({ queryKey: ["study", deckId] });
+      await refresh();
     } catch {
       setError(true);
     }
@@ -376,7 +413,7 @@ function useStudySession(deckId: string, onExit: () => void) {
       setAnswers((list) => list.slice(0, -1));
       setUndone(last.cardId);
       setRevealedId(undefined);
-      await client.invalidateQueries({ queryKey: ["study", deckId] });
+      await refresh();
     } catch {
       setError(true);
     }
@@ -384,6 +421,9 @@ function useStudySession(deckId: string, onExit: () => void) {
     setBusy(false);
   }
   return {
+    counts: query.data
+      ? studyCounts(query.data.collection, query.data.log, deckId, query.data.now)
+      : undefined,
     query,
     card,
     note: next?.note,

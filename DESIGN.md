@@ -231,21 +231,26 @@ Phone first, one column, 16–24px side margins except the full-width study card
 
 While an alarm card is showing, the top is one compact line of Body text: time, progress and a
 small Snooze link at the end. The awake check uses time, one-card progress and seconds remaining.
-Decks study uses a back link with the deck name on the left and Undo on the right.
+Decks study opens above the tabs with no Settings header. Its top bar has a back link with the
+deck name, New/Learning/Review counts in Anki blue/red/green, an Undo icon and a shared card-action
+menu. The menu stays hidden while empty; alarm and awake check use it in their compact headers too.
 The big clock and alarm label remain on Start; stages without cards retain their existing layout.
 
 The card fills the width and all height between the header and bottom strip, with no frame.
 Its default text stays 28px and follows system font scale; deck CSS is preserved. Short content
 leaves blank space below it and long content scrolls inside the card. A tap reveals the answer;
-a drag only scrolls. The faint hint "Toque para ver a resposta" / "Tap to see the answer" and a
-screen-reader accessibility action replace the Show answer button.
+a drag only scrolls. Decks study also has a full-width 56px "Mostrar resposta" / "Show answer"
+bar. On the alarm and awake check, the faint hint "Toque para ver a resposta" / "Tap to see the
+answer" and a screen-reader accessibility action remain available.
 
-The bottom strip reserves 64px before and after reveal. Four equal 64px grade pills share a row;
-when scaled text cannot fit, they use two rows and reserve that height on both sides of the card.
+The bottom strip reserves 56px in Decks study and 64px on the alarm and awake check, before and
+after reveal. Four equal grade pills share a row; when scaled text cannot fit, they use two rows and reserve that height on both sides of the card.
 The alarm's grade delay keeps the same space reserved. Card height never jumps on reveal.
 
 Phone screens use Expo Router with three bottom tabs, in order: Alarmes, Baralhos, Estatísticas
-(Alarms, Decks, Stats). Every tab has a Settings gear at the top. Settings groups alarm reliability,
+(Alarms, Decks, Stats). Every tab has a Settings gear at the top. Study sits outside this tab layout.
+On a deck page, the name, today's counts and Estudar / Study come before the AnkiDroid panel and
+editing options. Settings groups alarm reliability,
 theme, language, account and the update offer; theme and reliability open within its stack. The web
 uses shadcn's sidebar.
 
@@ -275,8 +280,9 @@ The web keeps its existing scale: pills for controls, `lg` 16px for sheets and d
 
 ### Grade buttons
 
-A row of four equal pills, 64px tall, label in Body bold with the interval in Caption under it:
-De novo, Difícil, Bom, Fácil, in Anki's order. They appear a few seconds after the reveal. Good is
+A row of four equal pills, 56px tall in Decks study and 64px on the alarm and awake check. Labels
+use Body bold: De novo, Difícil, Bom, Fácil, in Anki's order. The alarm delays the grades for a few
+seconds after reveal. Good is
 solid primary; the others are their hue on its tint.
 
 ### Primary and neutral buttons

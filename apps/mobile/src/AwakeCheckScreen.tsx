@@ -1,3 +1,4 @@
+import { StudyMenu } from "./StudyMenu.tsx";
 import { useQuery } from "@tanstack/react-query";
 import { awakeCheckSession, RING_POLICY, type Grade, type Locale } from "@app/core";
 import { Effect, type Layer } from "effect";
@@ -82,17 +83,18 @@ export function AwakeCheckScreen({
       studying={Boolean(next)}
       top={
         next ? (
-          <View className="min-h-12 justify-center px-4">
+          <View className="min-h-12 flex-row items-center justify-between px-4">
             <Text
               numberOfLines={1}
               adjustsFontSizeToFit
               minimumFontScale={0.5}
-              className="text-body text-attention"
+              className="shrink text-body text-attention"
               style={regular}
             >
               {timeText(now, locale, zone, use24Hour)} ·{" "}
               {t("awakeCardProgress", { seconds: String(Math.ceil(left / 1000)) })}
             </Text>
+            <StudyMenu items={[]} locale={locale} busy={prompt.busy} />
             {prompt.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
           </View>
         ) : (
