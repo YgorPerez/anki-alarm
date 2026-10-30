@@ -227,13 +227,22 @@ alarm and in study the card renders in Anki's night mode on dark grounds (`.nigh
 
 ## Layout
 
-Phone first, one column, 16–24px side margins. The alarm screen is fixed, so the hands learn it:
+Phone first, one column, 16–24px side margins except the full-width study card.
 
-- Top: clock, deck path, progress segments (one per card to get right), then "2 de 5 certos ·
-  faltam 3".
-- Middle: question, hairline rule, answer. No card box.
-- Bottom, at the thumb: one row of four 64px grade pills, or one full-width 64px button (Start,
-  Show answer, Answer now, Close). The snooze link sits below them, apart from every grade.
+While an alarm card is showing, the top is one compact line of Body text: time, progress and a
+small Snooze link at the end. The awake check uses time, one-card progress and seconds remaining.
+Decks study uses a back link with the deck name on the left and Undo on the right.
+The big clock and alarm label remain on Start; stages without cards retain their existing layout.
+
+The card fills the width and all height between the header and bottom strip, with no frame.
+Its default text stays 28px and follows system font scale; deck CSS is preserved. Short content
+leaves blank space below it and long content scrolls inside the card. A tap reveals the answer;
+a drag only scrolls. The faint hint "Toque para ver a resposta" / "Tap to see the answer" and a
+screen-reader accessibility action replace the Show answer button.
+
+The bottom strip reserves 64px before and after reveal. Four equal 64px grade pills share a row;
+when scaled text cannot fit, they use two rows and reserve that height on both sides of the card.
+The alarm's grade delay keeps the same space reserved. Card height never jumps on reveal.
 
 Phone screens use Expo Router with three bottom tabs, in order: Alarmes, Baralhos, Estatísticas
 (Alarms, Decks, Stats). Every tab has a Settings gear at the top. Settings groups alarm reliability,
@@ -242,7 +251,7 @@ uses shadcn's sidebar.
 
 ### Named Rules
 
-**Snooze stands alone.** Snooze is never next to a grade or a primary button.
+**Snooze stands alone.** During study, Snooze sits in the header, away from the grades.
 
 ## Elevation & Depth
 
@@ -272,7 +281,7 @@ solid primary; the others are their hue on its tint.
 
 ### Primary and neutral buttons
 
-Full-width 64px pills on the alarm. Primary (solid lilac) only for Start; Show answer, Answer now
+Full-width 64px pills on the alarm. Primary (solid lilac) only for Start; Answer now
 and Close are neutral (`surface`). In app screens, buttons are 48dp minimum.
 
 ### Progress segments

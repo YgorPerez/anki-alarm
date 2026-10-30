@@ -11,7 +11,9 @@ import { mediaUrl } from "./media.ts";
 
 const front = () => String(screen.getByLabelText("Frente").props.source.html);
 async function revealAndGrade(grade: string) {
-  await fireEvent.press(screen.getByRole("button", { name: "Mostrar resposta" }));
+  await fireEvent(screen.getByLabelText("Frente"), "accessibilityAction", {
+    nativeEvent: { actionName: "activate" },
+  });
   // The grades wait a moment after the reveal.
   expect(screen.queryByRole("button", { name: grade })).toBeNull();
   await fireEvent.press(await screen.findByRole("button", { name: grade }));
@@ -96,7 +98,8 @@ test("Start silences the ring, cards count toward N and N right dismisses it", a
     await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
     await screen.findByLabelText("Frente");
     expect(native.signals()).toContain("sessionStarted:ring-Acordar");
-    screen.getByText("0 de 2 certos · faltam 2");
+    expect(screen.queryByText("Trabalho")).toBeNull();
+    expect(screen.getByText(/ · 0 de 2 certos · faltam 2/)).toBeTruthy();
 
     const first = front();
     await revealAndGrade("De novo");
@@ -165,7 +168,9 @@ test("a snoozed ring shows when it rings again on the same clock, in the same fo
 /** The rows the four grades sit in, once a card is revealed. */
 async function gradeRows() {
   await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
-  await fireEvent.press(await screen.findByRole("button", { name: "Mostrar resposta" }));
+  await fireEvent(await screen.findByLabelText("Frente"), "accessibilityAction", {
+    nativeEvent: { actionName: "activate" },
+  });
   await screen.findByRole("button", { name: "Bom" });
   return ["De novo", "Difícil", "Bom", "Fácil"].map(
     (name) => screen.getByRole("button", { name }).parent,

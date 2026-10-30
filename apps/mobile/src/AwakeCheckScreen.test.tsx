@@ -76,10 +76,13 @@ test("one answer, any grade, passes the check and is a normal review", async () 
   const deckId = state.decks.find((d) => d.fields.name.value === "Manhã")!.id;
   const { native, check } = await shownCheck("ring-1", deckId);
   const passed = await show(check, native.layer);
-  screen.getByText("Ainda acordado?");
-  screen.getByText("Responda um cartão em 60 s ou o alarme toca de novo");
+  await screen.findByLabelText("Frente");
+  expect(screen.queryByText("Ainda acordado?")).toBeNull();
+  screen.getByText(/ · 0 de 1 · 60 s/);
   expect(String((await screen.findByLabelText("Frente")).props.source.html)).toContain("lua");
-  await fireEvent.press(screen.getByRole("button", { name: "Mostrar resposta" }));
+  await fireEvent(screen.getByLabelText("Frente"), "accessibilityAction", {
+    nativeEvent: { actionName: "activate" },
+  });
   await fireEvent.press(await screen.findByRole("button", { name: "De novo" }));
   await waitFor(() => expect(passed()).toBe(1));
   expect(native.awakeCheck()).toBeNull();

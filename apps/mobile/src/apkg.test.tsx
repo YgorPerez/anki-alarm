@@ -77,9 +77,9 @@ test("imported cards study with their templates, cloze numbers and local media",
   // The suspended reverse card stays out: four cards, each answered once, in order.
   /* oxlint-disable eslint/no-await-in-loop -- Each answer brings the next card. */
   for (let i = 0; i < 4; i++) {
-    const reveal = await screen.findByRole("button", { name: "Mostrar resposta" });
+    const reveal = await screen.findByLabelText("Frente");
     fronts.push(String(screen.getByLabelText("Frente").props.source.html));
-    await fireEvent.press(reveal);
+    await fireEvent(reveal, "accessibilityAction", { nativeEvent: { actionName: "activate" } });
     backs.push(String(screen.getByLabelText("Verso").props.source.html));
     await fireEvent.press(screen.getByRole("button", { name: "Bom" }));
   }

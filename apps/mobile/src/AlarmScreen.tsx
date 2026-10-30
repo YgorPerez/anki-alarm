@@ -104,9 +104,35 @@ export function AlarmScreen({
   );
   if (stage === "card" && session?.next)
     return (
-      <AlarmFrame top={header}>
+      <AlarmFrame
+        studying
+        top={
+          <View className="min-h-12 flex-row items-center justify-between px-4">
+            <View className="shrink">
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.5}
+                className="text-body text-foreground"
+                style={regular}
+              >
+                {time(now)} · <Progress session={session} locale={locale} />
+              </Text>
+            </View>
+            {offer && (
+              <SnoozeLink
+                compact
+                offer={offer}
+                busy={alarm.busy}
+                locale={locale}
+                onPress={alarm.snooze}
+              />
+            )}
+            {alarm.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
+          </View>
+        }
+      >
         <SessionCard next={session.next} alarm={alarm} locale={locale} />
-        {snooze}
       </AlarmFrame>
     );
   return (
@@ -262,7 +288,9 @@ function SnoozeLink({
   busy,
   locale,
   onPress,
+  compact = false,
 }: {
+  compact?: boolean;
   offer: NonNullable<ReturnType<typeof snoozeOffer>>;
   busy: boolean;
   locale: Locale;
@@ -279,41 +307,35 @@ function SnoozeLink({
       onPress={() => {
         void onPress();
       }}
-      className="mt-4 min-h-12 items-center justify-center"
+      className={
+        compact ? "min-h-12 justify-center pl-2" : "mt-4 min-h-12 items-center justify-center"
+      }
     >
       <Text className="text-label text-muted-foreground underline" style={regular}>
-        {length} ·{" "}
-        <Text className="text-attention" style={bold}>
-          {cost}
-        </Text>
+        {compact ? (
+          t("snooze")
+        ) : (
+          <>
+            {length} ·{" "}
+            <Text className="text-attention" style={bold}>
+              {cost}
+            </Text>
+          </>
+        )}
       </Text>
     </Pressable>
   );
 }
 
 function Progress({ session, locale }: { session: Session; locale: Locale }) {
-  const segments = Array.from({ length: session.need }, (_, index) => ({
-    key: `segment-${index}`,
-    filled: index < session.right,
-  }));
   return (
-    <View className="gap-2">
-      <View className="flex-row gap-1">
-        {segments.map((segment) => (
-          <View
-            key={segment.key}
-            className={`h-[5px] flex-1 rounded-pill ${segment.filled ? "bg-primary" : "bg-surface"}`}
-          />
-        ))}
-      </View>
-      <Text className="text-label text-attention" style={regular}>
-        {copy(locale)("progress", {
-          right: String(session.right),
-          need: String(session.need),
-          left: String(Math.max(0, session.need - session.right)),
-        })}
-      </Text>
-    </View>
+    <Text className="text-body text-attention" style={regular}>
+      {copy(locale)("progress", {
+        right: String(session.right),
+        need: String(session.need),
+        left: String(Math.max(0, session.need - session.right)),
+      })}
+    </Text>
   );
 }
 

@@ -62,27 +62,41 @@ export function useBlockBack() {
 }
 
 /**
- * An alarm screen's frame: the clock and what goes with it on top, the card and the controls
- * below. At large font scales the top shrinks and scrolls, so the card keeps some room and the
- * controls stay at the thumb.
+ * Card stages use an edge-to-edge frame with a compact header. Other stages keep the
+ * scrollable clock and padded actions.
  */
-export function AlarmFrame({ top, children }: { top: ReactNode; children: ReactNode }) {
+export function AlarmFrame({
+  top,
+  children,
+  studying = false,
+}: {
+  top: ReactNode;
+  children: ReactNode;
+  studying?: boolean;
+}) {
   const insets = useSafeAreaInsets();
   return (
     <View
-      className="flex-1 gap-4 bg-background px-6"
-      style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
+      className={studying ? "flex-1 bg-background" : "flex-1 gap-4 bg-background px-6"}
+      style={{
+        paddingTop: insets.top + (studying ? 0 : 24),
+        paddingBottom: insets.bottom + (studying ? 0 : 24),
+      }}
     >
-      <ScrollView className="shrink grow-0" contentContainerClassName="gap-4">
-        {top}
-      </ScrollView>
+      {studying ? (
+        top
+      ) : (
+        <ScrollView className="shrink grow-0" contentContainerClassName="gap-4">
+          {top}
+        </ScrollView>
+      )}
       {children}
     </View>
   );
 }
 
 type Next = NonNullable<ReturnType<typeof alarmSession>["next"]>;
-/** The card being answered: its front or back, then Show answer or the grades. */
+/** The card being answered: its front or back, then the reveal hint or grades. */
 export function AlarmCard({
   next,
   reveal,
@@ -101,27 +115,26 @@ export function AlarmCard({
   const t = copy(locale);
   return (
     <>
-      <View className="min-h-40 flex-1">
-        <CardSide
-          key={`${next.card.id}-${reveal.revealed}`}
-          label={t(reveal.revealed ? "answer" : "front")}
-          dark
-          input={{
-            note: next.note,
-            type: next.noteType,
-            ordinal: next.card.fields.ordinal.value,
-            side: reveal.revealed ? "back" : "front",
-            dark: true,
-            deckName: next.deckName,
-          }}
-        />
-      </View>
+      <CardSide
+        key={`${next.card.id}-${reveal.revealed}`}
+        label={t(reveal.revealed ? "answer" : "front")}
+        dark
+        revealHint={!reveal.revealed && !busy ? t("revealHint") : undefined}
+        onReveal={onReveal}
+        input={{
+          note: next.note,
+          type: next.noteType,
+          ordinal: next.card.fields.ordinal.value,
+          side: reveal.revealed ? "back" : "front",
+          dark: true,
+          deckName: next.deckName,
+        }}
+      />
       <AnswerControls
         revealed={reveal.revealed}
         gradesShown={reveal.gradesShown}
         busy={busy}
         locale={locale}
-        onReveal={onReveal}
         onAnswer={onAnswer}
       />
     </>
