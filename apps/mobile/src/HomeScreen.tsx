@@ -272,7 +272,7 @@ export function HomeScreen({
             ) : null}
             {banner}
             {error ? (
-              <Text accessibilityRole="alert" className="text-body text-attention">
+              <Text style={regular} accessibilityRole="alert" className="text-body text-attention">
                 {error}
               </Text>
             ) : null}
@@ -309,7 +309,7 @@ export function HomeScreen({
         )}
       />
       {actionError && (
-        <Text accessibilityRole="alert" className="text-body text-destructive">
+        <Text style={regular} accessibilityRole="alert" className="text-body text-destructive">
           {t("alarmError")}
         </Text>
       )}

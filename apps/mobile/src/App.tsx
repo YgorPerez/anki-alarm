@@ -1,3 +1,4 @@
+import { regular, bold } from "./fonts.ts";
 import { AlarmSettingsRows } from "./AlarmSettingsRows.tsx";
 import { HomeScreen } from "./HomeScreen.tsx";
 import { useAlarmDecks } from "./AlarmDeckSettings.tsx";
@@ -407,10 +408,10 @@ function Home({ children }: { children: ReactNode }) {
             onPress={() => router.push("/settings/reliability")}
             className="min-h-12 flex-row items-center justify-between gap-4 rounded-lg bg-surface p-4"
           >
-            <Text className="shrink text-body text-attention">
+            <Text style={regular} className="shrink text-body text-attention">
               {reliabilityCopy(locale)("atRisk")}
             </Text>
-            <Text className="text-body font-bold text-primary-ink">
+            <Text style={bold} className="text-body font-bold text-primary-ink">
               {reliabilityCopy(locale)("fix")}
             </Text>
           </Pressable>
@@ -485,7 +486,9 @@ function EditorRoute({
   if (!alarm)
     return (
       <View className="flex-1 bg-background p-6">
-        <Text className="text-body text-foreground">{copy(locale)("loading")}</Text>
+        <Text style={regular} className="text-body text-foreground">
+          {copy(locale)("loading")}
+        </Text>
       </View>
     );
   const settings = (draft: Alarm, onChange: (alarm: Alarm) => void) => (

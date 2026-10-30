@@ -99,7 +99,10 @@ export function TabBar({
                 : "items-center rounded-pill px-5 py-1"
             }
           >
-            <Text className={active === name ? "text-primary-ink" : "text-muted-foreground"}>
+            <Text
+              style={regular}
+              className={active === name ? "text-primary-ink" : "text-muted-foreground"}
+            >
               <Icon
                 name={name}
                 color={

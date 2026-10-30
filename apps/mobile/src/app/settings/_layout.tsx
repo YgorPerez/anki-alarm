@@ -1,3 +1,4 @@
+import { regular } from "../../fonts.ts";
 import { navigationRenderer } from "../../navigation-renderer.tsx";
 import { Stack, useRouter } from "expo-router";
 import { Pressable, Text } from "react-native";
@@ -15,7 +16,9 @@ function BackButton() {
       onPress={() => router.back()}
       className="min-h-12 min-w-12 justify-center"
     >
-      <Text className="text-body text-primary-ink">{t("back")}</Text>
+      <Text style={regular} className="text-body text-primary-ink">
+        {t("back")}
+      </Text>
     </Pressable>
   );
 }
