@@ -11,13 +11,14 @@ import {
   upcomingRing,
   timeLeft,
   QUICK_ALARM_MINUTES,
+  EVERY_DAY,
   type Alarm,
   type Locale,
 } from "@app/core";
 import { useRef, type ReactNode } from "react";
-import { FlatList, Pressable, Switch, Text, View } from "react-native";
-import { Clock, useNow } from "./clock.tsx";
-import { clockText, durationText, repeatSummary, timeText } from "./alarm-text.ts";
+import { FlatList, Pressable, Switch, Text, View, useWindowDimensions } from "react-native";
+import { useNow } from "./clock.tsx";
+import { clockText, durationText, repeatSummary, timeText, weekdayName } from "./alarm-text.ts";
 import { bold, clock, regular } from "./fonts.ts";
 import { copy } from "./copy.ts";
 import { HomeEmptyState, type DeckSetup } from "./HomeEmptyState.tsx";
@@ -43,6 +44,7 @@ function alarmMenuItems(
     zone,
     onSkip,
     onDuplicate,
+    onDelete,
   }: {
     offer: ReturnType<typeof skipOffer>;
     locale: Locale;
@@ -50,15 +52,17 @@ function alarmMenuItems(
     zone: string;
     onSkip?: (alarm: Alarm) => void;
     onDuplicate?: (alarm: Alarm) => void;
+    onDelete?: () => void;
   },
 ) {
   const t = copy(locale);
-  const items: { label: string; onPress: () => void }[] = [];
+  const items: { label: string; onPress: () => void; destructive?: boolean }[] = [];
   if (onSkip && offer === "skip")
     items.push({ label: t("skipNext"), onPress: () => onSkip(skipNextRing(alarm, now, zone)) });
   if (onSkip && offer === "undo")
     items.push({ label: t("undoSkip"), onPress: () => onSkip(undoSkip(alarm)) });
   if (onDuplicate) items.push({ label: t("duplicateAlarm"), onPress: () => onDuplicate(alarm) });
+  if (onDelete) items.push({ label: t("deleteAlarm"), onPress: onDelete, destructive: true });
   return items;
 }
 
@@ -83,13 +87,8 @@ function AlarmCardDetails({
           {t("skippedUntil", { date: dayText(ringsAfterSkip, locale, zone) })}
         </Text>
       )}
-      {alarm.label ? (
-        <Text style={regular} className="text-body text-foreground">
-          {alarm.label}
-        </Text>
-      ) : null}
-      <Text style={regular} className="text-label text-muted-foreground">
-        {deckName || t("chooseDeck")} ·{" "}
+      <Text style={regular} numberOfLines={1} className="text-label text-muted-foreground">
+        {alarm.label || deckName || t("chooseDeck")} ·{" "}
         {alarm.need === 1 ? t("oneCard") : t("needCount", { count: String(alarm.need) })}
       </Text>
     </>
@@ -107,6 +106,7 @@ function AlarmCard({
   onToggle,
   onSkip,
   onDuplicate,
+  onDelete,
 }: {
   alarm: Alarm;
   deckName?: string;
@@ -118,31 +118,62 @@ function AlarmCard({
   onToggle: (alarm: Alarm) => void;
   onSkip?: (alarm: Alarm) => void;
   onDuplicate?: (alarm: Alarm) => void;
+  onDelete?: () => void;
 }) {
   const t = copy(locale);
+  const { width, fontScale } = useWindowDimensions();
   const time = clockText(alarm.rule.hour, alarm.rule.minute, use24Hour, locale);
   const offer = skipOffer(alarm, now, zone);
-  const ringsAfterSkip = offer === "undo" ? upcomingRing(alarm, now, zone) : null;
+  const ringsAfterSkip =
+    skipOffer({ ...alarm, enabled: true }, now, zone) === "undo"
+      ? upcomingRing({ ...alarm, enabled: true }, now, zone)
+      : null;
   return (
-    <View
-      className={
-        alarm.enabled ? "rounded-lg bg-surface p-4" : "rounded-lg bg-surface p-4 opacity-50"
-      }
-    >
+    <View className="rounded-lg bg-surface p-4">
       <View className="flex-row items-center gap-3">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${time}, ${alarm.label || t("alarms")}`}
+        <AlarmCardMenu
+          name={`${time}, ${alarm.label || deckName || t("chooseDeck")}, ${repeatSummary(alarm.rule, { locale, now, zone })}, ${alarm.need === 1 ? t("oneCard") : t("needCount", { count: String(alarm.need) })}`}
+          locale={locale}
+          items={alarmMenuItems(alarm, { offer, locale, now, zone, onSkip, onDuplicate, onDelete })}
           onPress={() => onEdit(alarm)}
-          className="min-h-12 flex-1 gap-1"
         >
-          <Text className="text-title font-bold text-foreground" style={clock}>
+          <Text
+            className={alarm.enabled ? "text-foreground" : "text-muted-foreground"}
+            style={{
+              ...clock,
+              fontSize: Math.min(44, (width - 156) / ((use24Hour ? 3.3 : 5.5) * fontScale)),
+            }}
+          >
             {time}
           </Text>
-          <Text style={regular} className="text-label text-muted-foreground">
-            {repeatSummary(alarm.rule, { locale, now, zone })}
-            {alarm.quick ? ` · ${t("quick")}` : null}
-          </Text>
+          {alarm.rule.onceDate ? (
+            <Text style={regular} className="text-label text-muted-foreground">
+              {new Intl.DateTimeFormat(locale, { timeZone: "UTC", dateStyle: "medium" }).format(
+                Date.parse(alarm.rule.onceDate + "T12:00:00Z"),
+              )}
+              {alarm.quick ? ` · ${t("quick")}` : null}
+            </Text>
+          ) : (
+            <View
+              accessible
+              accessibilityLabel={repeatSummary(alarm.rule, { locale, now, zone })}
+              className="flex-row flex-wrap gap-2"
+            >
+              {EVERY_DAY.map((day) => (
+                <Text
+                  key={day}
+                  style={alarm.rule.repeatDays?.includes(day) ? bold : regular}
+                  className={
+                    alarm.rule.repeatDays?.includes(day) && alarm.enabled
+                      ? "text-caption text-primary-ink"
+                      : "text-caption text-muted-foreground"
+                  }
+                >
+                  {weekdayName(day, locale).slice(0, 1)}
+                </Text>
+              ))}
+            </View>
+          )}
           <AlarmCardDetails
             alarm={alarm}
             deckName={deckName}
@@ -150,12 +181,7 @@ function AlarmCard({
             ringsAfterSkip={ringsAfterSkip}
             zone={zone}
           />
-        </Pressable>
-        <AlarmCardMenu
-          name={alarm.label || time}
-          locale={locale}
-          items={alarmMenuItems(alarm, { offer, locale, now, zone, onSkip, onDuplicate })}
-        />
+        </AlarmCardMenu>
         <Switch
           accessibilityLabel={`${alarm.label || time}: ${t(alarm.enabled ? "enabled" : "disabled")}`}
           value={alarm.enabled}
@@ -227,15 +253,22 @@ export function HomeScreen({
         onRefresh={onRefresh}
         ListHeaderComponent={
           <View className="gap-4 pb-4">
-            <Clock at={now} locale={locale} zone={zone} use24Hour={use24Hour} />
-            <Text style={regular} className="text-body text-muted-foreground">
-              {next
-                ? t("nextAlarm", {
-                    time: timeText(next.at, locale, zone, use24Hour),
-                    left: durationText(timeLeft(next.remainingMs), locale),
-                  })
-                : t("noEnabledAlarms")}
-            </Text>
+            <View className="items-center gap-2 py-8">
+              <Text
+                accessibilityRole="header"
+                style={bold}
+                className="text-title text-foreground text-center"
+              >
+                {next
+                  ? t("alarmCountdown", { time: durationText(timeLeft(next.remainingMs), locale) })
+                  : t("noEnabledAlarms")}
+              </Text>
+              {next && (
+                <Text style={regular} className="text-body text-muted-foreground text-center">
+                  {dayText(next.at, locale, zone)} · {timeText(next.at, locale, zone, use24Hour)}
+                </Text>
+              )}
+            </View>
             {onQuickAlarm ? (
               <View className="flex-row flex-wrap gap-2">
                 {QUICK_ALARM_MINUTES.map((minutes) => (
@@ -296,6 +329,13 @@ export function HomeScreen({
               onToggle={onToggle}
               onSkip={onSkip}
               onDuplicate={onDuplicate}
+              onDelete={
+                onDelete
+                  ? () => {
+                      void removeAlarm(item);
+                    }
+                  : undefined
+              }
             />
           </SwipeAlarm>
         )}
