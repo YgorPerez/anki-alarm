@@ -1,4 +1,11 @@
-import { EVERY_DAY, WEEKDAYS, type AlarmRule, type Locale, type RingsIn } from "@app/core";
+import {
+  EVERY_DAY,
+  savedRule,
+  WEEKDAYS,
+  type AlarmRule,
+  type Locale,
+  type RingsIn,
+} from "@app/core";
 import { copy } from "./copy.ts";
 
 /** An alarm's time as the phone shows it: "06:30" on a 24 h phone, "6:30 AM" on a 12 h one. */
@@ -36,6 +43,13 @@ const weekdayNames = {
 /** A weekday's short name ("Mon", "Seg"), ISO numbering. */
 export const weekdayName = (day: number, locale: Locale) => weekdayNames[locale][day - 1]!;
 
+const weekdayLetters = {
+  "pt-BR": ["S", "T", "Q", "Q", "S", "S", "D"],
+  en: ["M", "T", "W", "T", "F", "S", "S"],
+} as const;
+/** A weekday's one letter ("M", "S"), ISO numbering. Letters repeat, so speak `weekdayName`. */
+export const weekdayLetter = (day: number, locale: Locale) => weekdayLetters[locale][day - 1]!;
+
 /** The civil date `at` falls on in `zone`, as YYYY-MM-DD. */
 const civilDate = (at: number, zone: string) =>
   new Intl.DateTimeFormat("en-CA", {
@@ -50,9 +64,47 @@ export function sameDays(days: readonly number[], expected: readonly number[]) {
   return days.length === expected.length && expected.every((day) => selected.has(day));
 }
 
+function nearDay(date: string, now: number, zone: string) {
+  const today = civilDate(now, zone);
+  if (date === today) return "today";
+  // Advance the civil day, including days containing a DST transition.
+  const tomorrow = new Date(Date.parse(`${today}T12:00:00Z`) + 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  return date === tomorrow ? "tomorrow" : null;
+}
+
+/**
+ * The editor's summary line. Repeating days read as in `repeatSummary`; a one-off, or no days at
+ * all, names the day it rings: "Amanhã · sáb, 31 out", "qui, 5 nov".
+ */
+export function repeatLine(
+  rule: AlarmRule,
+  context: { locale: Locale; now: number; zone: string },
+) {
+  const { locale, now, zone } = context;
+  const date =
+    rule.onceDate ?? (rule.repeatDays?.length ? null : savedRule(rule, now, zone)?.onceDate);
+  if (!date) return repeatSummary(rule, context);
+  const parts = new Intl.DateTimeFormat(locale, {
+    timeZone: "UTC",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).formatToParts(Date.parse(`${date}T12:00:00Z`));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)!.value.replace(".", "");
+  const day =
+    locale === "en"
+      ? `${part("weekday")}, ${part("month")} ${part("day")}`
+      : `${part("weekday")}, ${part("day")} ${part("month")}`;
+  const near = nearDay(date, now, zone);
+  return near ? `${copy(locale)(near)} · ${day}` : day;
+}
+
 /**
  * How an alarm repeats, in a few words: "Weekdays", "Mon, Wed", "Tomorrow", a date, or "Once"
- * for no days and no date yet. Home's cards and the editor's Repeat row both show it.
+ * for no days and no date yet. Home's cards show it.
  */
 export function repeatSummary(
   rule: Pick<AlarmRule, "repeatDays" | "onceDate">,
@@ -60,13 +112,8 @@ export function repeatSummary(
 ) {
   const t = copy(locale);
   if (rule.onceDate) {
-    const today = civilDate(now, zone);
-    if (rule.onceDate === today) return t("today");
-    // Advance the civil day, including days containing a DST transition.
-    const tomorrow = new Date(Date.parse(`${today}T12:00:00Z`) + 86_400_000)
-      .toISOString()
-      .slice(0, 10);
-    if (rule.onceDate === tomorrow) return t("tomorrow");
+    const near = nearDay(rule.onceDate, now, zone);
+    if (near) return t(near);
     return new Intl.DateTimeFormat(locale, { timeZone: "UTC", dateStyle: "medium" }).format(
       Date.parse(`${rule.onceDate}T12:00:00Z`),
     );

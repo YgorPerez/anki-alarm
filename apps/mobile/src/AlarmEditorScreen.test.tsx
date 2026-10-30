@@ -82,16 +82,15 @@ test("a new alarm takes its time from inline wheels, its days from the Repeat sh
 
   await fireEvent.press(screen.getByRole("button", { name: "Repeat, Weekdays" }));
   await fireEvent.press(screen.getByRole("button", { name: "Every day" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Done" }));
   for (const day of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
     screen.getByRole("checkbox", { name: day, checked: true });
   await fireEvent.press(screen.getByRole("checkbox", { name: "Sun" }));
-  await fireEvent.press(screen.getByRole("button", { name: "Done" }));
   screen.getByRole("button", { name: "Repeat, Mon, Tue, Wed, Thu, Fri, Sat" });
 
-  await fireEvent.press(screen.getByRole("button", { name: "Label, None" }));
   await fireEvent.changeText(screen.getByLabelText("Label"), "Academia");
-  await fireEvent.press(screen.getByRole("button", { name: "Done" }));
-  screen.getByRole("button", { name: "Label, Academia" });
+  expect(screen.getByLabelText("Label").props.value).toBe("Academia");
+  expect(screen.queryByRole("button", { name: /^Label/ })).toBeNull();
 
   await fireEvent.press(screen.getByRole("button", { name: "Save" }));
   expect(done.saved).toEqual([
@@ -106,6 +105,29 @@ test("a new alarm takes its time from inline wheels, its days from the Repeat sh
   expect(done.closed).toBe(1);
 });
 
+test("tapping a day letter on the page updates the summary and the draft", async () => {
+  const done = await openEditor({ ...newAlarm("a"), deckId: "inglês" });
+  screen.getByRole("button", { name: "Repeat, Weekdays" });
+  // The week starts on Sunday, each letter spoken as its day's short name.
+  expect(screen.getAllByRole("checkbox").map((day) => day.props.accessibilityLabel)).toEqual([
+    "Sun",
+    "Mon",
+    "Tue",
+    "Wed",
+    "Thu",
+    "Fri",
+    "Sat",
+  ]);
+  for (const letter of ["S", "M", "W", "F"]) screen.getAllByText(letter);
+  await fireEvent.press(screen.getByRole("checkbox", { name: "Sat" }));
+  screen.getByRole("checkbox", { name: "Sat", checked: true });
+  screen.getByRole("button", { name: "Repeat, Mon, Tue, Wed, Thu, Fri, Sat" });
+  await fireEvent.press(screen.getByRole("checkbox", { name: "Mon" }));
+  screen.getByRole("button", { name: "Repeat, Tue, Wed, Thu, Fri, Sat" });
+  await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+  expect(done.saved.at(-1)?.rule).toEqual({ hour: 7, minute: 0, repeatDays: [2, 3, 4, 5, 6] });
+});
+
 test("a one-off date comes from the calendar, and no days at all rings once at the next 07:00", async () => {
   const alarm = { ...newAlarm("a"), deckId: "inglês" };
   const done = await openEditor(alarm, { locale: "pt-BR" });
@@ -113,22 +135,41 @@ test("a one-off date comes from the calendar, and no days at all rings once at t
   await fireEvent.press(screen.getByRole("button", { name: "Data única" }));
   expect(pickers.at(-1)).toMatchObject({ mode: "date", minimumDate: new Date(2026, 9, 28) });
   await act(() => answerPicker(new Date(2026, 10, 5)));
-  screen.getByRole("checkbox", { name: "Seg", checked: false });
   await fireEvent.press(screen.getByRole("button", { name: "Pronto" }));
-  screen.getByRole("button", { name: /^Repetir, 5 de nov\. de 2026$/ });
+  screen.getByRole("checkbox", { name: "Seg", checked: false });
+  screen.getByRole("button", { name: "Repetir, qui, 5 nov" });
   await fireEvent.press(screen.getByRole("button", { name: "Salvar" }));
   expect(done.saved.at(-1)?.rule).toEqual({ hour: 7, minute: 0, onceDate: "2026-11-05" });
   expect(toasts.at(-1)).toBe("Toca em 7 d 7 h 42 min");
 
   const again = await openEditor(alarm, { locale: "en" });
-  await fireEvent.press(screen.getByRole("button", { name: "Repeat, Weekdays" }));
   for (const day of ["Mon", "Tue", "Wed", "Thu", "Fri"])
     await fireEvent.press(screen.getByRole("checkbox", { name: day }));
-  await fireEvent.press(screen.getByRole("button", { name: "Done" }));
-  screen.getByRole("button", { name: "Repeat, Once" });
+  screen.getByRole("button", { name: "Repeat, Tomorrow · Thu, Oct 29" });
   await fireEvent.press(screen.getByRole("button", { name: "Save" }));
   expect(again.saved.at(-1)?.rule).toEqual({ hour: 7, minute: 0, onceDate: "2026-10-29" });
   expect(toasts.at(-1)).toBe("Rings in 7 h 42 min");
+});
+
+test("the summary's sheet holds the presets and the date; a preset or a letter clears the date", async () => {
+  const done = await openEditor({ ...newAlarm("a"), deckId: "inglês" });
+  await fireEvent.press(screen.getByRole("button", { name: "Repeat, Weekdays" }));
+  // The letters stay on the page, not in the sheet.
+  expect(screen.getAllByRole("checkbox")).toHaveLength(7);
+  await fireEvent.press(screen.getByRole("button", { name: "One-off date" }));
+  await act(() => answerPicker(new Date(2026, 9, 29)));
+  screen.getByRole("button", { name: "Repeat, Tomorrow · Thu, Oct 29" });
+  await fireEvent.press(screen.getByRole("button", { name: "Weekdays" }));
+  screen.getByRole("button", { name: "Repeat, Weekdays" });
+  await fireEvent.press(screen.getByRole("button", { name: "One-off date" }));
+  await act(() => answerPicker(new Date(2026, 10, 5)));
+  await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+  screen.getByRole("button", { name: "Repeat, Thu, Nov 5" });
+
+  await fireEvent.press(screen.getByRole("checkbox", { name: "Sat" }));
+  screen.getByRole("button", { name: "Repeat, Sat" });
+  await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+  expect(done.saved.at(-1)?.rule).toEqual({ hour: 7, minute: 0, repeatDays: [6] });
 });
 
 test("editing keeps the alarm's id, Back closes a sheet first, and leaving asks before discarding changes", async () => {
@@ -136,13 +177,14 @@ test("editing keeps the alarm's id, Back closes a sheet first, and leaving asks 
   const done = await openEditor(alarm, { saved: true, hour24: false });
   screen.getByRole("adjustable", { name: "AM/PM" });
 
-  await fireEvent.press(screen.getByRole("button", { name: "Label, Trabalho" }));
-  await fireEvent.changeText(screen.getByLabelText("Label"), "Folga");
+  await fireEvent.press(screen.getByRole("button", { name: /^Repeat, / }));
+  await fireEvent.press(screen.getByRole("button", { name: "Every day" }));
   await act(async () => {
     expect(pressBack()).toBe(true);
   });
-  expect(screen.queryByLabelText("Label")).toBeNull();
-  screen.getByRole("button", { name: "Label, Folga" });
+  expect(screen.queryByRole("button", { name: "Every day" })).toBeNull();
+  screen.getByRole("button", { name: "Repeat, Every day" });
+  expect(done.closed).toBe(0);
   await fireEvent.press(screen.getByRole("button", { name: "Cancel" }));
   expect(done.closed).toBe(0);
   await act(() => answerAlert("Discard"));
@@ -170,7 +212,7 @@ test("a one-off date whose time has already passed asks for another instead of s
   // Today, 07:00, which was this morning.
   await act(() => answerPicker(new Date(2026, 9, 28)));
   await fireEvent.press(screen.getByRole("button", { name: "Done" }));
-  screen.getByRole("button", { name: "Repeat, Today" });
+  screen.getByRole("button", { name: "Repeat, Today · Wed, Oct 28" });
   await fireEvent.press(screen.getByRole("button", { name: "Save" }));
   screen.getByText("That time has passed. Pick a later date or time.");
   expect(done.saved).toEqual([]);
@@ -219,12 +261,7 @@ test("Cancel and Android Back ask before discarding changes, and restoring a val
     expect(pressBack()).toBe(true);
   });
   expect(done.closed).toBe(1);
-  await fireEvent.press(screen.getByRole("button", { name: "Label, None" }));
   await fireEvent.changeText(screen.getByLabelText("Label"), "Work");
-  await act(() => {
-    expect(pressBack()).toBe(true);
-  });
-  // Back closes the sheet before asking to leave the editor.
   const before = alerts.length;
   await fireEvent.press(screen.getByRole("button", { name: "Cancel" }));
   expect(alerts.at(-1)?.title).toBe("Discard changes?");
@@ -237,9 +274,7 @@ test("Cancel and Android Back ask before discarding changes, and restoring a val
   await act(() => answerAlert("Discard"));
   expect(done).toMatchObject({ saved: [], closed: 2 });
 
-  await fireEvent.press(screen.getByRole("button", { name: "Label, Work" }));
   await fireEvent.changeText(screen.getByLabelText("Label"), "");
-  await fireEvent.press(screen.getByRole("button", { name: "Done" }));
   const after = alerts.length;
   await fireEvent.press(screen.getByRole("button", { name: "Cancel" }));
   expect(alerts).toHaveLength(after);
@@ -355,6 +390,22 @@ test("TalkBack's adjustable control sits outside the wheel's scroll view, which 
       accessible: false,
       importantForAccessibility: "no-hide-descendants",
     });
+  }
+});
+
+test("at 1.3x font each day letter keeps its 48dp target and its line fits inside", async () => {
+  windowDimensions.fontScale = 1.3;
+  try {
+    await openEditor({ ...newAlarm("a"), deckId: "deck" });
+    for (const letter of screen.getAllByRole("checkbox"))
+      expect(StyleSheet.flatten(letter.props.style)).toMatchObject({ width: 48, minHeight: 48 });
+    for (const text of screen.getAllByText("T")) {
+      // A single letter is never clipped: no fixed line count or font-scale cap.
+      expect(text.props.numberOfLines).toBeUndefined();
+      expect(text.props.allowFontScaling).not.toBe(false);
+    }
+  } finally {
+    windowDimensions.fontScale = 1;
   }
 });
 
