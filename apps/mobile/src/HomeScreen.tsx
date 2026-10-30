@@ -32,7 +32,7 @@ function dayText(at: number, locale: Locale, zone: string) {
   }).format(at);
 }
 
-export function AlarmCard({
+function AlarmCard({
   alarm,
   deckName,
   locale,
