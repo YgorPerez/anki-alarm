@@ -1,7 +1,7 @@
 import { translator, type Card, type Note, type Locale, type Collection } from "@app/core";
 import Svg, { Path } from "react-native-svg";
 import { View } from "react-native";
-import { StudyMenu } from "./StudyMenu.tsx";
+import type { StudyMenuItem } from "./StudyMenu.tsx";
 
 const messages = {
   "pt-BR": {
@@ -43,43 +43,32 @@ const flags = [
   { id: 7, name: "purple", color: "#a66be0" },
 ] as const;
 
-/** The owning screen guards and persists each command, then refreshes its current card. */
-export function StudyAnnotations({
-  next,
-  locale,
-  busy,
-  change,
-}: {
-  next: { card: Card; note: Note } | undefined;
-  locale: Locale;
-  busy: boolean;
-  change: (command: (c: Collection) => void) => Promise<void>;
-}) {
-  if (!next) return null;
+type Current = { card: Card; note: Note } | undefined;
+const label = (t: (key: keyof (typeof messages)["en"]) => string, f: (typeof flags)[number]) =>
+  `${t("flag")} ${f.id}: ${t(f.name)}`;
+
+/** Flag and mark menu entries for the current card. The owning screen guards and persists them. */
+export function annotationItems(
+  next: Current,
+  locale: Locale,
+  change: (command: (c: Collection) => void) => Promise<void>,
+): StudyMenuItem[] {
+  if (!next) return [];
   const { card, note } = next;
   const t = translator(messages, locale);
   const marked = note.fields.tags.value.includes("marked");
-  const flag = flags.find((f) => f.id === card.fields.flag.value);
-  const label = (f: (typeof flags)[number]) => `${t("flag")} ${f.id}: ${t(f.name)}`;
-  const items = [
-    ...flags.map((f) => ({
-      id: `flag-${f.id}`,
-      label: label(f),
-      onPress: () => {
-        void change((c) => {
-          c.setCardFlag(card.id, f.id);
-        });
-      },
-    })),
+  const set = (flag: number) => () => {
+    void change((c) => {
+      c.setCardFlag(card.id, flag);
+    });
+  };
+  return [
+    ...flags.map((f) => ({ id: `flag-${f.id}`, label: label(t, f), onPress: set(f.id) })),
     {
       id: "flag-clear",
       label: t("clear"),
-      disabled: !flag,
-      onPress: () => {
-        void change((c) => {
-          c.setCardFlag(card.id, 0);
-        });
-      },
+      disabled: card.fields.flag.value === 0,
+      onPress: set(0),
     },
     {
       id: "mark",
@@ -91,10 +80,25 @@ export function StudyAnnotations({
       },
     },
   ];
+}
+
+/** The current card's flag and its note's star, for the top bar (never inside the card HTML). */
+export function StudyAnnotations({ next, locale }: { next: Current; locale: Locale }) {
+  if (!next) return null;
+  const t = translator(messages, locale);
+  const marked = next.note.fields.tags.value.includes("marked");
+  const flag = flags.find((f) => f.id === next.card.fields.flag.value);
+  if (!flag && !marked) return null;
   return (
     <View className="flex-row items-center gap-2">
       {flag && (
-        <Svg accessible accessibilityLabel={label(flag)} width={20} height={20} viewBox="0 0 24 24">
+        <Svg
+          accessible
+          accessibilityLabel={label(t, flag)}
+          width={20}
+          height={20}
+          viewBox="0 0 24 24"
+        >
           <Path
             d="M4 22V3Q9 0 14 3T23 3V15Q18 18 13 15T4 15"
             stroke={flag.color}
@@ -108,7 +112,6 @@ export function StudyAnnotations({
           <Path d="m12 2 3 6 7 1-5 5 1 8-6-4-6 4 1-8-5-5 7-1Z" fill="#e0b000" />
         </Svg>
       )}
-      <StudyMenu items={items} locale={locale} busy={busy} />
     </View>
   );
 }

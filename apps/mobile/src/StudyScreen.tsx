@@ -1,14 +1,15 @@
-import { StudyAnnotations } from "./StudyAnnotations.tsx";
-import type { Collection } from "@app/core";
-import type { ReactNode } from "react";
 import { intervalText } from "./interval-text.ts";
+import { StudyMenu, type StudyMenuItem } from "./StudyMenu.tsx";
+import { annotationItems, StudyAnnotations } from "./StudyAnnotations.tsx";
 import { StudyCounts } from "./StudyCounts.tsx";
-import { useContext } from "react";
+import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
+import { useContext, type ReactNode } from "react";
 import { ScreenActivity } from "./screen-activity.ts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   renderCard,
   nextStudyCard,
+  type Collection,
   nextIntervals,
   studyCounts,
   type Grade,
@@ -48,17 +49,31 @@ export function StudyScreen({
   const insets = useSafeAreaInsets();
   const dark = useColorScheme() === "dark";
   const study = useStudySession(deckId, onExit);
-  const { query, busy, error, canUndo, undo } = study;
+  const { query, busy, error, canUndo, undo, card } = study;
+  const [editing, setEditing] = useState<string>();
   const deckName = query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value;
+  const frame = { paddingTop: insets.top, paddingBottom: insets.bottom };
+  if (editing)
+    return (
+      <View className="flex-1 bg-background" style={frame}>
+        <StudyNoteEditor
+          cardId={editing}
+          locale={locale}
+          onSaved={study.refresh}
+          onClose={() => setEditing(undefined)}
+        />
+      </View>
+    );
   return (
-    <View
-      className="flex-1 bg-background"
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
-    >
+    <View className="flex-1 bg-background" style={frame}>
       <StudyNavigation
-        annotations={
-          <StudyAnnotations next={study.next} locale={locale} busy={busy} change={study.change} />
-        }
+        annotations={<StudyAnnotations next={study.next} locale={locale} />}
+        menu={[
+          ...(card
+            ? [{ id: "editNote", label: t("editNote"), onPress: () => setEditing(card.id) }]
+            : []),
+          ...annotationItems(study.next, locale, study.change),
+        ]}
         counts={study.counts}
         title={deckName ?? t("study")}
         busy={busy}
@@ -160,6 +175,7 @@ function StudyFeedback({
 
 function StudyNavigation({
   annotations,
+  menu,
   counts,
   title,
   busy,
@@ -168,6 +184,7 @@ function StudyNavigation({
   onUndo,
 }: {
   annotations: ReactNode;
+  menu: readonly StudyMenuItem[];
   counts: ReturnType<typeof studyCounts> | undefined;
   title: string;
   busy: boolean;
@@ -175,6 +192,7 @@ function StudyNavigation({
   onExit: () => void;
   onUndo: (() => Promise<void>) | undefined;
 }) {
+  const t = copy(locale);
   return (
     <View className="flex-row items-center justify-between px-4">
       <Pressable
@@ -200,6 +218,7 @@ function StudyNavigation({
         <Text className="text-body text-foreground">↶</Text>
       </Pressable>
       {annotations}
+      <StudyMenu items={menu} locale={locale} busy={busy} />
     </View>
   );
 }
@@ -476,5 +495,6 @@ function useStudySession(deckId: string, onExit: () => void) {
     change,
     canUndo: answers.length > 0,
     undo,
+    refresh,
   };
 }
