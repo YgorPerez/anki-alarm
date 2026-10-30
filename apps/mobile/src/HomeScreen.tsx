@@ -33,6 +33,69 @@ function dayText(at: number, locale: Locale, zone: string) {
   }).format(at);
 }
 
+/** The card menu: skip or undo the next ring when that's on offer, and duplicate. */
+function alarmMenuItems(
+  alarm: Alarm,
+  {
+    offer,
+    locale,
+    now,
+    zone,
+    onSkip,
+    onDuplicate,
+  }: {
+    offer: ReturnType<typeof skipOffer>;
+    locale: Locale;
+    now: number;
+    zone: string;
+    onSkip?: (alarm: Alarm) => void;
+    onDuplicate?: (alarm: Alarm) => void;
+  },
+) {
+  const t = copy(locale);
+  const items: { label: string; onPress: () => void }[] = [];
+  if (onSkip && offer === "skip")
+    items.push({ label: t("skipNext"), onPress: () => onSkip(skipNextRing(alarm, now, zone)) });
+  if (onSkip && offer === "undo")
+    items.push({ label: t("undoSkip"), onPress: () => onSkip(undoSkip(alarm)) });
+  if (onDuplicate) items.push({ label: t("duplicateAlarm"), onPress: () => onDuplicate(alarm) });
+  return items;
+}
+
+function AlarmCardDetails({
+  alarm,
+  deckName,
+  locale,
+  ringsAfterSkip,
+  zone,
+}: {
+  alarm: Alarm;
+  deckName?: string;
+  locale: Locale;
+  ringsAfterSkip: number | null;
+  zone: string;
+}) {
+  const t = copy(locale);
+  return (
+    <>
+      {ringsAfterSkip !== null && (
+        <Text style={regular} className="text-label text-attention">
+          {t("skippedUntil", { date: dayText(ringsAfterSkip, locale, zone) })}
+        </Text>
+      )}
+      {alarm.label ? (
+        <Text style={regular} className="text-body text-foreground">
+          {alarm.label}
+        </Text>
+      ) : null}
+      <Text style={regular} className="text-label text-muted-foreground">
+        {deckName || t("chooseDeck")} ·{" "}
+        {alarm.need === 1 ? t("oneCard") : t("needCount", { count: String(alarm.need) })}
+      </Text>
+    </>
+  );
+}
+
 function AlarmCard({
   alarm,
   deckName,
@@ -83,38 +146,18 @@ function AlarmCard({
             {repeatSummary(alarm.rule, { locale, now, zone })}
             {alarm.quick ? ` · ${t("quick")}` : null}
           </Text>
-          {ringsAfterSkip !== null && (
-            <Text style={regular} className="text-label text-attention">
-              {t("skippedUntil", { date: dayText(ringsAfterSkip, locale, zone) })}
-            </Text>
-          )}
-          {alarm.label ? (
-            <Text style={regular} className="text-body text-foreground">
-              {alarm.label}
-            </Text>
-          ) : null}
-          <Text style={regular} className="text-label text-muted-foreground">
-            {deckName || t("chooseDeck")} ·{" "}
-            {alarm.need === 1 ? t("oneCard") : t("needCount", { count: String(alarm.need) })}
-          </Text>
+          <AlarmCardDetails
+            alarm={alarm}
+            deckName={deckName}
+            locale={locale}
+            ringsAfterSkip={ringsAfterSkip}
+            zone={zone}
+          />
         </Pressable>
         <AlarmCardMenu
           name={alarm.label || time}
           locale={locale}
-          items={[
-            ...(onSkip && offer
-              ? [
-                  {
-                    label: t(offer === "skip" ? "skipNext" : "undoSkip"),
-                    onPress: () =>
-                      onSkip(offer === "skip" ? skipNextRing(alarm, now, zone) : undoSkip(alarm)),
-                  },
-                ]
-              : []),
-            ...(onDuplicate
-              ? [{ label: t("duplicateAlarm"), onPress: () => onDuplicate(alarm) }]
-              : []),
-          ]}
+          items={alarmMenuItems(alarm, { offer, locale, now, zone, onSkip, onDuplicate })}
         />
         <Switch
           accessibilityLabel={`${alarm.label || time}: ${t(alarm.enabled ? "enabled" : "disabled")}`}
