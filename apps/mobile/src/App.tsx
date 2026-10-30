@@ -49,6 +49,7 @@ import { AlarmService, alarmController, type AwakeCheck, type Ring } from "./ala
 import { androidAlarmService, native } from "./alarm-android.ts";
 import { localData } from "./database.ts";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigationTheme } from "./navigation-theme.ts";
 import { ThemeSettings } from "./ThemeSettings.tsx";
 import { initializeTheme, useThemeChoice } from "./theme.ts";
 import { ScopedTheme } from "uniwind";
@@ -461,6 +462,7 @@ function EditorRoute({
   const lastSavedId = useUI((ui) => ui.lastSavedAlarm);
   const decks = useAlarmDecks(locale);
   const [duplicateDraft, setDuplicateDraft] = useState<Alarm | null>(null);
+  const iconColor = useNavigationTheme()["muted-foreground"];
   const source = alarms?.find((item) => item.id === duplicate);
   const alarm =
     duplicateDraft ??
@@ -487,6 +489,7 @@ function EditorRoute({
     <AlarmEditorScreen
       key={alarm.id}
       alarm={alarm}
+      iconColor={iconColor}
       saved={id !== "new" && !duplicateDraft}
       onDuplicate={(draft) =>
         setDuplicateDraft(duplicateAlarm(draft, native.createId(), Date.now()))

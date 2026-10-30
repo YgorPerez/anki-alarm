@@ -314,6 +314,11 @@ wheel only when the phone uses 12-hour time. The selected values use foreground 
 values are quieter. Rows grow with system font scale and snap to whole values. Each wheel is one
 adjustable accessibility control with a spoken value and increment/decrement actions.
 
+Under the wheels, on the ground with no box: the repeat summary in Body with a muted calendar icon,
+seven day letters, and the name field. Letters are 48dp pills, Sunday first; a selected one is
+`primary-ink` bold on `primary-tint`, the rest are foreground with no fill. Their row runs 12dp past
+the 24dp margin so seven targets fit a 360dp phone, and wraps on anything narrower.
+
 The phone editor has no top bar. Its settings scroll above a fixed, full-width bottom bar with a
 hairline top border and safe-area padding. Cancelar / Cancel is a neutral pill; Salvar / Save is
 the solid primary pill. Both share the width equally and follow system font scale. Saved alarms
