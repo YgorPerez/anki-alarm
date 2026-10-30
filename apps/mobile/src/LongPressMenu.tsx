@@ -1,40 +1,51 @@
 import { useState, type ReactNode } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
-import type { Locale } from "@app/core";
 import { regular } from "./fonts.ts";
-import { copy } from "./copy.ts";
 
-/** One menu for card actions, including Duplicate and Skip/Undo skip. */
-export function AlarmCardMenu({
+/** A press target whose long press, or TalkBack action, opens a sheet of further actions. */
+export function LongPressMenu({
   name,
-  locale,
+  actionLabel,
+  actionHint,
   items,
   children,
   onPress,
+  onOpen,
+  className,
 }: {
   name: string;
-  locale: Locale;
-  items: readonly { label: string; onPress: () => void; destructive?: boolean }[];
+  actionLabel: string;
+  actionHint: string;
+  items: readonly {
+    label: string;
+    accessibilityLabel?: string;
+    onPress: () => void;
+    destructive?: boolean;
+  }[];
   children: ReactNode;
   onPress: () => void;
+  onOpen?: () => void;
+  className: string;
 }) {
   const [open, setOpen] = useState(false);
+  const openMenu = () => {
+    setOpen(true);
+    onOpen?.();
+  };
 
   return (
     <>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={name}
-        accessibilityHint={items.length ? copy(locale)("moreOptionsHint") : undefined}
-        accessibilityActions={
-          items.length ? [{ name: "longpress", label: copy(locale)("moreOptions") }] : []
-        }
+        accessibilityHint={items.length ? actionHint : undefined}
+        accessibilityActions={items.length ? [{ name: "longpress", label: actionLabel }] : []}
         onAccessibilityAction={({ nativeEvent }) => {
-          if (nativeEvent.actionName === "longpress") setOpen(true);
+          if (nativeEvent.actionName === "longpress" && items.length) openMenu();
         }}
-        onLongPress={items.length ? () => setOpen(true) : undefined}
+        onLongPress={items.length ? openMenu : undefined}
         onPress={onPress}
-        className="min-h-12 min-w-0 flex-1 gap-1"
+        className={className}
       >
         {children}
       </Pressable>
@@ -45,6 +56,7 @@ export function AlarmCardMenu({
               <Pressable
                 key={item.label}
                 accessibilityRole="button"
+                accessibilityLabel={item.accessibilityLabel}
                 onPress={() => {
                   setOpen(false);
                   item.onPress();

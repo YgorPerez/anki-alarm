@@ -2,7 +2,7 @@ import { useAlarmDeletion } from "./useAlarmDeletion.ts";
 import { useQuickAlarmNotice } from "./useQuickAlarmNotice.ts";
 import { SwipeAlarm } from "./SwipeAlarm.tsx";
 import { Button } from "./controls.tsx";
-import { AlarmCardMenu } from "./AlarmCardMenu.tsx";
+import { LongPressMenu } from "./LongPressMenu.tsx";
 import {
   nextAlarmRing,
   skipNextRing,
@@ -142,9 +142,11 @@ function AlarmCard({
   return (
     <View className="rounded-lg bg-surface p-4">
       <View className="flex-row items-center gap-3">
-        <AlarmCardMenu
+        <LongPressMenu
           name={accessibilityName}
-          locale={locale}
+          actionLabel={t("moreOptions")}
+          actionHint={t("moreOptionsHint")}
+          className="min-h-12 min-w-0 flex-1 gap-1"
           items={alarmMenuItems(alarm, { offer, locale, now, zone, onSkip, onDuplicate, onDelete })}
           onPress={() => onEdit(alarm)}
         >
@@ -182,7 +184,7 @@ function AlarmCard({
             </View>
           )}
           <AlarmCardDetails alarm={alarm} deckName={deckName} locale={locale} skipped={skipped} />
-        </AlarmCardMenu>
+        </LongPressMenu>
         <Switch
           accessibilityLabel={`${alarm.label || time}: ${t(alarm.enabled ? "enabled" : "disabled")}`}
           value={alarm.enabled}
@@ -211,6 +213,8 @@ export function HomeScreen({
   onDelete,
   onRestore,
   onQuickAlarm,
+  quickHint,
+  onQuickHintSeen,
   setup,
 }: {
   alarms: readonly Alarm[];
@@ -230,8 +234,12 @@ export function HomeScreen({
   onRefresh?: () => void;
   onDelete?: (id: string) => Promise<void>;
   onRestore?: (alarm: Alarm) => Promise<void>;
-  /** Adds a quick alarm that many minutes from now. Without it (no saved alarm or deck), no chips. */
+  /** Adds a quick alarm that many minutes from now. Without it (no saved alarm or deck), + only adds. */
   onQuickAlarm?: (minutes: number, onAdded: (alarm: Alarm) => void) => void;
+  /** Asks for the one-time hint about long-pressing +. It shows only with onQuickAlarm. */
+  quickHint?: boolean;
+  /** The hint was dismissed, or the quick alarms were opened. */
+  onQuickHintSeen?: () => void;
   /** Given once decks and alarms have loaded; without it Home shows no empty state. */
   setup?: DeckSetup;
 }) {
@@ -270,32 +278,6 @@ export function HomeScreen({
                 </Text>
               )}
             </View>
-            {onQuickAlarm ? (
-              <View className="flex-row flex-wrap gap-2">
-                {QUICK_ALARM_MINUTES.map((minutes) => (
-                  <Pressable
-                    key={minutes}
-                    accessibilityRole="button"
-                    accessibilityLabel={t("quickAlarmLabel", { count: String(minutes) })}
-                    onPress={() => addQuickAlarm(minutes)}
-                    className="min-h-12 items-center justify-center rounded-pill bg-surface px-5"
-                  >
-                    <Text style={bold} className="text-body text-foreground">
-                      {t("quickAlarmChip", { count: String(minutes) })}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
-            {notice ? (
-              <Text
-                accessibilityLiveRegion="polite"
-                style={regular}
-                className="text-body text-foreground"
-              >
-                {notice}
-              </Text>
-            ) : null}
             {banner}
             {error ? (
               <Text style={regular} accessibilityRole="alert" className="text-body text-attention">
@@ -346,27 +328,70 @@ export function HomeScreen({
           {t("alarmError")}
         </Text>
       )}
-      {undoAvailable && (
-        <View className="absolute bottom-24 left-6 right-6 flex-row items-center justify-between gap-2 rounded-lg bg-surface p-4">
+      <View pointerEvents="box-none" className="absolute bottom-24 left-6 right-6 gap-2">
+        {quickHint && onQuickAlarm ? (
+          <View className="max-w-72 flex-row items-start gap-2 self-end rounded-lg bg-primary-tint py-2 pl-4 pr-2">
+            <Text
+              accessibilityLiveRegion="polite"
+              style={regular}
+              className="shrink py-2 text-label text-foreground"
+            >
+              {t("quickHint")}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("quickHintDismiss")}
+              onPress={onQuickHintSeen}
+              className="min-h-12 min-w-12 items-center justify-center rounded-pill"
+            >
+              <Text style={bold} className="text-body text-foreground">
+                ×
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {notice ? (
           <Text
-            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
             style={regular}
-            className="shrink text-body text-foreground"
+            className="rounded-lg bg-surface p-4 text-body text-foreground"
           >
-            {t("alarmDeleted")}
+            {notice}
           </Text>
-          <Button
-            label={t("undoAlarmDelete")}
-            disabled={busy}
-            onPress={() => {
-              void restoreAlarm();
-            }}
-          />
-        </View>
-      )}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t("add")}
+        ) : null}
+        {undoAvailable && (
+          <View className="flex-row items-center justify-between gap-2 rounded-lg bg-surface p-4">
+            <Text
+              accessibilityRole="alert"
+              style={regular}
+              className="shrink text-body text-foreground"
+            >
+              {t("alarmDeleted")}
+            </Text>
+            <Button
+              label={t("undoAlarmDelete")}
+              disabled={busy}
+              onPress={() => {
+                void restoreAlarm();
+              }}
+            />
+          </View>
+        )}
+      </View>
+      <LongPressMenu
+        name={t("add")}
+        actionLabel={t("quickAlarms")}
+        actionHint={t("quickAlarmsHint")}
+        onOpen={onQuickHintSeen}
+        items={
+          onQuickAlarm
+            ? QUICK_ALARM_MINUTES.map((minutes) => ({
+                label: t("quickAlarmChip", { count: String(minutes) }),
+                accessibilityLabel: t("quickAlarmLabel", { count: String(minutes) }),
+                onPress: () => addQuickAlarm(minutes),
+              }))
+            : []
+        }
         // Without a deck, + leads to the empty state at the top instead of the editor.
         onPress={needsDeck ? () => list.current?.scrollToOffset({ offset: 0 }) : onAdd}
         className="absolute bottom-4 right-6 min-h-16 min-w-20 items-center justify-center rounded-pill bg-primary px-6 py-4"
@@ -374,7 +399,7 @@ export function HomeScreen({
         <Text style={bold} className="text-question text-primary-foreground">
           +
         </Text>
-      </Pressable>
+      </LongPressMenu>
     </View>
   );
 }

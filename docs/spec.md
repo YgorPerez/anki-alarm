@@ -373,6 +373,20 @@ text without dimming the entire card. Long-press opens Skip next (or Undo skip),
 Delete. TalkBack has a named long-press action for the same menu. Swipe to delete and Undo remain
 available. Decided in #94; implemented in #100.
 
+The + stays at the bottom right, at the thumb. A tap adds an alarm. A long press, or a named TalkBack
+action, offers the quick alarms +10, +20 and +30 min, when there is a saved alarm with a deck to
+copy from; otherwise + only adds. "Toca em 10 min" / "Rings in 10 min" appears above +, so it shows
+mid-scroll too.
+
+After an alarm is first saved on this phone, a hint near + explains the long press. Dismissing it or
+opening the quick alarms ends it for good on this phone. Its state is local (MMKV) and doesn't sync.
+
+The + keeps its position with four or more alarms. It can cover at most one card's switch while the
+list scrolls, and a tap there only opens a new alarm, so it never changes an alarm by accident. Any
+switch comes clear with a short scroll, and the list's bottom padding clears + for the last card.
+A count-dependent position would move the thumb's target and leave the phone's bottom corner, which
+#94 keeps. Decided in #101.
+
 ## Out of scope for the first release
 
 - iOS.
