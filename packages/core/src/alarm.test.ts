@@ -67,6 +67,7 @@ describe("a new alarm", () => {
       awakeCheckMinutes: 5,
       readAloud: false,
       skip: null,
+      quick: false,
     });
   });
 });

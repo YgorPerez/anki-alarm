@@ -37,6 +37,8 @@ export interface Alarm {
    * longer rings then, it has no effect.
    */
   skip: number | null;
+  /** A quick alarm (Home's +10/+20/+30 min): it deletes itself once its ring is dismissed. */
+  quick: boolean;
 }
 
 /** The sounds shipped in the app. Native plays each from `res/raw/alarm_<id>`. */
@@ -86,6 +88,7 @@ export const newAlarm = (id: string): Alarm => ({
   awakeCheckMinutes: 5,
   readAloud: false,
   skip: null,
+  quick: false,
 });
 
 /** The largest N the editor offers. */
@@ -116,7 +119,8 @@ type Upgraded =
   | "awakeCheck"
   | "awakeCheckMinutes"
   | "readAloud"
-  | "skip";
+  | "skip"
+  | "quick";
 type StoredAlarm = Omit<Alarm, Upgraded> & Partial<Record<Upgraded, unknown>>;
 
 /** A whole number kept within `min..max`; anything else is the fallback. */
@@ -137,6 +141,7 @@ export function readAlarm({
   awakeCheckMinutes,
   readAloud,
   skip,
+  quick,
   ...alarm
 }: StoredAlarm): Alarm {
   const defaults = newAlarm(alarm.id);
@@ -157,6 +162,7 @@ export function readAlarm({
     ),
     readAloud: readAloud === true,
     skip: typeof skip === "number" && Number.isFinite(skip) ? skip : null,
+    quick: quick === true,
   };
 }
 
@@ -216,6 +222,7 @@ export function alarmFromRecord(record: AlarmRecord): Alarm {
     awakeCheckMinutes: record.fields.awakeCheckMinutes?.value,
     readAloud: record.fields.readAloud?.value,
     skip: record.fields.skip?.value,
+    quick: record.fields.quick?.value,
   });
 }
 

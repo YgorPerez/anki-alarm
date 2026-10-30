@@ -30,6 +30,8 @@ const alarm = Schema.Struct({
   readAloud: Schema.optional(Schema.Unknown),
   // Nor any before #78 a skipped ring.
   skip: Schema.optional(Schema.Unknown),
+  // Nor any before #80 is a quick alarm.
+  quick: Schema.optional(Schema.Unknown),
 });
 const event = Schema.Struct({
   id: Schema.String,

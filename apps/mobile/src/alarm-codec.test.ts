@@ -83,6 +83,7 @@ it("keeps every alarm property through native", () => {
     awakeCheckMinutes: 10,
     readAloud: true,
     skip: 1_800_000_000_000,
+    quick: true,
   };
   // Every property here differs from its default, so a dropped one would show; a new property
   // needs a value here too.
@@ -94,4 +95,9 @@ it("keeps every alarm property through native", () => {
   expect(decodeAlarm(JSON.stringify(alarm))).toEqual(alarm);
   const ring = `{"id":"r","alarm":${JSON.stringify(alarm)},"startedAt":1,"phase":"ringing"}`;
   expect(decodeRing(ring)!.alarm).toEqual(alarm);
+});
+
+it("reads an alarm saved before quick alarms as not quick", () => {
+  const { quick: _quick, ...older } = newAlarm("a");
+  expect(decodeAlarm(JSON.stringify(older)).quick).toBe(false);
 });
