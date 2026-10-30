@@ -17,7 +17,9 @@ async function revealAndGrade(grade: string) {
   });
   // The grades wait a moment after the reveal.
   expect(screen.queryByRole("button", { name: grade })).toBeNull();
-  await fireEvent.press(await screen.findByRole("button", { name: grade }));
+  const button = await screen.findByRole("button", { name: grade });
+  expect(button.props.accessibilityHint).toMatch(/\d/);
+  await fireEvent.press(button);
 }
 
 /** A ring of an alarm on a new deck `name` with `fronts`, delivered by the memory native. */

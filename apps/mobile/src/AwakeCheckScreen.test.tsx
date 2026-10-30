@@ -84,7 +84,10 @@ test("one answer, any grade, passes the check and is a normal review", async () 
   await fireEvent(screen.getByLabelText("Frente"), "accessibilityAction", {
     nativeEvent: { actionName: "activate" },
   });
-  await fireEvent.press(await screen.findByRole("button", { name: "De novo" }));
+  const again = await screen.findByRole("button", { name: "De novo" });
+  expect(screen.getByText("<1min(s)")).toBeTruthy();
+  expect(again.props.accessibilityHint).toBe("<1min(s)");
+  await fireEvent.press(again);
   await waitFor(() => expect(passed()).toBe(1));
   expect(native.awakeCheck()).toBeNull();
   expect(native.signals()).toContain(`awakeCheckPassed:${check.id}`);
