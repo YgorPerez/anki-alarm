@@ -1,3 +1,4 @@
+import { StyleSheet } from "react-native";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { newAlarm, quickAlarm, type Alarm } from "@app/core";
@@ -28,7 +29,14 @@ test("Home shows localized alarm details, edits, adds and refreshes next ring af
     />
   );
   const result = await render(view());
-  expect(screen.getByText("23:18")).toBeTruthy();
+  expect(StyleSheet.flatten(screen.getByText("23:18").props.style)).toMatchObject({
+    fontFamily: "Inter_700Bold",
+    fontVariant: ["tabular-nums"],
+  });
+  expect(StyleSheet.flatten(screen.getByText("06:30").props.style)).toMatchObject({
+    fontFamily: "Inter_700Bold",
+    fontVariant: ["tabular-nums"],
+  });
   expect(screen.getByText("Próximo 06:30 · em 7 h 12 min")).toBeTruthy();
   expect(screen.getByText("Dias úteis")).toBeTruthy();
   expect(screen.getByText("Idiomas::Inglês · 3 cartões")).toBeTruthy();

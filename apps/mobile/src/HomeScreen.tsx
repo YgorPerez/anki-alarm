@@ -18,7 +18,7 @@ import { useRef, type ReactNode } from "react";
 import { FlatList, Pressable, Switch, Text, View } from "react-native";
 import { Clock, useNow } from "./clock.tsx";
 import { clockText, durationText, repeatSummary, timeText } from "./alarm-text.ts";
-import { bold, regular } from "./fonts.ts";
+import { bold, clock, regular } from "./fonts.ts";
 import { copy } from "./copy.ts";
 import { HomeEmptyState, type DeckSetup } from "./HomeEmptyState.tsx";
 
@@ -136,10 +136,7 @@ function AlarmCard({
           onPress={() => onEdit(alarm)}
           className="min-h-12 flex-1 gap-1"
         >
-          <Text
-            className="text-title font-bold text-foreground"
-            style={{ ...bold, fontVariant: ["tabular-nums"] }}
-          >
+          <Text className="text-title font-bold text-foreground" style={clock}>
             {time}
           </Text>
           <Text style={regular} className="text-label text-muted-foreground">

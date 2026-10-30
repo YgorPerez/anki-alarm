@@ -322,7 +322,9 @@ reviews (ADR 0001), so the web shows them too.
 - **Look:** a plain black page with the card's words at full size. Lilac primary for action (Good,
   Start, progress), peach for attention (cards left, snooze cost, a card that came back), one hue
   per grade (Again rose, Hard yellow, Easy teal; Good is solid primary), the same in study and
-  stats. Atkinson Hyperlegible on both apps.
+  stats. Atkinson Hyperlegible for general text on both apps. Phone clock times use bundled Inter
+  bold with tabular figures and an unslashed zero on Home, in the alarm editor, and for large
+  ringing, snoozed and native lock-screen clocks (#94, #95).
 - **Alarm screen:** always dark, one fixed layout: clock, progress segments, the card with no box,
   four grade pills at the thumb, snooze as a link apart from them. Cards render in Anki's night
   mode.
