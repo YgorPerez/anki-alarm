@@ -79,6 +79,36 @@ test.each([1, 2, 3, 4] as const)(
   },
 );
 
+test("A deck's interactive card runs its script and a tap on it doesn't reveal", async () => {
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Script test");
+        c.addBasicNote(deck.id, '<div onclick="mark(this)">A</div>', "door");
+      }),
+    ),
+  );
+  const deck = state.decks.find((d) => d.fields.name.value === "Script test")!;
+  await render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" } } })
+      }
+    >
+      <StudyScreen deckId={deck.id} locale="pt-BR" onExit={() => {}} />
+    </QueryClientProvider>,
+  );
+  const front = await screen.findByLabelText("Frente");
+  expect(front.props.javaScriptEnabled).toBe(true);
+  expect(front.props.source.html).toContain("script-src 'unsafe-inline' file:");
+  expect(front.props.accessibilityHint).toBeUndefined();
+  await fireEvent(front, "touchStart", { nativeEvent: { pageX: 10, pageY: 10, touches: [{}] } });
+  await fireEvent(front, "touchEnd", { nativeEvent: { pageX: 10, pageY: 10, touches: [] } });
+  expect(screen.queryByLabelText("Verso")).toBeNull();
+  await fireEvent.press(screen.getByRole("button", { name: "Mostrar resposta" }));
+  expect(screen.getByLabelText("Verso").props.javaScriptEnabled).toBe(true);
+});
+
 test("Undo restores the front; the back link and system Back leave study", async () => {
   const exit = vi.fn<() => void>();
   const state = await Effect.runPromise(

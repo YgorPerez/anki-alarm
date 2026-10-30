@@ -126,7 +126,7 @@ test("review limit includes web answers and void restores the daily allowance", 
   expect(studyQueue(state, log, deckId, now + 1)).toHaveLength(2);
 });
 
-import { studyDayStart, renderCard } from "./index.ts";
+import { studyDayStart, renderCard, usesScripts } from "./index.ts";
 test("study days turn over at 4am rather than midnight", () => {
   expect(studyDayStart(new Date(2026, 9, 28, 3, 59).getTime())).toBe(
     new Date(2026, 9, 27, 4).getTime(),
@@ -185,6 +185,25 @@ const plain = (html: string) =>
   body(html).replace(/<span class="cloze-inactive"[^>]*>(.*?)<\/span>/g, "$1");
 const render = (note: Note, type: NoteType, ordinal: number, side: "front" | "back") =>
   renderCard({ note, type, ordinal, side, dark: false });
+
+const csp = (html: string) => /Content-Security-Policy" content="([^"]*)"/.exec(html)![1]!;
+test("a card's scripts stay blocked unless the caller allows them, and never reach the network", () => {
+  const { note, type } = imported(["Q"], [["<script>mark()</script>{{Q}}", "{{Q}}"]], ["casa"]);
+  expect(csp(render(note, type, 0, "front"))).not.toContain("script-src");
+  const allowed = csp(
+    renderCard({ note, type, ordinal: 0, side: "front", dark: false, scripts: true }),
+  );
+  expect(allowed).toContain("script-src 'unsafe-inline' file:");
+  expect(allowed).toContain("default-src 'none'");
+  expect(allowed).not.toMatch(/https?:/);
+});
+
+test("usesScripts spots script tags and inline handlers, not plain cards", () => {
+  expect(usesScripts("<script>mark()</script>")).toBe(true);
+  expect(usesScripts('<script src="_deck.js"></script>')).toBe(true);
+  expect(usesScripts('<div onclick="mark(this)">A</div>')).toBe(true);
+  expect(usesScripts('<b>online</b> description="a"')).toBe(false);
+});
 
 test("imported templates pick the card's template and expand sections, filters and tags", () => {
   const { note, type } = imported(

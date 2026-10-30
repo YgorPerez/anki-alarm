@@ -11,13 +11,18 @@ export interface RenderInput {
   deckName?: string;
   /** The URL a media file name loads from. Relative to the page by default. */
   media?: (name: string) => string;
+  /** Lets the deck's own scripts run. Network access stays blocked either way. */
+  scripts?: boolean;
 }
+
+/** Whether a card's HTML has code to run: a script tag or an inline event handler. */
+export const usesScripts = (html: string) => /<script\b|<[^>]*\son\w+\s*=/i.test(html);
 
 /** A card side as an HTML document, from Anki's template syntax, with media resolved. */
 export function renderCard(input: RenderInput) {
   const { type, ordinal, side, dark } = input;
   const body = renderSide(input, side);
-  return `<!doctype html><html class="${dark ? "nightMode night_mode" : ""}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: file:; media-src data: file:; font-src data: file:; style-src 'unsafe-inline'"><style>body{margin:24px;background:${dark ? "#000" : "#fff"};color:${dark ? "#fff" : "#16131d"};font:28px/1.4 sans-serif;overflow-wrap:anywhere}img{max-width:100%}audio{display:block;margin:12px auto}${type.fields.css.value}</style></head><body class="card card${ordinal + 1}">${resolveMedia(body, input.media ?? encodeURIComponent)}</body></html>`;
+  return `<!doctype html><html class="${dark ? "nightMode night_mode" : ""}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: file:; media-src data: file:; font-src data: file:; style-src 'unsafe-inline'${input.scripts ? "; script-src 'unsafe-inline' file:" : ""}"><style>body{margin:24px;background:${dark ? "#000" : "#fff"};color:${dark ? "#fff" : "#16131d"};font:28px/1.4 sans-serif;overflow-wrap:anywhere}img{max-width:100%}audio{display:block;margin:12px auto}${type.fields.css.value}</style></head><body class="card card${ordinal + 1}">${resolveMedia(body, input.media ?? encodeURIComponent)}</body></html>`;
 }
 
 /** A card side's HTML before media are resolved: `[sound:…]` tags are still in it. */

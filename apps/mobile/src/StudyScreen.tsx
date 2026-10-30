@@ -15,6 +15,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   answerUndo,
   renderCard,
+  usesScripts,
   nextStudyCard,
   nextIntervals,
   studyCounts,
@@ -24,7 +25,7 @@ import {
   type StudyAction,
 } from "@app/core";
 import { Effect } from "effect";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   type GestureResponderEvent,
@@ -126,6 +127,7 @@ function StudyReview({
             dark={dark}
             revealHint={!revealed && !busy ? t("revealHint") : undefined}
             onReveal={reveal}
+            scripts
             input={{
               note,
               type,
@@ -229,21 +231,31 @@ function StudyNavigation({
     </View>
   );
 }
-/** A card side in a WebView without JavaScript. Card media load from local files only. */
+/**
+ * A card side in a WebView. Card media load from local files only. With `scripts`, a card that has
+ * code runs it, with no network, and a tap belongs to the card: its reveal is the Show answer bar.
+ */
 export function CardSide({
   label,
   dark,
   input,
-  revealHint,
+  revealHint: hint,
   onReveal,
+  scripts = false,
 }: {
   label: string;
   dark: boolean;
   input: RenderInput;
   revealHint?: string | undefined;
   onReveal: () => void;
+  scripts?: boolean;
 }) {
   const baseUrl = mediaBaseUrl();
+  const html = renderCard({ ...input, media: mediaUrl, scripts });
+  const interactive = scripts && usesScripts(html);
+  const revealHint = interactive ? undefined : hint;
+  // A new source reloads the page, which would wipe what the card's script has marked.
+  const source = useMemo(() => ({ html, baseUrl }), [html, baseUrl]);
   const { fontScale } = useWindowDimensions();
   const touch = useRef<{ x: number; y: number; at: number } | undefined>(undefined);
   const move = ({ nativeEvent: e }: GestureResponderEvent) => {
@@ -270,7 +282,7 @@ export function CardSide({
       }}
     >
       <WebView
-        accessible
+        accessible={!interactive}
         accessibilityLabel={label}
         accessibilityHint={revealHint}
         accessibilityActions={revealHint ? [{ name: "activate", label: revealHint }] : []}
@@ -278,9 +290,10 @@ export function CardSide({
           if (nativeEvent.actionName === "activate" && revealHint) onReveal();
         }}
         style={{ flex: 1, backgroundColor: dark ? "#000" : "#fff" }}
-        source={{ html: renderCard({ ...input, media: mediaUrl }), baseUrl }}
+        source={source}
         textZoom={Math.round(100 * fontScale)}
-        javaScriptEnabled={false}
+        javaScriptEnabled={interactive}
+        setSupportMultipleWindows={false}
         allowFileAccess
         originWhitelist={["about:*", "file://*"]}
         onShouldStartLoadWithRequest={(request) =>

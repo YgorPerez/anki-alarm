@@ -138,7 +138,7 @@ export {
   readDueDays,
   MAX_DUE_DAYS,
 } from "./study.ts";
-export { renderCard } from "./template.ts";
+export { renderCard, usesScripts } from "./template.ts";
 export {
   basicField,
   noteDraft,

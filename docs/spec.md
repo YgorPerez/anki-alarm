@@ -246,8 +246,11 @@ session** is a special mode of it on the phone.
   the idle time doesn't ring again mid-edit, and the alarm keeps covering the app. On an awake check
   opening the editor, touching it or typing restarts the 60 seconds, in native too.
 - A native tap on the card reveals its back; dragging scrolls its HTML without revealing. The
-  WebView keeps JavaScript disabled, preserves deck CSS and defaults to 28px text following system
-  font scale. A screen reader gets the reveal hint and an accessibility action.
+  WebView preserves deck CSS and defaults to 28px text following system font scale. A screen reader
+  gets the reveal hint and an accessibility action. JavaScript stays disabled on the alarm and awake
+  check. Decks study runs the scripts of a card that has them, such as tapping answer choices to
+  mark them, with no network access; on such a card a tap goes to the card, and only the "Mostrar
+  resposta" bar reveals. The web keeps card scripts blocked.
 - Decks study has a full-width 56px "Mostrar resposta" / "Show answer" bar and 56px grade pills;
   the alarm and awake check keep the reveal hint and 64px pills. At large font scales
   the grades use two rows and the strip reserves both rows on front and back, including during the
