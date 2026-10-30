@@ -77,17 +77,21 @@ export function HomeEmptyState({
   }
   return (
     <View className="gap-4">
-      <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
+      <Text
+        accessibilityRole="header"
+        style={bold}
+        className="text-center text-title text-foreground"
+      >
         {t(hasDecks ? "noAlarms" : "noDecks")}
       </Text>
-      <Text style={regular} className="text-body text-muted-foreground">
+      <Text style={regular} className="text-center text-body text-muted-foreground">
         {t(hasDecks ? "noAlarmsBody" : "noDecksBody")}
       </Text>
       {notice ? (
         <Text
           accessibilityLiveRegion="polite"
           style={regular}
-          className="text-body text-foreground"
+          className="text-center text-body text-foreground"
         >
           {notice}
         </Text>

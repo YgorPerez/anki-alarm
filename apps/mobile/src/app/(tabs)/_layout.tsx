@@ -2,7 +2,9 @@ import { navigationRenderer } from "../../navigation-renderer.tsx";
 import { Tabs, useRouter } from "expo-router";
 import type { BottomTabBarProps } from "expo-router/tabs";
 import { useUI } from "../../ui.ts";
+import { bold } from "../../fonts.ts";
 import { SettingsButton, TabBar } from "../../navigation.tsx";
+import { tabLabels } from "../../tab-labels.ts";
 import { useNavigationTheme } from "../../navigation-theme.ts";
 
 function SettingsGear() {
@@ -42,20 +44,22 @@ const renderTabBar = navigationRenderer(AppTabBar);
 
 export default function TabLayout() {
   const theme = useNavigationTheme();
+  const titles = tabLabels(useUI().locale);
   return (
     <Tabs
       backBehavior="none"
       screenOptions={{
-        title: "",
+        headerTitleAlign: "left",
+        headerTitleStyle: { ...bold, fontSize: 30, color: theme.foreground },
         headerShadowVisible: false,
         headerStyle: { backgroundColor: theme.background },
         headerRight: renderSettingsGear,
       }}
       tabBar={renderTabBar}
     >
-      <Tabs.Screen name="index" />
-      <Tabs.Screen name="decks" />
-      <Tabs.Screen name="stats" />
+      <Tabs.Screen name="index" options={{ title: titles.index }} />
+      <Tabs.Screen name="decks" options={{ title: titles.decks }} />
+      <Tabs.Screen name="stats" options={{ title: titles.stats }} />
     </Tabs>
   );
 }

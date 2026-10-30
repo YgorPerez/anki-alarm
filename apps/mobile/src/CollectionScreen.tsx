@@ -393,14 +393,17 @@ function CollectionHeading({
         )}
         {!form && !deck && <Button label={t("theme")} disabled={busy} onPress={onTheme} />}
       </View>
-      <Text
-        numberOfLines={2}
-        accessibilityRole="header"
-        style={bold}
-        className="text-title text-foreground"
-      >
-        {screenTitle(t, locale, form, deck)}
-      </Text>
+      {/* As a tab, the native header carries the deck list's title. */}
+      {(form || deck || onExit) && (
+        <Text
+          numberOfLines={2}
+          accessibilityRole="header"
+          style={bold}
+          className="text-title text-foreground"
+        >
+          {screenTitle(t, locale, form, deck)}
+        </Text>
+      )}
     </>
   );
 }
