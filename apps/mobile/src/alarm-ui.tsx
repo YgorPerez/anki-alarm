@@ -1,10 +1,12 @@
-import type { alarmSession, Grade, Locale } from "@app/core";
+import type { alarmSession, Card, Grade, Locale } from "@app/core";
+import { useQuery, type QueryKey } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BackHandler, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { bold } from "./fonts.ts";
 import { copy } from "./copy.ts";
 import { AnswerControls, CardSide } from "./StudyScreen.tsx";
+import { useSessionUndo } from "./study-undo.ts";
 
 // What the alarm and awake check screens share: always dark, Back blocked, big pill buttons.
 
@@ -36,8 +38,31 @@ export function useGuarded() {
   return { busy, error, setError, guarded };
 }
 
-/** Which card's back is showing, and whether its grades are out yet (`gradeDelayMs` later). */
-export function useReveal(cardId: string | undefined, gradeDelayMs: number) {
+/**
+ * An alarm screen's session, which `load` reads from the local data and which shows first the card
+ * the last undo was on; its card's reveal; and its undo history. Back is blocked.
+ */
+export function useAlarmStudy<S extends { next: { card: Card } | null }>(
+  queryKey: QueryKey,
+  load: (undone: string | undefined) => Promise<S>,
+  gradeDelayMs: number,
+) {
+  const history = useSessionUndo();
+  const query = useQuery({
+    queryKey,
+    networkMode: "always",
+    queryFn: () => load(history.undone()),
+  });
+  const cardId = query.data?.next?.card.id;
+  return { query, cardId, history, card: useSessionCard(cardId, gradeDelayMs) };
+}
+
+/**
+ * The session card on an alarm screen, where Back is blocked: whether its back is showing, and
+ * whether its grades are out yet (`gradeDelayMs` later).
+ */
+function useSessionCard(cardId: string | undefined, gradeDelayMs: number) {
+  useBlockBack();
   const [revealedId, setRevealedId] = useState<string>();
   const [gradesFor, setGradesFor] = useState<string>();
   useEffect(() => {
@@ -54,7 +79,7 @@ export function useReveal(cardId: string | undefined, gradeDelayMs: number) {
 }
 
 /** Back never leaves an alarm screen. */
-export function useBlockBack() {
+function useBlockBack() {
   useEffect(() => {
     const handler = BackHandler.addEventListener("hardwareBackPress", () => true);
     return () => handler.remove();
@@ -106,7 +131,7 @@ export function AlarmCard({
   onAnswer,
 }: {
   next: Next;
-  reveal: ReturnType<typeof useReveal>;
+  reveal: ReturnType<typeof useSessionCard>;
   busy: boolean;
   locale: Locale;
   onReveal: () => void;

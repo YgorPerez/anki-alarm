@@ -3,9 +3,9 @@ import { StudyMenu } from "./StudyMenu.tsx";
 import { buryItem, buryStudyCard } from "./study-actions.ts";
 import { StudyAnnotations } from "./StudyAnnotations.tsx";
 import { annotationItems, useStudyAnnotationChange } from "./study-annotations.ts";
-import { undoItem, useUndoStack } from "./study-undo.ts";
+import { undoItem } from "./study-undo.ts";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   awakeCheckSession,
   RING_POLICY,
@@ -18,14 +18,7 @@ import { Effect, type Layer } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import type { AlarmService, AwakeCheck } from "./alarms.ts";
-import {
-  AlarmCard,
-  AlarmFrame,
-  PillButton,
-  useBlockBack,
-  useGuarded,
-  useReveal,
-} from "./alarm-ui.tsx";
+import { AlarmCard, AlarmFrame, PillButton, useGuarded, useAlarmStudy } from "./alarm-ui.tsx";
 import { GRADE_DELAY_MS, signalWith } from "./alarm-screen.ts";
 import { bold, regular } from "./fonts.ts";
 import { Clock, useNow } from "./clock.tsx";
@@ -169,13 +162,9 @@ function useAwakeCheck(
   const { busy, error, guarded } = useGuarded();
   const shownAt = useRef(0);
   const signal = signalWith(layer);
-  const history = useUndoStack();
-  // The card the last undo was on: the check shows it again.
-  const undone = useRef<string>(undefined);
-  const query = useQuery({
-    queryKey: ["awakeCheck", check.id],
-    networkMode: "always",
-    queryFn: async () => {
+  const { query, cardId, history, card } = useAlarmStudy(
+    ["awakeCheck", check.id],
+    async (undone) => {
       const { collection, log } = await Effect.runPromise(
         localData((data) => Effect.all({ collection: data.collection, log: data.reviewLog })),
       );
@@ -185,14 +174,12 @@ function useAwakeCheck(
         deckId: check.alarm.deckId,
         checkId: check.id,
         now: Date.now(),
-        undone: undone.current,
+        undone,
       });
     },
-  });
+    gradeDelayMs,
+  );
   const session = query.data;
-  const cardId = session?.next?.card.id;
-  const card = useReveal(cardId, gradeDelayMs);
-  useBlockBack();
   useEffect(() => {
     // When the card appeared, on the monotonic clock: the answer's time taken.
     if (cardId) shownAt.current = performance.now();
@@ -202,8 +189,7 @@ function useAwakeCheck(
     guarded(async () => {
       const target = session?.next?.card;
       if (!target) return;
-      history.record(await change(target));
-      undone.current = undefined;
+      history.replaced(await change(target));
       card.hide();
       await query.refetch();
     });
@@ -233,7 +219,7 @@ function useAwakeCheck(
     undo: () =>
       guarded(async () => {
         if (!history.canUndo) return;
-        undone.current = await history.undo();
+        await history.undo();
         card.hide();
         await Promise.all([
           query.refetch(),

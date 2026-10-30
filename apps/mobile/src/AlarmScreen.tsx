@@ -3,9 +3,9 @@ import { StudyMenu } from "./StudyMenu.tsx";
 import { buryItem, buryStudyCard } from "./study-actions.ts";
 import { StudyAnnotations } from "./StudyAnnotations.tsx";
 import { annotationItems, useStudyAnnotationChange } from "./study-annotations.ts";
-import { undoItem, useUndoStack } from "./study-undo.ts";
+import { undoItem } from "./study-undo.ts";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   alarmSession,
   answerUndo,
@@ -23,14 +23,7 @@ import { Effect, type Layer } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { AlarmService, Ring } from "./alarms.ts";
-import {
-  AlarmCard,
-  AlarmFrame,
-  PillButton,
-  useBlockBack,
-  useGuarded,
-  useReveal,
-} from "./alarm-ui.tsx";
+import { AlarmCard, AlarmFrame, PillButton, useGuarded, useAlarmStudy } from "./alarm-ui.tsx";
 import { GRADE_DELAY_MS, signalWith } from "./alarm-screen.ts";
 import { bold, regular } from "./fonts.ts";
 import { Clock, useNow } from "./clock.tsx";
@@ -414,9 +407,6 @@ function useAlarmSession(
   const signal = signalWith(layer);
   // Bumped for each card shown, so a reading still under way knows it's been replaced.
   const readingId = useRef(0);
-  const history = useUndoStack();
-  // The card the last undo was on: the session shows it again first.
-  const undone = useRef<string>(undefined);
   /** Read aloud, when the alarm has it: the card just shown. A failure never blocks the session. */
   const read = (next: Session["next"] | undefined) => {
     const id = ++readingId.current;
@@ -430,11 +420,10 @@ function useAlarmSession(
     });
     if (reading) void readFront(signal, reading, () => id === readingId.current).catch(() => {});
   };
-  const query = useQuery({
+  const { query, cardId, history, card } = useAlarmStudy(
     // Each snooze raises N.
-    queryKey: ["alarmSession", ring.id, current.snoozes],
-    networkMode: "always",
-    queryFn: async () => {
+    ["alarmSession", ring.id, current.snoozes],
+    async (undone) => {
       const { collection, log, alarms, events } = await Effect.runPromise(
         localData((data) =>
           Effect.all({
@@ -452,14 +441,12 @@ function useAlarmSession(
         need: ringNeed(current, events, alarms),
         ringId: ring.id,
         now: Date.now(),
-        undone: undone.current,
+        undone,
       });
     },
-  });
+    gradeDelayMs,
+  );
   const session = query.data;
-  const cardId = session?.next?.card.id;
-  const card = useReveal(cardId, gradeDelayMs);
-  useBlockBack();
   const readsAloud = ring.alarm.readAloud;
   /** Stops a reading under way, as a snooze or leaving the screen does. */
   const stopReading = () => {
@@ -489,8 +476,7 @@ function useAlarmSession(
       const target = session?.next?.card;
       if (!target) return;
       await signal((service) => service.activity(ring.id));
-      history.record(await change(target));
-      undone.current = undefined;
+      history.replaced(await change(target));
       card.hide();
       const { data } = await query.refetch();
       shownAt.current = performance.now();
@@ -572,7 +558,7 @@ function useAlarmSession(
         if (!history.canUndo) return;
         await signal((service) => service.activity(ring.id));
         stopReading();
-        undone.current = await history.undo();
+        await history.undo();
         card.hide();
         const { data } = await query.refetch();
         shownAt.current = performance.now();
