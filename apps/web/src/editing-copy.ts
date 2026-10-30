@@ -46,10 +46,11 @@ const messages = {
     browser: "Navegador de cartões",
     search: "Buscar",
     searchHint:
-      'Palavras ou "frases". Também deck:Nome, note:Tipo, card:1, tag:x, is:suspended e - para excluir.',
+      'Palavras ou "frases". Também deck:Nome, note:Tipo, card:1, tag:x, is:suspended, is:buried e - para excluir.',
     results: "{count} cartões",
     noResults: "Nenhum cartão encontrado.",
     suspended: "Suspenso",
+    buried: "Enterrado até amanhã",
     chooseNote: "Escolha um cartão para editar a nota.",
     // Note types
     noteTypes: "Tipos de nota",
@@ -134,10 +135,11 @@ const messages = {
     browser: "Card browser",
     search: "Search",
     searchHint:
-      'Words or "phrases". Also deck:Name, note:Type, card:1, tag:x, is:suspended, and - to exclude.',
+      'Words or "phrases". Also deck:Name, note:Type, card:1, tag:x, is:suspended, is:buried, and - to exclude.',
     results: "{count} cards",
     noResults: "No cards found.",
     suspended: "Suspended",
+    buried: "Buried until tomorrow",
     chooseNote: "Pick a card to edit its note.",
     noteTypes: "Note types",
     noteTypeName: "Note type name",

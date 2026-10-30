@@ -1,6 +1,7 @@
 import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { intervalText } from "./interval-text.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
+import { buryItem, buryStudyCard } from "./study-actions.ts";
 import { StudyCounts } from "./StudyCounts.tsx";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useContext } from "react";
@@ -73,6 +74,7 @@ export function StudyScreen({
             ? [
                 { id: "editNote", label: t("editNote"), onPress: () => setEditing(card.id) },
                 ...suspensionItems(locale, study.suspend),
+                buryItem(locale, study.bury),
               ]
             : []
         }
@@ -414,12 +416,23 @@ function useStudySession(deckId: string, onExit: () => void) {
       client.invalidateQueries({ queryKey: ["reviewLog"] }),
     ]);
   }
-  async function answer(grade: Grade) {
-    if (!cardId || !revealed || lock.current) return;
+  /** Runs one study operation at a time; a failure shows the error and keeps the card. */
+  async function guarded(operation: () => Promise<void>) {
+    if (lock.current) return;
     lock.current = true;
     setBusy(true);
     setError(false);
     try {
+      await operation();
+    } catch {
+      setError(true);
+    }
+    lock.current = false;
+    setBusy(false);
+  }
+  async function answer(grade: Grade) {
+    if (!cardId || !revealed) return;
+    await guarded(async () => {
       const entry = await Effect.runPromise(
         localData((data) =>
           data.answerCard(
@@ -433,46 +446,28 @@ function useStudySession(deckId: string, onExit: () => void) {
       setUndone(undefined);
       setRevealedId(undefined);
       await refresh();
-    } catch {
-      setError(true);
-    }
-    lock.current = false;
-    setBusy(false);
+    });
   }
   /** Takes the current card out without an answer (suspend, bury); the next one comes. */
   async function leaveCard(change: (target: Card) => Promise<void>) {
-    if (!card || lock.current) return;
-    lock.current = true;
-    setBusy(true);
-    setError(false);
-    try {
+    if (!card) return;
+    await guarded(async () => {
       await change(card);
       setRevealedId(undefined);
       setUndone(undefined);
       await refresh();
-    } catch {
-      setError(true);
-    }
-    lock.current = false;
-    setBusy(false);
+    });
   }
   async function undo() {
     const last = answers.at(-1);
-    if (!last || lock.current) return;
-    lock.current = true;
-    setBusy(true);
-    setError(false);
-    try {
+    if (!last) return;
+    await guarded(async () => {
       await Effect.runPromise(localData((data) => data.undo(last.id)));
       setAnswers((list) => list.slice(0, -1));
       setUndone(last.cardId);
       setRevealedId(undefined);
       await refresh();
-    } catch {
-      setError(true);
-    }
-    lock.current = false;
-    setBusy(false);
+    });
   }
   return {
     intervals:
@@ -495,6 +490,8 @@ function useStudySession(deckId: string, onExit: () => void) {
       leaveCard((target) => suspendStudyCard(target, scope, client)),
     canUndo: answers.length > 0,
     undo,
+    /** Buries the card until the next study day; the deck's counts change with it. */
+    bury: () => leaveCard((target) => buryStudyCard(target, client)),
     refresh,
   };
 }

@@ -1,5 +1,6 @@
 import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
+import { buryItem, buryStudyCard } from "./study-actions.ts";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -183,6 +184,7 @@ function CardStage({
             items={[
               { id: "editNote", label: t("editNote"), onPress: () => setEditing(next.card.id) },
               ...suspensionItems(locale, alarm.suspend),
+              buryItem(locale, alarm.bury),
             ]}
             locale={locale}
             busy={alarm.busy}
@@ -462,27 +464,36 @@ function useAlarmSession(
     [layer, readsAloud],
   );
 
-  /** A deck with no cards can't give the awake check a card, so that dismissal skips it. */
   /** A tap or edit in the session: quiets the ring again and restarts its idle time. */
   const activity = () => {
     void signal((service) => service.activity(ring.id)).catch(() => setError(true));
   };
   /**
-   * Takes the current card out of the session without an answer (suspend, bury): progress stays
-   * and the next card comes, read aloud.
+   * The current card goes through `change` (an answer, or a card leaving without one), then the
+   * session's next card shows, or the ring is dismissed once N are right.
    */
-  const leaveCard = (change: (target: Card) => Promise<void>) =>
+  const replaceCard = (change: (target: Card) => Promise<unknown>) =>
     guarded(async () => {
       const target = session?.next?.card;
       if (!target) return;
       await signal((service) => service.activity(ring.id));
-      stopReading();
       await change(target);
       card.hide();
       const { data } = await query.refetch();
       shownAt.current = performance.now();
-      read(data?.next);
+      if (data?.done) await finish();
+      else read(data?.next);
     });
+  /**
+   * Takes the current card out of the session without an answer (suspend, bury): progress stays
+   * and the next card comes, read aloud.
+   */
+  const leaveCard = (change: (target: Card) => Promise<void>) =>
+    replaceCard(async (target) => {
+      stopReading();
+      await change(target);
+    });
+  /** A deck with no cards can't give the awake check a card, so that dismissal skips it. */
   const finish = async (awakeCheck = true) => {
     const after = awakeCheck ? awakeCheckAfter(ring.alarm) : null;
     await signal((service) => service.dismiss(ring.id, after));
@@ -526,20 +537,17 @@ function useAlarmSession(
       leaveCard((target) => suspendStudyCard(target, scope, client)),
     activity,
     refetch: () => query.refetch(),
-    answer: (grade: Grade) =>
-      guarded(async () => {
-        if (!cardId || !card.revealed) return;
-        await signal((service) => service.activity(ring.id));
+    answer: async (grade: Grade) => {
+      if (!card.revealed) return;
+      await replaceCard((target) => {
         const durationMs = Math.max(0, performance.now() - shownAt.current);
-        await Effect.runPromise(
-          localData((data) => data.answerCard(cardId, grade, durationMs, ring.id)),
+        return Effect.runPromise(
+          localData((data) => data.answerCard(target.id, grade, durationMs, ring.id)),
         );
-        card.hide();
-        const { data } = await query.refetch();
-        shownAt.current = performance.now();
-        if (data?.done) await finish();
-        else read(data?.next);
-      }),
+      });
+    },
+    /** Buries the card until the next study day: another comes, and it doesn't count toward N. */
+    bury: () => leaveCard((target) => buryStudyCard(target, client)),
     dismiss: () => guarded(() => finish(false)),
   };
 }

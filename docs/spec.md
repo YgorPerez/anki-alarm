@@ -112,6 +112,11 @@ Every answer is a **review**: an immutable event with its own id (UUIDv7), the c
 AnkiDroid import, alarm session). Reviews are only ever appended. Undo appends a **void** for the
 review, and replay skips voided reviews.
 
+A card can be **buried** until the next study day starts: study and alarm sessions skip it until
+then. That is a synced card property, the time the bury ends (the start of the next study day),
+so it expires without a write. `.apkg` import reads Anki's buried queues (-2, -3) as buried until
+the study day after the card's last change; export writes a buried card in queue -3.
+
 A card's **memory state** (stability, difficulty, due date, learning step) is not stored as truth.
 Core rebuilds it by replaying the card's reviews in answer-time order through FSRS with the deck's
 options. Caches of the result are fine; the log is what syncs.
@@ -178,6 +183,11 @@ AnkiDroid decks become the app's own decks. The app schedules them with FSRS lik
   dropped. A card AnkiDroid reviewed since we last saw it gets its snapshot before our answers go.
   The phone keeps what it sent and the `reps` it last saw locally; a phone that takes over a linked
   deck doesn't resend the reviews from before.
+- Buries go with sync back too, after the card's answers (an answer would unbury it): each linked
+  card still buried in the app is buried in AnkiDroid once, checked by reading its queue back. A
+  card already out of AnkiDroid's queue, or gone from it, needs nothing. A bury that ended before
+  sync back ran stays in the app, and AnkiDroid's API can't unbury, so undoing a bury already
+  sent leaves the card buried there until AnkiDroid's next day. Pull doesn't change a card's bury.
 - AnkiDroid's API can't write due dates or memory state; only answers, bury, suspend and moving
   decks. A reset or set due date on a linked card stays in the app, the card screen says so, and
   AnkiDroid's next review of the card snapshots over it. The two schedules can drift a little when
@@ -222,6 +232,10 @@ session** is a special mode of it on the phone.
   learning steps, with the same scheduler configuration as review replay.
 - On a deck page, today's counts and Estudar / Study sit directly below the deck name, before
   AnkiDroid controls and editing options.
+- The card-action menu offers "Enterrar até amanhã" / "Bury until tomorrow" on all three screens.
+  On an alarm or awake check the buried card leaves without counting toward N and another comes;
+  buried cards come back only when nothing else is left, so burying never ends an alarm. The web's
+  browser finds buried cards with `is:buried`.
 - The phone has a full editor: notes, decks, deck options. Editing note types (templates and CSS)
   is web only.
 

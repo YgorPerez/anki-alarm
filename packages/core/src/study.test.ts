@@ -359,6 +359,31 @@ test("study counts separate due reviews from relearning and exclude suspended an
   });
 });
 
+test("a buried card leaves study until the next study day starts, and unburying brings it back", () => {
+  let at = now;
+  const c = new Collection({ deviceId: "a", now: () => at, random: () => new Uint8Array(16) });
+  const deck = c.createDeck("Words");
+  c.addBasicNote(deck.id, "one", "um");
+  const cardId = c.snapshot().cards[0]!.id;
+  c.buryCard(cardId);
+  const nextDay = new Date(2026, 9, 29, 4).getTime();
+  expect(studyQueue(c.snapshot(), [], deck.id, now)).toHaveLength(0);
+  expect(studyCounts(c.snapshot(), [], deck.id, nextDay - 1)).toEqual({
+    new: 0,
+    learning: 0,
+    review: 0,
+  });
+  expect(nextStudyCard(c.snapshot(), [], deck.id, nextDay)?.card.id).toBe(cardId);
+  at = now + 1000;
+  c.unburyCard(cardId);
+  expect(studyQueue(c.snapshot(), [], deck.id, at).map((x) => x.card.id)).toEqual([cardId]);
+});
+
+test("burying a card that is missing or gone throws", () => {
+  const c = new Collection({ deviceId: "a", now: () => now, random: () => new Uint8Array(16) });
+  expect(() => c.buryCard("missing")).toThrow("Invalid card");
+});
+
 test("new-card intervals follow its preset learning steps without writing a review", () => {
   const { state, cardId, preset } = fixture();
   preset.fields.learningSteps.value = [2, 20];

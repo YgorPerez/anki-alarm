@@ -6,6 +6,7 @@ import type { Card, CollectionState, Deck, Field, NoteType, Preset } from "./col
 import { importId, sha1, type ImportKind } from "./ids.ts";
 import {
   deckPreset,
+  isBuried,
   newPosition,
   replayEntries,
   studyDayStart,
@@ -300,6 +301,7 @@ function collectionRows({ collection, log, deckId, now }: ApkgExportInput) {
       position: position.get(card.id) ?? 0,
       dayNumber,
       tomorrow: tomorrow.getTime(),
+      now,
     }),
   );
 
@@ -431,10 +433,12 @@ function cardRow(
     position: number;
     dayNumber: (ms: number) => number;
     tomorrow: number;
+    now: number;
   },
 ): Value[] {
   const due = memory.due.getTime();
   const suspended = card.fields.suspended.value;
+  const buried = isBuried(card, at.now);
   const learning = memory.state === CardState.Learning || memory.state === CardState.Relearning;
   // Learning steps due today are timestamps in queue 1; later ones day numbers in queue 3.
   const [type, queue, dueValue, ivl, factor] =
@@ -471,7 +475,8 @@ function cardRow(
     clockOf(card),
     -1,
     type,
-    suspended ? -1 : queue,
+    // -3 is Anki's user-buried queue, which it empties at its next study day.
+    suspended ? -1 : buried ? -3 : queue,
     dueValue,
     ivl,
     factor,

@@ -79,6 +79,13 @@ class AnkiDroidModule : Module() {
         AnkiDroidReader(context.contentResolver).answer(noteId.toLong(), ord, ease, timeTakenMs.toLong())?.toString() ?: "null"
       }
     }
+
+    /** Sync back: one bury, then the card as AnkiDroid has it afterwards ("null" when it's gone). */
+    AsyncFunction("bury") { noteId: Double, ord: Int, promise: Promise ->
+      provider(promise) {
+        AnkiDroidReader(context.contentResolver).bury(noteId.toLong(), ord)?.toString() ?: "null"
+      }
+    }
   }
 
   private fun granted() = context.checkSelfPermission(AnkiDroidReader.PERMISSION) == PackageManager.PERMISSION_GRANTED

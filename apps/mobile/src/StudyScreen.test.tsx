@@ -291,3 +291,43 @@ test("Edit note from the menu returns to the same card, re-rendered; Back cancel
   expect(saved.notes.some((n) => n.values[1]?.value === `${word} (editado)`)).toBe(true);
   expect(exit).not.toHaveBeenCalled();
 });
+
+test("Bury from the card menu skips the card until tomorrow without answering it", async () => {
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Bury test");
+        c.addBasicNote(deck.id, "ponte", "bridge");
+        c.addBasicNote(deck.id, "rio", "river");
+      }),
+    ),
+  );
+  const deck = state.decks.find((d) => d.fields.name.value === "Bury test")!;
+  const logBefore = await Effect.runPromise(localData((data) => data.reviewLog));
+  await render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" } } })
+      }
+    >
+      <StudyScreen deckId={deck.id} locale="pt-BR" onExit={() => {}} />
+    </QueryClientProvider>,
+  );
+  const html = String((await screen.findByLabelText("Frente")).props.source.html);
+  const [buried, other] = html.includes("ponte") ? ["ponte", "rio"] : ["rio", "ponte"];
+  expect(screen.getByLabelText("2 novos")).toBeTruthy();
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  expect(
+    screen
+      .getAllByText(/^(Editar nota|Suspender card|Suspender nota|Enterrar até amanhã)$/)
+      .map((item) => item.props.children),
+  ).toEqual(["Editar nota", "Suspender card", "Suspender nota", "Enterrar até amanhã"]);
+  await fireEvent.press(screen.getByRole("button", { name: "Enterrar até amanhã" }));
+  await waitFor(() => expect(screen.getByLabelText("Frente").props.source.html).toContain(other));
+  expect(screen.getByLabelText("1 novos")).toBeTruthy();
+  const after = await Effect.runPromise(localData((data) => data.collection));
+  const note = after.notes.find((n) => n.values[0]?.value === buried)!;
+  const card = after.cards.find((c) => c.fields.noteId.value === note.id)!;
+  expect(card.fields.buriedUntil.value).toBeGreaterThan(Date.now());
+  expect(await Effect.runPromise(localData((data) => data.reviewLog))).toEqual(logBefore);
+});

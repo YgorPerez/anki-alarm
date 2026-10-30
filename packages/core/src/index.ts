@@ -25,12 +25,15 @@ export {
   ankiDroidAccess,
   cardsStayInApp,
   linkableAnkiDroidDecks,
+  syncBackBuries,
+  syncBackBuryPlan,
   syncBackPlan,
   syncBackQueue,
   syncBackSuspensions,
 } from "./ankidroid.ts";
 export type {
   SyncBackAnswer,
+  SyncBackBury,
   SyncBackPlan,
   AnkiDroidAccess,
   AnkiDroidCard,
@@ -123,6 +126,7 @@ export {
   studyCounts,
   nextStudyCard,
   studyDayStart,
+  isBuried,
   checkLogEntry,
   cardMemory,
   CardState,

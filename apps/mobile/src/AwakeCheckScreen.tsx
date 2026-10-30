@@ -1,5 +1,6 @@
 import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
+import { buryItem, buryStudyCard } from "./study-actions.ts";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { awakeCheckSession, RING_POLICY, type Card, type Grade, type Locale } from "@app/core";
@@ -113,6 +114,7 @@ export function AwakeCheckScreen({
               items={[
                 { id: "editNote", label: t("editNote"), onPress: () => setEditing(next.card.id) },
                 ...suspensionItems(locale, prompt.suspend),
+                buryItem(locale, prompt.bury),
               ]}
               locale={locale}
               busy={prompt.busy}
@@ -215,5 +217,7 @@ function useAwakeCheck(
         );
         await pass();
       }),
+    /** Buries the card until the next study day; another card comes and the check goes on. */
+    bury: () => leaveCard((target) => buryStudyCard(target, client)),
   };
 }

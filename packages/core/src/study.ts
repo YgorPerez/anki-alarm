@@ -167,6 +167,8 @@ export function newPosition(card: Card, log: readonly LogEntry[], voided: Readon
       .map((e) => e.at),
   );
 }
+/** Whether the card is buried at `now`: `buryCard` keeps it out of study until the next day. */
+export const isBuried = (card: Card, now: number) => (card.fields.buriedUntil?.value ?? 0) > now;
 /** Local calendar arithmetic keeps the 4am boundary correct across DST. */
 export function studyDayStart(now: number, hour = 4): number {
   const date = new Date(now);
@@ -222,7 +224,7 @@ function studyCandidates(
   }
   const presetOf = (card: Card) => presets.get(card.fields.deckId.value)!;
   const cards = collection.cards.filter(
-    (c) => family.has(c.fields.deckId.value) && !c.fields.suspended?.value,
+    (c) => family.has(c.fields.deckId.value) && !c.fields.suspended?.value && !isBuried(c, now),
   );
   const voided = new Set(log.filter((e) => e.kind === "void").map((e) => e.targetId));
   // Each card replays only its own entries.
