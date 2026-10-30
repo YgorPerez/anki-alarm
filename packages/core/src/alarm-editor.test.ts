@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
-import { newAlarm, newAlarmFor, nextAlarmRing, onceRule, ringsIn, timeLeft } from "./index.ts";
+import {
+  savedRule,
+  newAlarm,
+  newAlarmFor,
+  nextAlarmRing,
+  onceRule,
+  ringsIn,
+  timeLeft,
+} from "./index.ts";
 
 const zone = "America/Sao_Paulo";
 // Wednesday 2026-10-28, 23:18 in São Paulo (UTC−3).
@@ -111,5 +119,28 @@ describe("an alarm with no repeat days", () => {
   it("rings once tomorrow when today's time has passed", () => {
     expect(onceRule(6, 30, now, zone)).toEqual({ hour: 6, minute: 30, onceDate: "2026-10-29" });
     expect(onceRule(23, 18, now, zone)).toEqual({ hour: 23, minute: 18, onceDate: "2026-10-29" });
+  });
+});
+
+describe("saving an editor rule", () => {
+  it("gives a date priority and removes repeat days", () => {
+    expect(
+      savedRule({ hour: 8, minute: 0, onceDate: "2026-10-30", repeatDays: [1] }, now, zone),
+    ).toEqual({ hour: 8, minute: 0, onceDate: "2026-10-30" });
+  });
+  it("keeps repeating rules and turns empty days into the next one-off", () => {
+    expect(savedRule({ hour: 8, minute: 0, repeatDays: [1] }, now, zone)).toEqual({
+      hour: 8,
+      minute: 0,
+      repeatDays: [1],
+    });
+    expect(savedRule({ hour: 6, minute: 30, repeatDays: [] }, now, zone)).toEqual({
+      hour: 6,
+      minute: 30,
+      onceDate: "2026-10-29",
+    });
+  });
+  it("rejects a date whose time has passed", () => {
+    expect(savedRule({ hour: 8, minute: 0, onceDate: "2026-10-28" }, now, zone)).toBeNull();
   });
 });

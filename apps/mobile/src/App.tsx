@@ -1,3 +1,5 @@
+import { useNow } from "./clock.tsx";
+import { regular, bold } from "./fonts.ts";
 import { AlarmSettingsRows } from "./AlarmSettingsRows.tsx";
 import { HomeScreen } from "./HomeScreen.tsx";
 import { useAlarmDecks } from "./AlarmDeckSettings.tsx";
@@ -227,6 +229,7 @@ function Home({ children }: { children: ReactNode }) {
         .then((active) => {
           setRing(active.ring);
           setAwakeCheck(active.awakeCheck);
+          void client.invalidateQueries({ queryKey: ["alarms"] });
           // An alarm folded into the ring can raise its N.
           void client.invalidateQueries({ queryKey: ["alarmSession"] });
         })
@@ -407,10 +410,10 @@ function Home({ children }: { children: ReactNode }) {
             onPress={() => router.push("/settings/reliability")}
             className="min-h-12 flex-row items-center justify-between gap-4 rounded-lg bg-surface p-4"
           >
-            <Text className="shrink text-body text-attention">
+            <Text style={regular} className="shrink text-body text-attention">
               {reliabilityCopy(locale)("atRisk")}
             </Text>
-            <Text className="text-body font-bold text-primary-ink">
+            <Text style={bold} className="text-body font-bold text-primary-ink">
               {reliabilityCopy(locale)("fix")}
             </Text>
           </Pressable>
@@ -468,6 +471,7 @@ function EditorRoute({
 }) {
   const router = useRouter();
   const [newId] = useState(() => native.createId());
+  const now = useNow();
   const lastSavedId = useUI((ui) => ui.lastSavedAlarm);
   const decks = useAlarmDecks(locale);
   const [duplicateDraft, setDuplicateDraft] = useState<Alarm | null>(null);
@@ -475,7 +479,7 @@ function EditorRoute({
   const alarm =
     duplicateDraft ??
     (source
-      ? duplicateAlarm(source, newId)
+      ? duplicateAlarm(source, newId, now)
       : alarms === null
         ? undefined
         : id === "new"
@@ -485,7 +489,9 @@ function EditorRoute({
   if (!alarm)
     return (
       <View className="flex-1 bg-background p-6">
-        <Text className="text-body text-foreground">{copy(locale)("loading")}</Text>
+        <Text style={regular} className="text-body text-foreground">
+          {copy(locale)("loading")}
+        </Text>
       </View>
     );
   const settings = (draft: Alarm, onChange: (alarm: Alarm) => void) => (
@@ -496,7 +502,9 @@ function EditorRoute({
       key={alarm.id}
       alarm={alarm}
       saved={id !== "new" && !duplicateDraft}
-      onDuplicate={(draft) => setDuplicateDraft(duplicateAlarm(draft, native.createId()))}
+      onDuplicate={(draft) =>
+        setDuplicateDraft(duplicateAlarm(draft, native.createId(), Date.now()))
+      }
       locale={locale}
       hour24={use24Hour}
       onSave={onSave}

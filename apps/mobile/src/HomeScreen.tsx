@@ -1,3 +1,5 @@
+import { useAlarmDeletion } from "./useAlarmDeletion.ts";
+import { useQuickAlarmNotice } from "./useQuickAlarmNotice.ts";
 import { SwipeAlarm } from "./SwipeAlarm.tsx";
 import { Button } from "./controls.tsx";
 import { AlarmCardMenu } from "./AlarmCardMenu.tsx";
@@ -7,16 +9,15 @@ import {
   skipOffer,
   undoSkip,
   upcomingRing,
-  ringsIn,
   timeLeft,
   QUICK_ALARM_MINUTES,
   type Alarm,
   type Locale,
 } from "@app/core";
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { FlatList, Pressable, Switch, Text, View } from "react-native";
 import { Clock, useNow } from "./clock.tsx";
-import { clockText, durationText, repeatSummary, ringsInText, timeText } from "./alarm-text.ts";
+import { clockText, durationText, repeatSummary, timeText } from "./alarm-text.ts";
 import { bold, regular } from "./fonts.ts";
 import { copy } from "./copy.ts";
 import { HomeEmptyState, type DeckSetup } from "./HomeEmptyState.tsx";
@@ -32,7 +33,7 @@ function dayText(at: number, locale: Locale, zone: string) {
   }).format(at);
 }
 
-export function AlarmCard({
+function AlarmCard({
   alarm,
   deckName,
   locale,
@@ -167,63 +168,14 @@ export function HomeScreen({
   /** Given once decks and alarms have loaded; without it Home shows no empty state. */
   setup?: DeckSetup;
 }) {
-  const [deleted, setDeleted] = useState<{ alarm: Alarm; at: number } | null>(null);
-  const [hidden, setHidden] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState(false);
-  const pending = useRef(false);
   const now = useNow();
-  const undoAvailable = deleted !== null && (busy || now - deleted.at < 8000);
-  const visibleAlarms = alarms.filter((alarm) => !hidden.includes(alarm.id));
-  const removeAlarm = async (alarm: Alarm) => {
-    if (!onDelete || pending.current) return;
-    pending.current = true;
-    setBusy(true);
-    setActionError(false);
-    try {
-      await onDelete(alarm.id);
-      setHidden((ids) => [...ids, alarm.id]);
-      setDeleted({ alarm, at: now });
-    } catch {
-      setActionError(true);
-    } finally {
-      pending.current = false;
-      setBusy(false);
-    }
-  };
-  const restoreAlarm = async () => {
-    if (!deleted || !undoAvailable || !onRestore || pending.current) return;
-    pending.current = true;
-    setBusy(true);
-    setActionError(false);
-    try {
-      await onRestore(deleted.alarm);
-      setDeleted(null);
-    } catch {
-      setActionError(true);
-    } finally {
-      pending.current = false;
-      setBusy(false);
-    }
-  };
-
+  const { visibleAlarms, removeAlarm, restoreAlarm, undoAvailable, busy, actionError } =
+    useAlarmDeletion(alarms, now, onDelete, onRestore);
   const list = useRef<FlatList<Alarm>>(null);
   const needsDeck = setup !== undefined && decks.length === 0;
   const t = copy(locale);
   const next = nextAlarmRing(visibleAlarms, now, zone);
-  // "Rings in …" after a chip adds its alarm, for a few seconds.
-  const [notice, setNotice] = useState<{ text: string; until: number }>();
-  const addQuickAlarm = (minutes: number) => {
-    onQuickAlarm?.(minutes, (alarm) => {
-      const at = Date.now();
-      const left = ringsIn(alarm.rule, at, zone);
-      if (left !== null)
-        setNotice({
-          text: ringsInText(left, locale),
-          until: at + 5000,
-        });
-    });
-  };
+  const { notice, addQuickAlarm } = useQuickAlarmNotice(now, zone, locale, onQuickAlarm);
   return (
     <View className="flex-1 bg-background">
       <FlatList
@@ -261,22 +213,22 @@ export function HomeScreen({
                 ))}
               </View>
             ) : null}
-            {notice && now < notice.until ? (
+            {notice ? (
               <Text
                 accessibilityLiveRegion="polite"
                 style={regular}
                 className="text-body text-foreground"
               >
-                {notice.text}
+                {notice}
               </Text>
             ) : null}
             {banner}
             {error ? (
-              <Text accessibilityRole="alert" className="text-body text-attention">
+              <Text style={regular} accessibilityRole="alert" className="text-body text-attention">
                 {error}
               </Text>
             ) : null}
-            {setup && !visibleAlarms.length ? (
+            {setup && (needsDeck || !visibleAlarms.length) ? (
               <HomeEmptyState
                 locale={locale}
                 hasDecks={decks.length > 0}
@@ -309,7 +261,7 @@ export function HomeScreen({
         )}
       />
       {actionError && (
-        <Text accessibilityRole="alert" className="text-body text-destructive">
+        <Text style={regular} accessibilityRole="alert" className="text-body text-destructive">
           {t("alarmError")}
         </Text>
       )}
