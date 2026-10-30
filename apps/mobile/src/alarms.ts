@@ -1,6 +1,7 @@
 import { Context, Effect, Layer } from "effect";
 import {
   quickAlarmsDone,
+  clearExpiredSkip,
   RING_POLICY,
   type Alarm,
   type AlarmPermissions,
@@ -95,8 +96,17 @@ export function alarmController(repository: AlarmRepository) {
   /** Native schedules exactly the enabled alarms it's given, and unschedules the rest. */
   const rearm = Effect.gen(function* () {
     const service = yield* AlarmService;
+    const alarms = yield* repository.list;
+    const now = Date.now();
+    const current = [];
+    for (const alarm of alarms) {
+      const cleared = clearExpiredSkip(alarm, now);
+      // The repository stamps this edit and queues it for sync, like any local save.
+      if (cleared !== alarm) yield* repository.save(cleared);
+      current.push(cleared);
+    }
     yield* service.setAlarms(
-      (yield* repository.list).filter((item) => item.enabled),
+      current.filter((item) => item.enabled),
       RING_POLICY,
     );
   });

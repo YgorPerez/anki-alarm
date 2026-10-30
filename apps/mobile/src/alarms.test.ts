@@ -214,3 +214,25 @@ it("restoring a deleted alarm through save restores its native schedule", async 
   expect(await run(Effect.flatMap(AlarmService, (service) => service.list))).toEqual([restored]);
   expect(await Effect.runPromise(controller.list)).toEqual([restored]);
 });
+
+it("resume persists expired skips, including disabled alarms, and schedules the cleared values", async () => {
+  const native = memoryAlarmService();
+  const repository = memoryAlarmRepository();
+  const controller = alarmController(repository);
+  const expired = { ...alarm, skip: 1 };
+  const disabled = { ...alarm, id: "disabled", enabled: false, skip: 1 };
+  const future = { ...alarm, id: "future", skip: 8_000_000_000_000 };
+  // Seed storage directly, as on an app restart or after a sync pull.
+  await Effect.runPromise(Effect.forEach([expired, disabled, future], repository.save));
+  await Effect.runPromise(controller.resume.pipe(Effect.provide(native.layer)));
+  expect(await Effect.runPromise(controller.list)).toEqual([
+    { ...expired, skip: null },
+    { ...disabled, skip: null },
+    future,
+  ]);
+  expect(
+    await Effect.runPromise(
+      Effect.flatMap(AlarmService, (service) => service.list).pipe(Effect.provide(native.layer)),
+    ),
+  ).toEqual([{ ...expired, skip: null }, future]);
+});

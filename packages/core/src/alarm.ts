@@ -329,3 +329,8 @@ export function nextAlarmRing(
   }
   return next;
 }
+
+/** Clears a skip once that occurrence has passed, ready to persist and sync. */
+export function clearExpiredSkip(alarm: Alarm, now: number): Alarm {
+  return alarm.skip !== null && alarm.skip <= now ? { ...alarm, skip: null } : alarm;
+}

@@ -60,6 +60,7 @@ export type {
 export {
   nextRing,
   nextAlarmRing,
+  clearExpiredSkip,
   skipNextRing,
   skipOffer,
   undoSkip,

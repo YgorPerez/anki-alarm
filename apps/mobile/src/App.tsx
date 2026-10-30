@@ -1,3 +1,4 @@
+import { useNow } from "./clock.tsx";
 import { regular, bold } from "./fonts.ts";
 import { AlarmSettingsRows } from "./AlarmSettingsRows.tsx";
 import { HomeScreen } from "./HomeScreen.tsx";
@@ -228,6 +229,7 @@ function Home({ children }: { children: ReactNode }) {
         .then((active) => {
           setRing(active.ring);
           setAwakeCheck(active.awakeCheck);
+          void client.invalidateQueries({ queryKey: ["alarms"] });
           // An alarm folded into the ring can raise its N.
           void client.invalidateQueries({ queryKey: ["alarmSession"] });
         })
@@ -469,6 +471,7 @@ function EditorRoute({
 }) {
   const router = useRouter();
   const [newId] = useState(() => native.createId());
+  const now = useNow();
   const lastSavedId = useUI((ui) => ui.lastSavedAlarm);
   const decks = useAlarmDecks(locale);
   const [duplicateDraft, setDuplicateDraft] = useState<Alarm | null>(null);
@@ -476,7 +479,7 @@ function EditorRoute({
   const alarm =
     duplicateDraft ??
     (source
-      ? duplicateAlarm(source, newId)
+      ? duplicateAlarm(source, newId, now)
       : alarms === null
         ? undefined
         : id === "new"
@@ -499,7 +502,9 @@ function EditorRoute({
       key={alarm.id}
       alarm={alarm}
       saved={id !== "new" && !duplicateDraft}
-      onDuplicate={(draft) => setDuplicateDraft(duplicateAlarm(draft, native.createId()))}
+      onDuplicate={(draft) =>
+        setDuplicateDraft(duplicateAlarm(draft, native.createId(), Date.now()))
+      }
       locale={locale}
       hour24={use24Hour}
       onSave={onSave}
