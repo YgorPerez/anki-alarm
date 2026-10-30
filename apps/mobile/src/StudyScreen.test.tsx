@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Effect } from "effect";
 import { fakeSyncApi } from "@app/contracts/testing";
 import { localData } from "./database.ts";
-import { StudyScreen } from "./StudyScreen.tsx";
+import { AnswerControls, StudyScreen } from "./StudyScreen.tsx";
 
 test.each([1, 2, 3, 4] as const)(
   "reveals before grade %i and commits a phone review while the sync API is offline",
@@ -31,13 +31,30 @@ test.each([1, 2, 3, 4] as const)(
           <StudyScreen deckId={deck.id} locale="pt-BR" onExit={() => {}} />
         </QueryClientProvider>,
       );
-      await screen.findByRole("button", { name: "Mostrar resposta" });
+      await screen.findByLabelText("Frente");
       expect(
         screen.queryByRole("button", { name: ["De novo", "Difícil", "Bom", "Fácil"][grade - 1] }),
       ).toBeNull();
       expect(screen.getByLabelText("Frente").props.source.html).toContain("casa");
       expect(screen.getByLabelText("Frente").props.source.html).not.toContain("house");
-      await fireEvent.press(screen.getByRole("button", { name: "Mostrar resposta" }));
+      expect(screen.queryByRole("button", { name: "Mostrar resposta" })).toBeNull();
+      screen.getByText("Toque para ver a resposta");
+      const front = screen.getByLabelText("Frente");
+      expect(front.props.javaScriptEnabled).toBe(false);
+      expect(front.props.textZoom).toBe(100);
+      expect(front.props.accessibilityHint).toBe("Toque para ver a resposta");
+      await fireEvent(front, "touchStart", {
+        nativeEvent: { pageX: 10, pageY: 10, touches: [{}] },
+      });
+      await fireEvent(front, "touchMove", {
+        nativeEvent: { pageX: 10, pageY: 100, touches: [{}] },
+      });
+      await fireEvent(front, "touchEnd", { nativeEvent: { pageX: 10, pageY: 10, touches: [] } });
+      expect(screen.queryByLabelText("Verso")).toBeNull();
+      await fireEvent(front, "touchStart", {
+        nativeEvent: { pageX: 10, pageY: 10, touches: [{}] },
+      });
+      await fireEvent(front, "touchEnd", { nativeEvent: { pageX: 12, pageY: 12, touches: [] } });
       expect(screen.getByLabelText("Verso").props.source.html).toContain("house");
       await fireEvent.press(
         screen.getByRole("button", { name: ["De novo", "Difícil", "Bom", "Fácil"][grade - 1] }),
@@ -73,7 +90,9 @@ test("Undo voids the last answer and brings its card back to the front", async (
     </QueryClientProvider>,
   );
   expect(screen.queryByRole("button", { name: "Desfazer" })).toBeNull();
-  await fireEvent.press(await screen.findByRole("button", { name: "Mostrar resposta" }));
+  await fireEvent(await screen.findByLabelText("Frente"), "accessibilityAction", {
+    nativeEvent: { actionName: "activate" },
+  });
   const first = String(screen.getByLabelText("Verso").props.source.html);
   await fireEvent.press(screen.getByRole("button", { name: "Fácil" }));
   await fireEvent.press(await screen.findByRole("button", { name: "Desfazer" }));
@@ -81,6 +100,47 @@ test("Undo voids the last answer and brings its card back to the front", async (
   const log = await Effect.runPromise(localData((data) => data.reviewLog));
   const review = log.findLast((e) => e.kind === "review")!;
   expect(log.at(-1)).toMatchObject({ kind: "void", targetId: review.id, cardId: review.cardId });
-  await fireEvent.press(screen.getByRole("button", { name: "Mostrar resposta" }));
+  await fireEvent(screen.getByLabelText("Frente"), "accessibilityAction", {
+    nativeEvent: { actionName: "activate" },
+  });
   expect(screen.getByLabelText("Verso").props.source.html).toBe(first);
 });
+
+test.each([
+  { fontScale: 1, height: 64 },
+  { fontScale: 2, height: 140 },
+])(
+  "the control strip reserves $height pixels on both sides at font scale $fontScale",
+  async ({ fontScale, height }) => {
+    const native = await import("react-native");
+    const dimensions = vi.spyOn(native, "useWindowDimensions").mockReturnValue({
+      width: 400,
+      height: 800,
+      scale: 2,
+      fontScale,
+    });
+    try {
+      const view = await render(controls(false));
+      screen.getByText("Tap to see the answer");
+      expect(view.toJSON()).toMatchObject({ props: { style: { height } } });
+      await view.rerender(controls(true, false));
+      expect(view.toJSON()).toMatchObject({ props: { style: { height } } });
+      expect(screen.queryByRole("button", { name: "Good" })).toBeNull();
+      await view.rerender(controls(true));
+      expect(view.toJSON()).toMatchObject({ props: { style: { height } } });
+      expect(screen.getAllByRole("button")).toHaveLength(4);
+    } finally {
+      dimensions.mockRestore();
+    }
+  },
+);
+
+const controls = (revealed: boolean, gradesShown = true) => (
+  <AnswerControls
+    revealed={revealed}
+    gradesShown={gradesShown}
+    locale="en"
+    busy={false}
+    onAnswer={async () => {}}
+  />
+);

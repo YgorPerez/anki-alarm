@@ -13,6 +13,7 @@ import { Effect } from "effect";
 import { useEffect, useRef, useState } from "react";
 import {
   BackHandler,
+  type GestureResponderEvent,
   Pressable,
   Text,
   View,
@@ -39,64 +40,59 @@ export function StudyScreen({
   const t = copy(locale);
   const insets = useSafeAreaInsets();
   const dark = useColorScheme() === "dark";
-  const { query, card, note, type, busy, error, revealed, reveal, answer, canUndo, undo } =
-    useStudySession(deckId, onExit);
+  const study = useStudySession(deckId, onExit);
+  const { query, busy, error, canUndo, undo } = study;
   const deckName = query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value;
   return (
     <View
-      className="flex-1 gap-4 bg-background px-6"
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom + 16 }}
+      className="flex-1 bg-background"
+      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      <View className="flex-row items-center justify-between">
-        <Pressable
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={onExit}
-          className="min-h-12 justify-center"
-        >
-          <Text className="text-body text-foreground">{t("back")}</Text>
-        </Pressable>
-        {canUndo && (
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy}
-            onPress={() => {
-              void undo();
-            }}
-            className="min-h-12 justify-center px-2"
-          >
-            <Text className="text-body text-foreground">{editingCopy(locale)("undo")}</Text>
-          </Pressable>
-        )}
-      </View>
-      <Text
-        accessibilityRole="header"
-        className="text-title text-foreground"
-        style={{ fontFamily: "AtkinsonHyperlegible_700Bold" }}
-      >
-        {deckName ?? t("study")}
-      </Text>
-      {(error || query.isError) && (
-        <Text accessibilityRole="alert" className="text-body text-destructive">
-          {t("error")}
-        </Text>
-      )}
-      {query.isError && (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            void query.refetch();
-          }}
-        >
-          <Text>{t("retry")}</Text>
-        </Pressable>
-      )}
+      <StudyNavigation
+        title={deckName ?? t("study")}
+        busy={busy}
+        locale={locale}
+        onExit={onExit}
+        onUndo={canUndo ? undo : undefined}
+      />
+      <StudyFeedback
+        locale={locale}
+        error={error || query.isError}
+        retry={
+          query.isError
+            ? () => {
+                void query.refetch();
+              }
+            : undefined
+        }
+      />
+      <StudyReview study={study} locale={locale} dark={dark} deckName={deckName} />
+    </View>
+  );
+}
+function StudyReview({
+  study,
+  locale,
+  dark,
+  deckName,
+}: {
+  study: ReturnType<typeof useStudySession>;
+  locale: Locale;
+  dark: boolean;
+  deckName: string | undefined;
+}) {
+  const t = copy(locale);
+  const { query, card, note, type, busy, revealed, reveal, answer } = study;
+  return (
+    <>
       {card && note && type ? (
         <>
           <CardSide
             key={`${card.id}-${revealed}-${dark}`}
             label={t(revealed ? "answer" : "front")}
             dark={dark}
+            revealHint={!revealed && !busy ? t("revealHint") : undefined}
+            onReveal={reveal}
             input={{
               note,
               type,
@@ -106,18 +102,79 @@ export function StudyScreen({
               ...(deckName === undefined ? {} : { deckName }),
             }}
           />
-          <AnswerControls
-            revealed={revealed}
-            busy={busy}
-            locale={locale}
-            onReveal={reveal}
-            onAnswer={answer}
-          />
+          <AnswerControls revealed={revealed} busy={busy} locale={locale} onAnswer={answer} />
         </>
       ) : (
         <Text className="text-body text-attention">
           {t(query.isPending ? "loading" : "studyDone")}
         </Text>
+      )}
+    </>
+  );
+}
+
+function StudyFeedback({
+  locale,
+  error,
+  retry,
+}: {
+  locale: Locale;
+  error: boolean;
+  retry: (() => void) | undefined;
+}) {
+  const t = copy(locale);
+  return (
+    <>
+      {error && (
+        <Text accessibilityRole="alert" className="text-body text-destructive">
+          {t("error")}
+        </Text>
+      )}
+      {retry && (
+        <Pressable accessibilityRole="button" onPress={retry}>
+          <Text>{t("retry")}</Text>
+        </Pressable>
+      )}
+    </>
+  );
+}
+
+function StudyNavigation({
+  title,
+  busy,
+  locale,
+  onExit,
+  onUndo,
+}: {
+  title: string;
+  busy: boolean;
+  locale: Locale;
+  onExit: () => void;
+  onUndo: (() => Promise<void>) | undefined;
+}) {
+  return (
+    <View className="flex-row items-center justify-between px-4">
+      <Pressable
+        accessibilityRole="button"
+        disabled={busy}
+        onPress={onExit}
+        className="min-h-12 shrink justify-center"
+      >
+        <Text numberOfLines={1} className="text-body text-foreground">
+          ‹ {title}
+        </Text>
+      </Pressable>
+      {onUndo && (
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={() => {
+            void onUndo();
+          }}
+          className="min-h-12 justify-center px-2"
+        >
+          <Text className="text-body text-foreground">{editingCopy(locale)("undo")}</Text>
+        </Pressable>
       )}
     </View>
   );
@@ -127,24 +184,60 @@ export function CardSide({
   label,
   dark,
   input,
+  revealHint,
+  onReveal,
 }: {
   label: string;
   dark: boolean;
   input: RenderInput;
+  revealHint?: string | undefined;
+  onReveal: () => void;
 }) {
   const baseUrl = mediaBaseUrl();
+  const { fontScale } = useWindowDimensions();
+  const touch = useRef<{ x: number; y: number; at: number } | undefined>(undefined);
+  const move = ({ nativeEvent: e }: GestureResponderEvent) => {
+    const start = touch.current;
+    if (start && (Math.hypot(e.pageX - start.x, e.pageY - start.y) > 10 || e.touches.length > 1))
+      touch.current = undefined;
+  };
   return (
-    <WebView
-      accessibilityLabel={label}
-      style={{ flex: 1, backgroundColor: dark ? "#000" : "#fff" }}
-      source={{ html: renderCard({ ...input, media: mediaUrl }), baseUrl }}
-      javaScriptEnabled={false}
-      allowFileAccess
-      originWhitelist={["about:*", "file://*"]}
-      onShouldStartLoadWithRequest={(request) =>
-        request.url === "about:blank" || request.url === baseUrl
-      }
-    />
+    <View
+      style={{ flex: 1 }}
+      onTouchStart={({ nativeEvent: e }) => {
+        touch.current =
+          e.touches.length === 1 ? { x: e.pageX, y: e.pageY, at: Date.now() } : undefined;
+      }}
+      onTouchMove={move}
+      onTouchCancel={() => {
+        touch.current = undefined;
+      }}
+      onTouchEnd={(event) => {
+        move(event);
+        const start = touch.current;
+        touch.current = undefined;
+        if (start && Date.now() - start.at < 500 && revealHint) onReveal();
+      }}
+    >
+      <WebView
+        accessible
+        accessibilityLabel={label}
+        accessibilityHint={revealHint}
+        accessibilityActions={revealHint ? [{ name: "activate", label: revealHint }] : []}
+        onAccessibilityAction={({ nativeEvent }) => {
+          if (nativeEvent.actionName === "activate" && revealHint) onReveal();
+        }}
+        style={{ flex: 1, backgroundColor: dark ? "#000" : "#fff" }}
+        source={{ html: renderCard({ ...input, media: mediaUrl }), baseUrl }}
+        textZoom={Math.round(100 * fontScale)}
+        javaScriptEnabled={false}
+        allowFileAccess
+        originWhitelist={["about:*", "file://*"]}
+        onShouldStartLoadWithRequest={(request) =>
+          request.url === "about:blank" || request.url === baseUrl
+        }
+      />
+    </View>
   );
 }
 const gradeLabels = { 1: "again", 2: "hard", 3: "good", 4: "easy" } as const;
@@ -157,34 +250,29 @@ export function AnswerControls({
   gradesShown = true,
   busy,
   locale,
-  onReveal,
   onAnswer,
 }: {
   revealed: boolean;
   gradesShown?: boolean;
   busy: boolean;
   locale: Locale;
-  onReveal: () => void;
   onAnswer: (grade: Grade) => Promise<void>;
 }) {
   const t = copy(locale);
   const rows = gradeRows(useWindowDimensions());
-  if (!revealed)
+  const height = rows.length === 1 ? 64 : 140;
+  if (!revealed || !gradesShown)
     return (
-      <Pressable
-        accessibilityRole="button"
-        disabled={busy}
-        onPress={onReveal}
-        className="min-h-16 items-center justify-center rounded-pill bg-surface"
-      >
-        <Text className="text-body text-foreground" style={bold}>
-          {t("reveal")}
-        </Text>
-      </Pressable>
+      <View style={{ height }} className="items-center justify-center px-4">
+        {!revealed && (
+          <Text accessibilityLiveRegion="polite" className="text-label text-muted-foreground">
+            {t("revealHint")}
+          </Text>
+        )}
+      </View>
     );
-  if (!gradesShown) return <View className="min-h-16" />;
   return (
-    <View className="gap-3">
+    <View style={{ height }} className="gap-3 px-4">
       {rows.map((row) => (
         <View key={row.join()} className="flex-row gap-3">
           {row.map((grade) => (
@@ -195,7 +283,7 @@ export function AnswerControls({
               onPress={() => {
                 void onAnswer(grade);
               }}
-              className={`min-h-16 flex-1 items-center justify-center rounded-pill px-1 ${gradeClasses[grade]}`}
+              className={`h-16 flex-1 items-center justify-center rounded-pill px-1 ${gradeClasses[grade]}`}
             >
               <Text className={`text-body ${gradeText[grade]}`} style={bold}>
                 {t(gradeLabels[grade])}
@@ -213,7 +301,7 @@ export function AnswerControls({
  * of Body) at the system's font scale; two by two otherwise, so no word breaks mid-letter.
  */
 function gradeRows({ width, fontScale }: { width: number; fontScale: number }) {
-  const pill = (width - 2 * 24 - 3 * 12) / 4;
+  const pill = (width - 2 * 16 - 3 * 12) / 4;
   return pill >= 4 * 17 * fontScale ? [[1, 2, 3, 4] as const] : [[1, 2] as const, [3, 4] as const];
 }
 

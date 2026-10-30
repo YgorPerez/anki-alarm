@@ -15,6 +15,7 @@ import {
 import { GRADE_DELAY_MS, signalWith } from "./alarm-screen.ts";
 import { bold, regular } from "./fonts.ts";
 import { Clock, useNow } from "./clock.tsx";
+import { timeText } from "./alarm-text.ts";
 import { copy } from "./copy.ts";
 import { localData } from "./database.ts";
 
@@ -77,7 +78,28 @@ export function AwakeCheckScreen({
     </>
   );
   return (
-    <AlarmFrame top={top}>
+    <AlarmFrame
+      studying={Boolean(next)}
+      top={
+        next ? (
+          <View className="min-h-12 justify-center px-4">
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.5}
+              className="text-body text-attention"
+              style={regular}
+            >
+              {timeText(now, locale, zone, use24Hour)} ·{" "}
+              {t("awakeCardProgress", { seconds: String(Math.ceil(left / 1000)) })}
+            </Text>
+            {prompt.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
+          </View>
+        ) : (
+          top
+        )
+      }
+    >
       {next ? (
         <AlarmCard
           next={next}

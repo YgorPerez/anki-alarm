@@ -3,6 +3,8 @@ const messages = {
   "pt-BR": {
     study: "Estudar",
     reveal: "Mostrar resposta",
+    revealHint: "Toque para ver a resposta",
+    awakeCardProgress: "0 de 1 · {seconds} s",
     studyDone: "Nenhum cartão disponível agora. Os limites diários se aplicam.",
     title: "Baralhos",
     switchLanguage: "English",
@@ -176,6 +178,8 @@ const messages = {
   en: {
     study: "Study",
     reveal: "Show answer",
+    revealHint: "Tap to see the answer",
+    awakeCardProgress: "0 of 1 · {seconds} s",
     studyDone: "No cards available now. Daily limits apply.",
     title: "Decks",
     switchLanguage: "Português",
