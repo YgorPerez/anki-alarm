@@ -1,9 +1,10 @@
 import { expect, test } from "vite-plus/test";
 import { browseCards, Collection, runCommand } from "./index.ts";
 
+const NOW = 1_700_000_000_000;
 const environment = () => {
   let n = 0;
-  let now = 1_700_000_000_000;
+  let now = NOW;
   return { deviceId: "web-a", now: () => now++, random: () => new Uint8Array(16).fill(n++) };
 };
 function collection() {
@@ -33,7 +34,7 @@ const fronts = (rows: { question: string; card: string }[]) =>
   rows.map((r) => `${r.question}/${r.card}`);
 
 test("the browser lists every card by its note's first field, as plain text", () => {
-  const rows = browseCards(collection(), "");
+  const rows = browseCards(collection(), "", NOW);
   expect(fronts(rows)).toEqual([
     "Capital da França/Card 1",
     "Capital da França/Reverse",
@@ -48,28 +49,40 @@ test("the browser lists every card by its note's first field, as plain text", ()
 
 test("search ignores case, accents and HTML, and every term must match", () => {
   const state = collection();
-  expect(fronts(browseCards(state, "maca"))).toEqual(["Maçã/Card 1", "Maçã/Reverse"]);
-  expect(fronts(browseCards(state, "APPLE"))).toEqual(["Maçã/Card 1", "Maçã/Reverse"]);
-  expect(browseCards(state, "b")).toHaveLength(0);
-  expect(browseCards(state, "paris arredores")).toHaveLength(2);
-  expect(browseCards(state, '"paris arredores"')).toHaveLength(0);
-  expect(browseCards(state, '"paris & arredores"')).toHaveLength(2);
-  expect(browseCards(state, "paris -arredores")).toHaveLength(0);
+  expect(fronts(browseCards(state, "maca", NOW))).toEqual(["Maçã/Card 1", "Maçã/Reverse"]);
+  expect(fronts(browseCards(state, "APPLE", NOW))).toEqual(["Maçã/Card 1", "Maçã/Reverse"]);
+  expect(browseCards(state, "b", NOW)).toHaveLength(0);
+  expect(browseCards(state, "paris arredores", NOW)).toHaveLength(2);
+  expect(browseCards(state, '"paris arredores"', NOW)).toHaveLength(0);
+  expect(browseCards(state, '"paris & arredores"', NOW)).toHaveLength(2);
+  expect(browseCards(state, "paris -arredores", NOW)).toHaveLength(0);
 });
 
 test("search by deck (with its subdecks), note type, card and suspension", () => {
   const state = collection();
-  expect(fronts(browseCards(state, "deck:português card:reverse"))).toEqual([
+  expect(fronts(browseCards(state, "deck:português card:reverse", NOW))).toEqual([
     "correr/Reverse",
     "Maçã/Reverse",
   ]);
-  expect(fronts(browseCards(state, "deck:Português::Verbos card:1"))).toEqual(["correr/Card 1"]);
-  expect(browseCards(state, "deck:portu")).toHaveLength(0);
-  expect(browseCards(state, "deck:portu*")).toHaveLength(4);
-  expect(browseCards(state, "note:basic")).toHaveLength(6);
-  expect(browseCards(state, '"deck:Geografia"')).toHaveLength(2);
-  expect(browseCards(state, "is:suspended")).toHaveLength(0);
-  expect(browseCards(state, "-is:suspended")).toHaveLength(6);
+  expect(fronts(browseCards(state, "deck:Português::Verbos card:1", NOW))).toEqual([
+    "correr/Card 1",
+  ]);
+  expect(browseCards(state, "deck:portu", NOW)).toHaveLength(0);
+  expect(browseCards(state, "deck:portu*", NOW)).toHaveLength(4);
+  expect(browseCards(state, "note:basic", NOW)).toHaveLength(6);
+  expect(browseCards(state, '"deck:Geografia"', NOW)).toHaveLength(2);
+  expect(browseCards(state, "is:suspended", NOW)).toHaveLength(0);
+  expect(browseCards(state, "-is:suspended", NOW)).toHaveLength(6);
+});
+
+test("search finds buried cards until the next study day starts", () => {
+  const c = new Collection(environment(), collection());
+  const card = browseCards(c.snapshot(), "correr card:1", NOW)[0]!;
+  expect(card.buried).toBe(false);
+  c.buryCard(card.cardId);
+  expect(fronts(browseCards(c.snapshot(), "is:buried", NOW))).toEqual(["correr/Card 1"]);
+  expect(browseCards(c.snapshot(), "-is:buried", NOW)).toHaveLength(5);
+  expect(browseCards(c.snapshot(), "is:buried", NOW + 86_400_000)).toHaveLength(0);
 });
 
 test("commands are plain data, so a web tab can send them to the leader's database", () => {

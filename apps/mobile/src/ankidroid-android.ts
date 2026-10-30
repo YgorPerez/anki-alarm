@@ -28,6 +28,8 @@ export const androidAnkiDroid: AnkiDroidApi = {
   cards: (noteIds) => provider<AnkiDroidCard[]>(() => native.cards([...noteIds])),
   answer: ({ noteId, ord, ease, timeTakenMs }) =>
     provider<AnkiDroidCard | null>(() => native.answer(noteId, ord, ease, timeTakenMs)),
+  suspend: ({ noteId, ord }) => provider<AnkiDroidCard | null>(() => native.suspend(noteId, ord)),
+  bury: ({ noteId, ord }) => provider<AnkiDroidCard | null>(() => native.bury(noteId, ord)),
   importMedia: Effect.tryPromise({
     try: pickAndImportApkgMedia,
     catch: (error) => new Error(String(error)),

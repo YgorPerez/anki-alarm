@@ -62,6 +62,19 @@ object AwakeCheck {
     }
   }
 
+  /**
+   * Someone is using check `id`'s prompt (editing its note): `shownAt` moves to `now`, so its
+   * `awakeCheckSeconds` start over, kills and reboots included. A stale or unknown id, or a prompt
+   * not on screen yet, changes nothing.
+   */
+  @Synchronized fun activity(ctx: Context, id: String, now: Long = System.currentTimeMillis()): Boolean {
+    val check = pending(ctx) ?: return false
+    if (check.getString("id") != id || !check.has("shownAt")) return false
+    AlarmStore.prefs(ctx).edit().putString(KEY, check.put("shownAt", now).toString()).commit()
+    AlarmScheduler.armAwakeCheck(ctx, now + timeout(ctx))
+    return true
+  }
+
   /** An answer came for check `id`. A stale or unknown id changes nothing. */
   @Synchronized fun passed(ctx: Context, id: String): Boolean {
     val check = pending(ctx) ?: return false

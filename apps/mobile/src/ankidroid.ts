@@ -1,5 +1,12 @@
 import type { AnkiDroidProvider } from "@app/client-data";
-import type { AnkiDroidCard, AnkiDroidDeck, AnkiDroidSource, SyncBackAnswer } from "@app/core";
+import type {
+  AnkiDroidCard,
+  AnkiDroidDeck,
+  AnkiDroidSource,
+  SyncBackAnswer,
+  SyncBackSuspension,
+  SyncBackBury,
+} from "@app/core";
 import { ankiDroidAccess } from "@app/core";
 import { Effect } from "effect";
 import { localData } from "./database.ts";
@@ -18,6 +25,7 @@ export class AnkiDroidError extends Error {
  * route. The Android implementation is in `ankidroid-android.ts`; tests use `memoryAnkiDroid`.
  */
 export interface AnkiDroidApi {
+  suspend: (action: SyncBackSuspension) => Effect.Effect<AnkiDroidCard | null, AnkiDroidError>;
   /** `null` when AnkiDroid isn't installed. Read on every visit and resume. */
   status: Effect.Effect<{ versionCode: number; permission: "granted" | "denied" } | null, Error>;
   requestPermission: Effect.Effect<"granted" | "prompted" | "settings", Error>;
@@ -27,6 +35,8 @@ export interface AnkiDroidApi {
   cards: (noteIds: readonly number[]) => Effect.Effect<AnkiDroidCard[], AnkiDroidError>;
   /** Answers a card in AnkiDroid and reads it back; `null` when AnkiDroid has no such card. */
   answer: (answer: SyncBackAnswer) => Effect.Effect<AnkiDroidCard | null, AnkiDroidError>;
+  /** Buries a card in AnkiDroid and reads it back; `null` when AnkiDroid has no such card. */
+  bury: (bury: SyncBackBury) => Effect.Effect<AnkiDroidCard | null, AnkiDroidError>;
   /** Lets the user pick an `.apkg` and stores its media. `null` when the picker is cancelled. */
   importMedia: Effect.Effect<number | null, Error>;
 }
@@ -36,6 +46,8 @@ export const ankiDroidProvider = (api: AnkiDroidApi): AnkiDroidProvider => ({
   readDeck: api.readDeck,
   cards: api.cards,
   answer: api.answer,
+  suspend: api.suspend,
+  bury: api.bury,
 });
 
 /**
@@ -58,7 +70,7 @@ export function memoryAnkiDroid(options: {
   media?: number | null;
   /** What the provider throws, e.g. after the permission is revoked. */
   failure?: AnkiDroidError["reason"];
-}): AnkiDroidApi & { requests: number; answers: SyncBackAnswer[] } {
+}): AnkiDroidApi & { requests: number; answers: SyncBackAnswer[]; buries: SyncBackBury[] } {
   const state = { ...options, sources: structuredClone(options.sources ?? []) };
   const fail = (): Effect.Effect<void, AnkiDroidError> =>
     state.failure ? Effect.fail(new AnkiDroidError(state.failure)) : Effect.void;
@@ -66,6 +78,7 @@ export function memoryAnkiDroid(options: {
   const api = {
     requests: 0,
     answers: [] as SyncBackAnswer[],
+    buries: [] as SyncBackBury[],
     status: Effect.sync(() => state.installed),
     requestPermission: Effect.sync(() => {
       api.requests++;
@@ -100,6 +113,26 @@ export function memoryAnkiDroid(options: {
             reps: card.reps + 1,
             lastReviewSecs: Math.floor(Date.now() / 1000),
           });
+          return { ...card };
+        }),
+      ),
+    suspend: ({ noteId, ord }: SyncBackSuspension) =>
+      fail().pipe(
+        Effect.map(() => {
+          const card = allCards().find((c) => c.noteId === noteId && c.ord === ord);
+          if (!card) return null;
+          card.queue = -1;
+          return { ...card };
+        }),
+      ),
+    // AnkiDroid's Bury: the card moves to the user-buried queue.
+    bury: (bury: SyncBackBury) =>
+      fail().pipe(
+        Effect.map(() => {
+          api.buries.push(bury);
+          const card = allCards().find((c) => c.noteId === bury.noteId && c.ord === bury.ord);
+          if (!card) return null;
+          card.queue = -3;
           return { ...card };
         }),
       ),

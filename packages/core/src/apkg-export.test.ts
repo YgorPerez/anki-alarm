@@ -179,6 +179,38 @@ test("exporting a deck and importing it back changes no record and adds no revie
   }
 });
 
+test("a buried card exports as user-buried and imports buried until the same study day", async () => {
+  const { collection, log, english } = await studied();
+  const before = collection.snapshot();
+  const moon = before.cards.find(
+    (c) =>
+      c.fields.deckId.value === english.id &&
+      before.notes.find((n) => n.id === c.fields.noteId.value)!.values[0]!.value === "moon",
+  )!;
+  collection.buryCard(moon.id);
+  const state = collection.snapshot();
+  const { zip, package: source } = await exported(state, log, "Inglês");
+  expect(rows(zip, "SELECT queue FROM cards WHERE queue < 0").map((r) => r.queue)).toEqual([-3]);
+  const fresh = new Collection(environment("phone-b"));
+  fresh.importAnki(source);
+  expect(source.cards.filter((c) => c.buried)).toHaveLength(1);
+  expect(
+    fresh
+      .snapshot()
+      .cards.filter((c) => c.fields.buriedUntil.value)
+      .map((c) => [c.id, c.fields.buriedUntil.value]),
+  ).toEqual([[moon.id, new Date(2030, 2, 18, 4).getTime()]]);
+  expect(collection.importAnki(source, log).log).toEqual([]);
+  expect(collection.snapshot()).toEqual(state);
+  const tomorrow = await writeApkg(writeHost, {
+    collection: state,
+    log,
+    deckId: english.id,
+    now: new Date(2030, 2, 18, 4).getTime(),
+  });
+  expect(rows(tomorrow, "SELECT queue FROM cards WHERE queue < 0")).toEqual([]);
+});
+
 test("another install gets the same records, history and schedule from the export", async () => {
   const { collection, log } = await studied();
   const state = collection.snapshot();
@@ -355,4 +387,28 @@ test("what Anki makes of an export comes back as the same records and reviews", 
     "setDueDate",
     "review",
   ]);
+});
+
+test("all seven flags and the marked tag survive an apkg round-trip", async () => {
+  const c = new Collection(environment());
+  const deck = c.createDeck("Flags");
+  for (let flag = 1; flag <= 7; flag++) {
+    const note = c.addBasicNote(deck.id, String(flag), "back");
+    const card = c.snapshot().cards.at(-1)!;
+    c.setCardFlag(card.id, flag);
+    c.setNoteMarked(note.id, true);
+  }
+  const result = await writeApkg(writeHost, {
+    collection: c.snapshot(),
+    log: [],
+    deckId: deck.id,
+    now: NOW,
+  });
+  const parsed = await readApkg(readHost(result));
+  const restored = new Collection(environment("other"));
+  restored.importAnki(parsed.package);
+  expect(restored.snapshot().cards.map((item) => item.fields.flag.value)).toEqual([
+    1, 2, 3, 4, 5, 6, 7,
+  ]);
+  expect(restored.snapshot().notes.every((n) => n.fields.tags.value.includes("marked"))).toBe(true);
 });

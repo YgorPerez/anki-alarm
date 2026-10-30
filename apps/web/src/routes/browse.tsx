@@ -57,7 +57,7 @@ function Browse() {
   const t = editingCopy(lang);
   const navigate = useNavigate({ from: "/browse" });
   const query = useQuery(collectionQuery);
-  const rows = query.data && browseCards(query.data.collection, q);
+  const rows = query.data && browseCards(query.data.collection, q, query.data.now);
   return (
     <main className="mx-auto flex min-h-dvh max-w-6xl flex-col gap-6 p-6">
       <BackLink lang={lang} label={t("goBack")} />

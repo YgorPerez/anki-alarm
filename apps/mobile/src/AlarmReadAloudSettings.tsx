@@ -1,3 +1,4 @@
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { deckLanguage, READ_ALOUD_LANGUAGES, type Alarm, type Locale } from "@app/core";
 import { Effect } from "effect";
@@ -23,7 +24,7 @@ export function AlarmReadAloudSettings({
   const client = useQueryClient();
   const [error, setError] = useState(false);
   const collection = useQuery({
-    queryKey: ["collection"],
+    queryKey: COLLECTION_QUERY_KEY,
     networkMode: "always",
     queryFn: () => Effect.runPromise(localData((data) => data.collection)),
   });
@@ -36,7 +37,7 @@ export function AlarmReadAloudSettings({
     Effect.runPromise(
       localData((data) => data.changeCollection((c) => c.setDeckLanguage(deck.id, tag))),
     ).then(
-      () => client.invalidateQueries({ queryKey: ["collection"] }),
+      () => client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY }),
       () => setError(true),
     );
   };

@@ -23,7 +23,7 @@ export interface Ring {
 }
 /**
  * The awake check after a dismissed ring. `shownAt` is null until its delay is over; native fails it
- * (and rings again) `RING_POLICY.awakeCheckSeconds` after it.
+ * (and rings again) `RING_POLICY.awakeCheckSeconds` after it. `awakeCheckActivity` moves it forward.
  */
 export interface AwakeCheck {
   id: string;
@@ -71,6 +71,8 @@ interface AlarmPort {
   dismiss: (ringId: string, awakeCheckAfter: number | null) => Effect.Effect<void, Error>;
   getAwakeCheck: Effect.Effect<AwakeCheck | null, Error>;
   /** The check's card was answered. Ignores a check that isn't the pending one. */
+  /** Someone is editing the check's note: its timeout starts over. */
+  awakeCheckActivity: (checkId: string) => Effect.Effect<void, Error>;
   awakeCheckPassed: (checkId: string) => Effect.Effect<void, Error>;
   /**
    * Read aloud: TTS on the alarm stream, so it's heard in silent and Do Not Disturb. Ends when the
@@ -227,6 +229,11 @@ export function memoryAlarmService() {
         ring = null;
       }),
     getAwakeCheck: Effect.sync(() => check),
+    awakeCheckActivity: (id) =>
+      Effect.sync(() => {
+        signals.push(`awakeCheckActivity:${id}`);
+        if (check?.id === id && check.shownAt !== null) check = { ...check, shownAt: Date.now() };
+      }),
     awakeCheckPassed: (id) =>
       Effect.sync(() => {
         signals.push(`awakeCheckPassed:${id}`);

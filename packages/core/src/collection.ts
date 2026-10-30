@@ -5,6 +5,7 @@ import {
   linkedAnkiDroidDecks,
   presetFromOptions,
   seenReps,
+  sentSuspensionKey,
   snapshotEntry,
   type AnkiDroidCard,
   type AnkiDroidSource,
@@ -12,7 +13,7 @@ import {
 import { cardId, importId, uuid7 } from "./ids.ts";
 import { isLanguageTag } from "./locale.ts";
 import { editedNoteType, editedValues, noteTypeProblems, type NoteTypeEdit } from "./note-types.ts";
-import { studyDayStart, type LogEntry } from "./study.ts";
+import { dueInDays, studyDayStart, type LogEntry } from "./study.ts";
 
 /** FSRS-6's default weights, which every new preset starts from. */
 export const DEFAULT_FSRS_PARAMETERS: readonly number[] = default_w;
@@ -109,6 +110,9 @@ export type Card = RecordFields<{
   deckId: string;
   ordinal: number;
   suspended: boolean;
+  /** Buried until this time, the start of a study day; a past time or null means not buried. */
+  buriedUntil: number | null;
+  flag: number;
 }> &
   AnkiIdentity;
 export type RecordKind = "decks" | "presets" | "noteTypes" | "notes" | "cards";
@@ -142,6 +146,8 @@ export interface AnkiDroidLink {
   seen: [cardId: string, reps: number][];
   /** Decks this phone took over: their earlier reviews are not sent back from here. */
   claimed: string[];
+  /** Keys in what sync back sent for suspensions AnkiDroid no longer holds, to forget. */
+  released: string[];
   added: number;
   edited: number;
 }
@@ -193,8 +199,8 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
  * Reads stored records in the current shape, upgrading what earlier versions saved with the
  * records' own clocks, so the upgrade itself is not an edit: Basic notes kept `front` and `back` as
  * properties and a `deckId` the cards now own; note types had one front and back template; presets
- * had no `fsrsParameters`, decks no `desiredRetention`, notes no `tags`, cards no `suspended`.
- * Current records pass through unchanged.
+ * had no `fsrsParameters`, decks no `desiredRetention`, notes no `tags`, cards no `suspended` or
+ * `buriedUntil`. Current records pass through unchanged.
  */
 export function parseCollection(stored: StoredCollection): CollectionState {
   // Each record is brought to its current shape below.
@@ -207,8 +213,11 @@ export function parseCollection(stored: StoredCollection): CollectionState {
       value: [...DEFAULT_FSRS_PARAMETERS],
       hlc: preset.fields.name.hlc,
     };
-  for (const card of state.cards)
+  for (const card of state.cards) {
     card.fields.suspended ??= { value: false, hlc: card.fields.ordinal.hlc };
+    card.fields.buriedUntil ??= { value: null, hlc: card.fields.ordinal.hlc };
+    card.fields.flag ??= { value: 0, hlc: card.fields.ordinal.hlc };
+  }
   for (const type of state.noteTypes) {
     const old = legacy(type.fields);
     if (!old.frontTemplate) continue;
@@ -405,7 +414,7 @@ export class Collection {
     for (const ordinal of ordinalsFor(type, values))
       this.state.cards.push(
         this.record(
-          { noteId: note.id, deckId, ordinal, suspended: false },
+          { noteId: note.id, deckId, ordinal, suspended: false, buriedUntil: null, flag: 0 },
           cardId(note.id, ordinal),
           hlc,
         ),
@@ -428,6 +437,34 @@ export class Collection {
       for (const ordinal of ordinalsFor(type, values))
         if (!have.has(ordinal)) this.addCard(id, ordinal, deckId);
   }
+  /** Sets Anki's flag (0 clears it), returning the previous value for undo. */
+  setCardFlag(id: string, flag: number): number {
+    if (!Number.isInteger(flag) || flag < 0 || flag > 7) throw new Error("Invalid flag");
+    const card = this.state.cards.find((c) => c.id === id);
+    if (!card) throw new Error("Invalid card");
+    const previous = card.fields.flag.value;
+    if (previous !== flag) card.fields.flag = { value: flag, hlc: this.tick() };
+    return previous;
+  }
+  /** Sets the note's marked tag without changing its other tags; returns the previous mark. */
+  setNoteMarked(id: string, marked: boolean): boolean {
+    const note = this.state.notes.find((n) => n.id === id);
+    if (!note) throw new Error("Invalid note");
+    const tags = note.fields.tags.value;
+    const previous = tags.includes("marked");
+    if (previous !== marked)
+      note.fields.tags = {
+        value: marked ? [...tags, "marked"] : tags.filter((t) => t !== "marked"),
+        hlc: this.tick(),
+      };
+    return previous;
+  }
+  /** The note a card belongs to. */
+  noteIdOf(id: string): string {
+    const card = this.state.cards.find((c) => c.id === id);
+    if (!card) throw new Error("Invalid card");
+    return card.fields.noteId.value;
+  }
   /** A note's cards, by ordinal. */
   private cardsOf(noteId: string) {
     return this.state.cards
@@ -439,7 +476,13 @@ export class Collection {
     let id = cardId(noteId, ordinal);
     if (this.state.cards.some((c) => c.id === id) || this.deleted("cards", id))
       id = uuid7(this.env.now(), this.env.random());
-    this.state.cards.push(this.record({ noteId, deckId, ordinal, suspended: false }, id, hlc));
+    this.state.cards.push(
+      this.record(
+        { noteId, deckId, ordinal, suspended: false, buriedUntil: null, flag: 0 },
+        id,
+        hlc,
+      ),
+    );
   }
   /**
    * Changes a note type's name, fields, templates and CSS (see `NoteTypeEdit`). Notes move their
@@ -508,6 +551,30 @@ export class Collection {
     const options = { ...patch, ...(patch.name === undefined ? {} : { name: patch.name.trim() }) };
     for (const key of presetKeys) stamp(key, options[key]);
   }
+  /** Sets suspension and returns the previous values for action undo. Validates before changing. */
+  setCardsSuspended(cardIds: readonly string[], suspended: boolean) {
+    const cards = this.state.cards.filter((c) => cardIds.includes(c.id));
+    if (cards.length !== new Set(cardIds).size) throw new Error("Invalid card");
+    const previous = cards.map((c) => ({ cardId: c.id, suspended: c.fields.suspended.value }));
+    for (const card of cards)
+      if (card.fields.suspended.value !== suspended)
+        card.fields.suspended = { value: suspended, hlc: this.tick() };
+    return previous;
+  }
+  /** Suspends every card of a note, including siblings in other decks. */
+  suspendNote(noteId: string) {
+    if (!this.state.notes.some((n) => n.id === noteId)) throw new Error("Invalid note");
+    return this.setCardsSuspended(
+      this.cardsOf(noteId).map((c) => c.id),
+      true,
+    );
+  }
+  /** Restores suspension through new synced field clocks, without changing the review log. */
+  restoreSuspension(previous: readonly { cardId: string; suspended: boolean }[]) {
+    if (previous.some((p) => !this.state.cards.some((c) => c.id === p.cardId)))
+      throw new Error("Invalid card");
+    for (const p of previous) this.setCardsSuspended([p.cardId], p.suspended);
+  }
   moveCards(cardIds: readonly string[], deckId: string) {
     if (!this.state.decks.some((d) => d.id === deckId)) throw new Error("Invalid deck");
     const cards = this.state.cards.filter((c) => cardIds.includes(c.id));
@@ -515,6 +582,23 @@ export class Collection {
     for (const card of cards)
       if (card.fields.deckId.value !== deckId)
         card.fields.deckId = { value: deckId, hlc: this.tick() };
+  }
+  /**
+   * Buries the card until the next study day starts: study and alarm sessions skip it until then.
+   * Linked cards are buried in AnkiDroid too, with the next sync back.
+   */
+  buryCard(id: string) {
+    this.setBuriedUntil(id, dueInDays(1, this.env.now()));
+  }
+  /** Reverses `buryCard`: the card is back in study at once. */
+  unburyCard(id: string) {
+    this.setBuriedUntil(id, null);
+  }
+  private setBuriedUntil(id: string, until: number | null) {
+    const card = this.state.cards.find((c) => c.id === id);
+    if (!card) throw new Error("Invalid card");
+    if (card.fields.buriedUntil.value !== until)
+      card.fields.buriedUntil = { value: until, hlc: this.tick() };
   }
   /** Moves every card of the note to `deckId`. */
   moveNote(id: string, deckId: string) {
@@ -539,16 +623,26 @@ export class Collection {
    * Records take ids from their Anki identities, so linking again updates instead of duplicating:
    * a note field takes AnkiDroid's value when the note's mod time is newer than the field's clock.
    * Pulling is linking again: new notes and cards come in, edited fields follow that rule, and
-   * suspension follows AnkiDroid. A card AnkiDroid reviewed since this phone last saw it (`seen`,
-   * see `seenReps`) comes with a snapshot of its state to append to the review log.
+   * suspension follows AnkiDroid, except a suspension sync back sent (`sent`, see
+   * `sentSuspensionKey`) on a card unsuspended here since. A card AnkiDroid reviewed since this
+   * phone last saw it (`seen`, see `seenReps`) comes with a snapshot of its state to append to the
+   * review log.
    */
   linkAnkiDroid(
     source: AnkiDroidSource,
     log: readonly LogEntry[] = [],
     seen: ReadonlyMap<string, number> = new Map(),
+    sent: ReadonlySet<string> = new Set(),
   ): AnkiDroidLink {
     const decks = linkedAnkiDroidDecks(source);
     const claimed: string[] = [];
+    // Notes that were in a linked deck before this link: their mark is already the app's.
+    const linkedDecks = new Set(this.state.decks.filter((d) => d.fields.linkedBy).map((d) => d.id));
+    const linkedNotes = new Set(
+      this.state.cards
+        .filter((c) => linkedDecks.has(c.fields.deckId.value))
+        .map((c) => c.fields.noteId.value),
+    );
     const deckIds = new Map(decks.map((d) => [d.id, importId("deck", d.id, d.name)]));
     if ([...deckIds.values()].some((id) => this.deleted("decks", id)))
       throw new Error("Linked deck was deleted");
@@ -610,12 +704,13 @@ export class Collection {
       const hasCard = source.cards.some((c) => c.noteId === ad.id && homeDeck(c));
       if (!noteTypeId || !hasCard || this.deleted("notes", id)) continue;
       noteIds.set(ad.id, id);
-      const merged = this.mergeAnkiNote(id, ad, noteTypeId);
+      const merged = this.mergeAnkiNote(id, ad, noteTypeId, !linkedNotes.has(id));
       if (merged === "added") added++;
       else if (merged === "edited") edited++;
     }
     const snapshots: LogEntry[] = [];
     const reps: [string, number][] = [];
+    const released: string[] = [];
     for (const ad of source.cards) {
       const noteId = noteIds.get(ad.noteId);
       const deckId = homeDeck(ad);
@@ -624,24 +719,42 @@ export class Collection {
       if (this.deleted("cards", id)) continue;
       // Queue -1 is suspended in Anki; buried cards (-2/-3) are not modelled.
       const suspended = ad.queue === -1;
+      const ours = sent.has(sentSuspensionKey(id));
+      if (ours && !suspended) released.push(sentSuspensionKey(id));
       const card = this.state.cards.find((c) => c.id === id);
       if (!card)
         this.state.cards.push({
-          ...this.record({ noteId, deckId, ordinal: ad.ord, suspended }, id),
+          ...this.record(
+            { noteId, deckId, ordinal: ad.ord, suspended, buriedUntil: null, flag: 0 },
+            id,
+          ),
           anki: { id: ad.id },
         });
-      else if (card.fields.suspended.value !== suspended)
+      else if (card.fields.suspended.value !== suspended && !(suspended && ours))
         card.fields.suspended = { value: suspended, hlc: this.tick() };
       reps.push([id, ad.reps]);
       if (ad.reps <= seenReps(log, id, seen)) continue;
       const snapshot = snapshotEntry(ad, id, steps.get(deckId) ?? [], this.env.now());
       if (snapshot) snapshots.push(snapshot);
     }
-    return { deckId: deckIds.get(source.deckId)!, snapshots, seen: reps, claimed, added, edited };
+    return {
+      deckId: deckIds.get(source.deckId)!,
+      snapshots,
+      seen: reps,
+      claimed,
+      released,
+      added,
+      edited,
+    };
   }
-  private mergeAnkiNote(id: string, ad: AnkiDroidSource["notes"][number], noteTypeId: string) {
+  private mergeAnkiNote(
+    id: string,
+    ad: AnkiDroidSource["notes"][number],
+    noteTypeId: string,
+    firstLink: boolean,
+  ) {
     const values = ad.fields.split(SEPARATOR);
-    const tags = ad.tags.split(" ").filter(Boolean);
+    let tags = ad.tags.split(" ").filter(Boolean);
     const note = this.state.notes.find((n) => n.id === id);
     if (!note) {
       const hlc = this.tick();
@@ -652,6 +765,12 @@ export class Collection {
       });
       return "added";
     }
+    // A first link takes AnkiDroid's mark, whatever the clocks say. After that mark is local to
+    // this app, so an unmark here survives, even when AnkiDroid edits other tags.
+    const adopted = firstLink && tags.includes("marked");
+    const marked = note.fields.tags.value.includes("marked");
+    tags = tags.filter((tag) => tag !== "marked");
+    if (marked || adopted) tags.push("marked");
     // Per field, the newer of the local clock and AnkiDroid's mod time wins (ADR 0001).
     const mod = ad.mod * 1000;
     let changed = false;
@@ -664,6 +783,9 @@ export class Collection {
     });
     if (note.fields.tags.value.join(" ") !== tags.join(" ") && mod > note.fields.tags.hlc.wallMs) {
       note.fields.tags = { value: tags, hlc: this.tick() };
+      changed = true;
+    } else if (adopted && !marked) {
+      note.fields.tags = { value: [...note.fields.tags.value, "marked"], hlc: this.tick() };
       changed = true;
     }
     return changed ? "edited" : undefined;
@@ -810,6 +932,9 @@ export class Collection {
           deckId: decks.get(c.deckId)!,
           ordinal: c.ordinal,
           suspended: c.suspended,
+          // Anki unburies at the first study day after the card's last change.
+          buriedUntil: c.buried ? dueInDays(1, c.mtime) : null,
+          flag: c.flag ?? 0,
         };
         const merged = {
           id: cardId(id, c.ordinal),

@@ -1,6 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import {
   Collection,
+  browseCards,
   ankiDroidAccess,
   cardId,
   cardsStayInApp,
@@ -8,6 +9,8 @@ import {
   linkableAnkiDroidDecks,
   replayCard,
   studyQueue,
+  syncBackBuries,
+  syncBackBuryPlan,
   syncBackPlan,
   syncBackQueue,
   type AnkiDroidSource,
@@ -100,6 +103,50 @@ test("AnkiDroid's screens say why linking isn't possible, and from which version
   expect(ankiDroidAccess({ versionCode: 322303300, permission: "granted" })).toBe("outdated");
   expect(ankiDroidAccess({ versionCode: 22400300, permission: "denied" })).toBe("permission");
   expect(ankiDroidAccess({ versionCode: 322500300, permission: "granted" })).toBe("ready");
+});
+
+const withTags = (tags: string, mod = 1_760_000_000) => {
+  const linked = source();
+  linked.notes[0] = { ...linked.notes[0]!, tags, mod };
+  return linked;
+};
+
+test("linking takes AnkiDroid's mark; afterwards a pull keeps the app's", () => {
+  const c = new Collection(environment());
+  c.linkAnkiDroid(withTags("verb marked"));
+  const tags = () => c.snapshot().notes[0]!.fields.tags.value;
+  const noteId = c.snapshot().notes[0]!.id;
+  expect(tags()).toEqual(["verb", "marked"]);
+
+  c.setNoteMarked(noteId, false);
+  c.linkAnkiDroid(withTags("verb n4 marked", now / 1000 + 60));
+  expect(tags()).toEqual(["verb", "n4"]);
+
+  c.setNoteMarked(noteId, true);
+  c.linkAnkiDroid(withTags("verb n3", now / 1000 + 120));
+  expect(tags()).toEqual(["verb", "n3", "marked"]);
+});
+
+test("a note already here takes AnkiDroid's mark when first linked, however old its mod", () => {
+  const before = new Collection(environment());
+  before.linkAnkiDroid(withTags("verb"));
+  const state = before.snapshot();
+  // As an .apkg import leaves it: the same ids, in a deck nothing has linked.
+  for (const deck of state.decks) delete deck.fields.linkedBy;
+  const c = new Collection(environment(), state);
+  c.linkAnkiDroid(withTags("verb marked", 1_000));
+  expect(c.snapshot().notes[0]!.fields.tags.value).toEqual(["verb", "marked"]);
+});
+
+test("a note marked here before its first link stays marked", () => {
+  const before = new Collection(environment());
+  before.linkAnkiDroid(withTags("verb"));
+  const state = before.snapshot();
+  for (const deck of state.decks) delete deck.fields.linkedBy;
+  const c = new Collection(environment(), state);
+  c.setNoteMarked(state.notes[0]!.id, true);
+  c.linkAnkiDroid(withTags("verb"));
+  expect(c.snapshot().notes[0]!.fields.tags.value).toEqual(["verb", "marked"]);
 });
 
 test("filtered decks are not offered for linking, and the list is sorted by name", () => {
@@ -339,6 +386,34 @@ test("sync back holds answers for cards suspended or buried in AnkiDroid and dro
   expect(deleted.send.map((a) => a.entryId)).toEqual(["b"]);
 });
 
+test("sync back buries this phone's linked cards still buried, once per bury", () => {
+  const { c, fresh, reviewed } = linked();
+  const own = c.createDeck("Mine");
+  c.addBasicNote(own.id, "casa", "house");
+  const mine = c.snapshot().cards.find((x) => x.fields.deckId.value === own.id)!;
+  for (const id of [fresh.id, reviewed.id, mine.id]) c.buryCard(id);
+  const state = c.snapshot();
+  const until = state.cards.find((x) => x.id === fresh.id)!.fields.buriedUntil.value;
+  const buries = syncBackBuries(state, "phone-a", new Set(), now);
+  expect(buries).toEqual([
+    { key: `bury:${fresh.id}:${until}`, cardId: fresh.id, noteId: 501, ord: 0 },
+    { key: `bury:${reviewed.id}:${until}`, cardId: reviewed.id, noteId: 501, ord: 1 },
+  ]);
+  expect(syncBackBuries(state, "phone-a", new Set([buries[0]!.key]), now)).toEqual([buries[1]]);
+  expect(syncBackBuries(state, "phone-a", new Set(), until!)).toEqual([]);
+  expect(syncBackBuries(state, "phone-b", new Set(), now)).toEqual([]);
+  // Burying a suspended card would take it out of its suspension in AnkiDroid.
+  c.setCardsSuspended([fresh.id], true);
+  expect(syncBackBuries(c.snapshot(), "phone-a", new Set(), now)).toEqual([buries[1]]);
+  // Already out of AnkiDroid's queue, or gone from it: nothing to send.
+  const [ankiFresh, ankiReviewed] = source().cards;
+  expect(syncBackBuryPlan(buries, [ankiFresh!, ankiReviewed!])).toEqual({ send: buries, done: [] });
+  expect(syncBackBuryPlan(buries, [{ ...ankiReviewed!, queue: -1 }])).toEqual({
+    send: [],
+    done: buries,
+  });
+});
+
 test("a card AnkiDroid reviewed since we last saw it is snapshotted before our answers go", () => {
   const { state, snapshots, reviewed } = linked();
   const log = [...snapshots, review("ours", reviewed.id, now + 60_000)];
@@ -409,4 +484,27 @@ test("linking reports the decks this phone took over, so their earlier reviews a
   const other = new Collection(environment("phone-b"), state);
   expect(other.linkAnkiDroid(source()).claimed).toEqual(state.decks.map((d) => d.id));
   expect(new Collection(environment(), state).linkAnkiDroid(source()).claimed).toEqual([]);
+});
+
+test("a newer AnkiDroid pull preserves local flag and mark choices", () => {
+  const c = new Collection(environment());
+  c.linkAnkiDroid(source());
+  const state = c.snapshot();
+  const localCard = state.cards[0]!;
+  const note = state.notes[0]!;
+  c.setCardFlag(localCard.id, 5);
+  c.setNoteMarked(note.id, true);
+  expect(c.snapshot().cards[1]!.fields.flag.value).toBe(0);
+  expect(browseCards(c.snapshot(), "is:marked", Date.now())).toHaveLength(2);
+  const update = source();
+  update.notes[0]!.mod = now / 1000 + 60;
+  update.notes[0]!.tags = "updated";
+  c.linkAnkiDroid(update, []);
+  expect(c.snapshot().cards[0]!.fields.flag.value).toBe(5);
+  expect(c.snapshot().notes[0]!.fields.tags.value).toEqual(["updated", "marked"]);
+  c.setNoteMarked(note.id, false);
+  update.notes[0]!.mod += 60;
+  update.notes[0]!.tags = "updated marked";
+  c.linkAnkiDroid(update, []);
+  expect(c.snapshot().notes[0]!.fields.tags.value).toEqual(["updated"]);
 });

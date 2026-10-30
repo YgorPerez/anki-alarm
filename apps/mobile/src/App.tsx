@@ -1,3 +1,5 @@
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
+import { StudyScreen } from "./StudyScreen.tsx";
 import { RuntimeContext, useRuntime } from "./runtime.ts";
 import { useNow } from "./clock.tsx";
 import { regular, bold } from "./fonts.ts";
@@ -115,11 +117,18 @@ export function DecksRoute() {
     <ScreenActivity value={focused}>
       <CollectionScreen
         locale={useUI().locale}
+        onStudy={(deckId) => router.push({ pathname: "/study/[deckId]", params: { deckId } })}
         ankiDroid={androidAnkiDroid}
         onTheme={() => router.push("/settings/theme")}
       />
     </ScreenActivity>
   );
+}
+/** Study sits above the tabs so both system Back and the back link return to the deck. */
+export function StudyRoute() {
+  const { deckId } = useLocalSearchParams<{ deckId: string }>();
+  const router = useRouter();
+  return <StudyScreen deckId={deckId} locale={useUI().locale} onExit={() => router.back()} />;
 }
 /** Links an AnkiDroid deck from Home's empty state; the new deck then shows on Home. */
 export function AnkiDroidRoute() {
@@ -335,7 +344,7 @@ function Home({ children }: { children: ReactNode }) {
   ) : null;
 
   const collectionQuery = useQuery({
-    queryKey: ["collection"],
+    queryKey: COLLECTION_QUERY_KEY,
     queryFn: () => Effect.runPromise(localData((data) => data.collection)),
   });
   const decks = (collectionQuery.data?.decks ?? []).map((deck) => ({
@@ -383,7 +392,7 @@ function Home({ children }: { children: ReactNode }) {
           ? {
               onImport: async () => {
                 const summary = await pickAndImportApkg();
-                await client.invalidateQueries({ queryKey: ["collection"] });
+                await client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY });
                 return summary;
               },
               onLink: () => router.push("/ankidroid"),

@@ -9,6 +9,9 @@ back until it ends.
 **Awake check.** A prompt a few minutes after dismissal that shows one card. No answer in 60
 seconds rings the alarm again.
 
+**Buried card.** A card kept out of study and alarm sessions until the next study day starts. A
+synced card property; on a linked deck sync back buries it in AnkiDroid too.
+
 **Card.** One thing to review, made from a note by one card template (or one cloze number). It has a
 memory state.
 
@@ -76,7 +79,7 @@ review. Replay adopts it. It has no grade.
 **Study day.** The day daily limits and "due today" count in. It starts at the user's chosen hour,
 4 am by default.
 
-**Sync back.** Sending reviews done in the app to AnkiDroid as answers.
+**Sync back.** Sending reviews done in the app to AnkiDroid as answers, and buries after them.
 
 **Theme.** The colors a user picks: a background for light mode and one for dark, a primary (action:
 Good, progress), a secondary (warning: cards left, snooze) and one color per grade. It syncs, and

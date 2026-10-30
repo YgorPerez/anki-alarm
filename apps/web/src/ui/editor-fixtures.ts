@@ -26,5 +26,10 @@ export function editorFixture() {
     css: ".card { text-align: center }",
   });
   const state: CollectionState = collection.snapshot();
-  return { state, englishId: english.id, verbsId: verbs.id, rows: browseCards(state, "") };
+  return {
+    state,
+    englishId: english.id,
+    verbsId: verbs.id,
+    rows: browseCards(state, "", Date.now()),
+  };
 }

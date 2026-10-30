@@ -19,6 +19,7 @@ interface NativeAlarm {
   snooze: (ringId: string, minutes: number) => string | null;
   dismiss: (ringId: string, awakeCheckAfter: number | null) => void;
   getAwakeCheck: () => string | null;
+  awakeCheckActivity: (checkId: string) => boolean;
   awakeCheckPassed: (checkId: string) => boolean;
   /** Resolves when the speech ends or is stopped. */
   speak: (text: string, language: string) => Promise<void>;

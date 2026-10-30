@@ -1,9 +1,11 @@
 import { expect, test } from "vite-plus/test";
 import {
   cardMemory,
+  nextIntervals,
   Collection,
   replayCard,
   studyQueue,
+  studyCounts,
   nextStudyCard,
   type LogEntry,
   type Note,
@@ -309,4 +311,149 @@ test("a subdeck's card schedules with the subdeck's own preset", () => {
   expect(studyQueue(state, log, parent.id, now)).toHaveLength(0);
   state.decks.find((d) => d.id === child.id)!.fields.desiredRetention.value = 0.99;
   expect(studyQueue(state, log, parent.id, now).map((item) => item.card.id)).toEqual([cardId]);
+});
+
+test("study counts respect daily allowance and move answered cards into learning, including undo", () => {
+  const { state, deckId, cardId, preset } = fixture();
+  preset.fields.newPerDay.value = 1;
+  expect(studyCounts(state, [], deckId, now)).toEqual({ new: 1, learning: 0, review: 0 });
+  const log: LogEntry[] = [
+    { kind: "review", id: "a", cardId, at: now, grade: 1, durationMs: 1, origin: "alarm" },
+  ];
+  expect(studyCounts(state, log, deckId, now + 61_000)).toEqual({ new: 0, learning: 1, review: 0 });
+  log.push({ kind: "void", id: "v", cardId, at: now + 62_000, targetId: "a" });
+  expect(studyCounts(state, log, deckId, now + 62_000)).toEqual({ new: 1, learning: 0, review: 0 });
+});
+
+test("study counts separate due reviews from relearning and exclude suspended and future cards", () => {
+  const { state, deckId, cardId } = fixture();
+  const second = state.cards[1]!.id;
+  const snapshot = (id: string, cardState: 2 | 3, due: number): LogEntry => ({
+    kind: "snapshot",
+    id: `snapshot-${id}`,
+    cardId: id,
+    at: now - 1000,
+    state: {
+      state: cardState,
+      due,
+      stability: 5,
+      difficulty: 5,
+      elapsed_days: 0,
+      scheduled_days: 5,
+      learning_steps: 0,
+      reps: 2,
+      lapses: 1,
+    },
+  });
+  const log = [snapshot(cardId, 2, now), snapshot(second, 3, now)];
+  expect(studyCounts(state, log, deckId, now)).toEqual({ new: 0, learning: 1, review: 1 });
+  state.cards[0]!.fields.suspended = {
+    value: true,
+    hlc: { wallMs: now, counter: 0, deviceId: "a" },
+  };
+  expect(studyCounts(state, log, deckId, now)).toEqual({ new: 0, learning: 1, review: 0 });
+  expect(studyCounts(state, [snapshot(second, 3, now + 1000)], deckId, now)).toEqual({
+    new: 0,
+    learning: 0,
+    review: 0,
+  });
+});
+
+test("a buried card leaves study until the next study day starts, and unburying brings it back", () => {
+  let at = now;
+  const c = new Collection({ deviceId: "a", now: () => at, random: () => new Uint8Array(16) });
+  const deck = c.createDeck("Words");
+  c.addBasicNote(deck.id, "one", "um");
+  const cardId = c.snapshot().cards[0]!.id;
+  c.buryCard(cardId);
+  const nextDay = new Date(2026, 9, 29, 4).getTime();
+  expect(studyQueue(c.snapshot(), [], deck.id, now)).toHaveLength(0);
+  expect(studyCounts(c.snapshot(), [], deck.id, nextDay - 1)).toEqual({
+    new: 0,
+    learning: 0,
+    review: 0,
+  });
+  expect(nextStudyCard(c.snapshot(), [], deck.id, nextDay)?.card.id).toBe(cardId);
+  at = now + 1000;
+  c.unburyCard(cardId);
+  expect(studyQueue(c.snapshot(), [], deck.id, at).map((x) => x.card.id)).toEqual([cardId]);
+});
+
+test("burying a card that is missing or gone throws", () => {
+  const c = new Collection({ deviceId: "a", now: () => now, random: () => new Uint8Array(16) });
+  expect(() => c.buryCard("missing")).toThrow("Invalid card");
+});
+
+test("new-card intervals follow its preset learning steps without writing a review", () => {
+  const { state, cardId, preset } = fixture();
+  preset.fields.learningSteps.value = [2, 20];
+  expect(nextIntervals(state, [], cardId, now)).toEqual({
+    1: 120,
+    2: 660,
+    3: 1200,
+    4: 8 * 86400,
+  });
+  expect(cardMemory(state, [], cardId, now)!.reps).toBe(0);
+  expect(nextIntervals(state, [], "missing", now)).toBeUndefined();
+});
+
+test.each([1, 2, 3] as const)("intervals preview every grade from card state %i", (stateCode) => {
+  const { state, cardId, preset } = fixture();
+  const log: LogEntry[] = [
+    {
+      kind: "snapshot",
+      id: "snapshot",
+      cardId,
+      at: now - 86400_000,
+      state: {
+        state: stateCode,
+        due: now,
+        last_review: now - 5 * 86400_000,
+        stability: 5,
+        difficulty: 5,
+        elapsed_days: 5,
+        scheduled_days: 5,
+        learning_steps: 0,
+        reps: 3,
+        lapses: 1,
+      },
+    },
+  ];
+  const before = structuredClone(log);
+  const intervals = nextIntervals(state, log, cardId, now)!;
+  for (const grade of [1, 2, 3, 4] as const) {
+    // Commit the answer through replay: the displayed interval must describe its actual due date.
+    const answered = replayCard(
+      cardId,
+      [
+        ...log,
+        {
+          kind: "review",
+          id: "answer",
+          cardId,
+          at: now,
+          grade,
+          durationMs: 1,
+          origin: "phone",
+        },
+      ],
+      preset,
+      now,
+    );
+    expect(intervals[grade]).toBe((answered.due.getTime() - now) / 1000);
+    expect(intervals[grade]).toBeGreaterThan(0);
+  }
+  expect(log).toEqual(before);
+});
+
+test("intervals use the card's deck retention override and respond to undo", () => {
+  const { state, cardId } = fixture();
+  const original = nextIntervals(state, [], cardId, now)!;
+  state.decks[0]!.fields.desiredRetention.value = 0.99;
+  expect(nextIntervals(state, [], cardId, now)![4]).toBeLessThan(original[4]);
+  const log: LogEntry[] = [
+    { kind: "review", id: "answer", cardId, at: now, grade: 4, durationMs: 1, origin: "phone" },
+    { kind: "void", id: "undo", cardId, at: now + 1, targetId: "answer" },
+  ];
+  expect(nextIntervals(state, log, cardId, now)).toEqual(nextIntervals(state, [], cardId, now));
 });
