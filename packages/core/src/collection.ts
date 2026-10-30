@@ -456,6 +456,12 @@ export class Collection {
       };
     return previous;
   }
+  /** The note a card belongs to. */
+  noteIdOf(id: string): string {
+    const card = this.state.cards.find((c) => c.id === id);
+    if (!card) throw new Error("Invalid card");
+    return card.fields.noteId.value;
+  }
   /** A note's cards, by ordinal. */
   private cardsOf(noteId: string) {
     return this.state.cards

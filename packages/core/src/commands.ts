@@ -19,7 +19,10 @@ export type CollectionCommand =
   /** Anki's flag 1–7 on a card; 0 clears it. */
   | { kind: "setCardFlag"; id: string; flag: number }
   /** The note's `marked` tag. */
-  | { kind: "setNoteMarked"; id: string; marked: boolean };
+  | { kind: "setNoteMarked"; id: string; marked: boolean }
+  /** Puts back the suspension `setCardsSuspended` or `suspendNote` returned. */
+  | { kind: "restoreSuspension"; previous: { cardId: string; suspended: boolean }[] }
+  | { kind: "unburyCard"; id: string };
 
 /** Runs one command. Returns the id of the deck or note it created. */
 export function runCommand(collection: Collection, command: CollectionCommand): string | undefined {
@@ -58,6 +61,12 @@ export function runCommand(collection: Collection, command: CollectionCommand): 
       break;
     case "setNoteMarked":
       collection.setNoteMarked(command.id, command.marked);
+      break;
+    case "restoreSuspension":
+      collection.restoreSuspension(command.previous);
+      break;
+    case "unburyCard":
+      collection.unburyCard(command.id);
       break;
   }
   return undefined;
