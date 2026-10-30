@@ -213,6 +213,9 @@ session** is a special mode of it on the phone.
   the alarm and awake check keep the reveal hint and 64px pills. At large font scales
   the grades use two rows and the strip reserves both rows on front and back, including during the
   alarm's grade delay, so the card height stays fixed.
+- Each phone grade pill shows its next interval above the grade name, in Anki's localized short
+  form. Core previews all four grades using the card's own deck preset, retention override and
+  learning steps, with the same scheduler configuration as review replay.
 - On a deck page, today's counts and Estudar / Study sit directly below the deck name, before
   AnkiDroid controls and editing options.
 - The phone has a full editor: notes, decks, deck options. Editing note types (templates and CSS)
