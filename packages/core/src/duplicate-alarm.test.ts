@@ -21,6 +21,6 @@ test("duplicating preserves every setting under a new id", () => {
     vibrate: false,
   };
   const copy = duplicateAlarm(source, "copy");
-  expect(copy).toEqual({ ...source, id: "copy", quick: false });
+  expect(copy).toEqual({ ...source, id: "copy" });
   expect(source.id).toBe("source");
 });
