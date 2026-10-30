@@ -1,3 +1,4 @@
+import { savedAlarmDefaults, type AlarmDefaultsInput } from "./alarm-defaults.ts";
 import { newAlarm, nextRing, type Alarm, type AlarmRule } from "./alarm.ts";
 
 /** How long until an alarm rings, as the editor's "Rings in 7 h 12 min" says it. */
@@ -31,22 +32,14 @@ export function ringsIn(rule: AlarmRule, now: number, zone: string): RingsIn | n
  * newest one with a deck when that isn't known), so saving doesn't wait on picking a deck. A deck
  * that's gone gives way to the first of `deckIds`, in the order the editor lists them.
  */
-export function newAlarmFor(
-  id: string,
-  {
-    alarms,
-    lastSavedId,
-    deckIds,
-  }: { alarms: readonly Alarm[]; lastSavedId: string | null; deckIds: readonly string[] },
-): Alarm {
+export function newAlarmFor(id: string, input: AlarmDefaultsInput): Alarm {
   const fresh = newAlarm(id);
-  const last =
-    alarms.find((alarm) => alarm.id === lastSavedId) ??
-    // Hermes may lack findLast; the copy is fresh.
-    // oxlint-disable-next-line unicorn/no-array-reverse
-    [...alarms].reverse().find((alarm) => alarm.deckId !== null);
-  const deckId = last?.deckId && deckIds.includes(last.deckId) ? last.deckId : (deckIds[0] ?? null);
-  return { ...fresh, deckId, need: last?.need ?? fresh.need };
+  const defaults = savedAlarmDefaults(input);
+  return {
+    ...fresh,
+    deckId: defaults?.deckId ?? input.deckIds[0] ?? null,
+    need: defaults?.need ?? fresh.need,
+  };
 }
 
 /** Every ISO weekday, Monday first: the Repeat sheet's "Every day". */

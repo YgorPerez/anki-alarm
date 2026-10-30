@@ -93,6 +93,7 @@ test("public services persist local changes and outbox together across reopen", 
           awakeCheck: true,
           awakeCheckMinutes: 10,
           readAloud: true,
+          quick: false,
         };
         yield* data.saveAlarm(alarm);
         expect(yield* data.alarms).toEqual([alarm]);
