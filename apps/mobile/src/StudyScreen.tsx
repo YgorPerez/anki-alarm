@@ -1,3 +1,4 @@
+import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
 import { StudyCounts } from "./StudyCounts.tsx";
 import { useContext } from "react";
@@ -53,6 +54,7 @@ export function StudyScreen({
     >
       <StudyNavigation
         counts={study.counts}
+        items={study.card ? suspensionItems(locale, study.suspend) : []}
         title={deckName ?? t("study")}
         busy={busy}
         locale={locale}
@@ -152,6 +154,7 @@ function StudyFeedback({
 
 function StudyNavigation({
   counts,
+  items,
   title,
   busy,
   locale,
@@ -159,6 +162,7 @@ function StudyNavigation({
   onUndo,
 }: {
   counts: ReturnType<typeof studyCounts> | undefined;
+  items: Parameters<typeof StudyMenu>[0]["items"];
   title: string;
   busy: boolean;
   locale: Locale;
@@ -189,7 +193,7 @@ function StudyNavigation({
       >
         <Text className="text-body text-foreground">↶</Text>
       </Pressable>
-      <StudyMenu items={[]} locale={locale} busy={busy} />
+      <StudyMenu items={items} locale={locale} busy={busy} />
     </View>
   );
 }
@@ -402,6 +406,22 @@ function useStudySession(deckId: string, onExit: () => void) {
     lock.current = false;
     setBusy(false);
   }
+  async function suspend(scope: SuspendScope) {
+    if (!card || lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setError(false);
+    try {
+      await suspendStudyCard(card, scope, client);
+      setRevealedId(undefined);
+      setUndone(undefined);
+      await refresh();
+    } catch {
+      setError(true);
+    }
+    lock.current = false;
+    setBusy(false);
+  }
   async function undo() {
     const last = answers.at(-1);
     if (!last || lock.current) return;
@@ -433,6 +453,7 @@ function useStudySession(deckId: string, onExit: () => void) {
     revealed,
     reveal: () => setRevealedId(cardId),
     answer,
+    suspend,
     canUndo: answers.length > 0,
     undo,
   };

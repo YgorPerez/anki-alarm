@@ -1,5 +1,6 @@
+import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   alarmSession,
   awakeCheckAfter,
@@ -129,7 +130,11 @@ export function AlarmScreen({
                 onPress={alarm.snooze}
               />
             )}
-            <StudyMenu items={[]} locale={locale} busy={alarm.busy} />
+            <StudyMenu
+              items={suspensionItems(locale, alarm.suspend)}
+              locale={locale}
+              busy={alarm.busy}
+            />
             {alarm.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
           </View>
         }
@@ -350,6 +355,7 @@ function useAlarmSession(
   gradeDelayMs: number,
 ) {
   const [started, setStarted] = useState(false);
+  const client = useQueryClient();
   const { busy, error, setError, guarded } = useGuarded();
   // The ring as a signal just left it, until the caller passes native's next one.
   const [local, setLocal] = useState<{ from: Ring; ring: Ring }>();
@@ -458,6 +464,18 @@ function useAlarmSession(
       card.reveal();
       void signal((service) => service.activity(ring.id)).catch(() => setError(true));
     },
+    suspend: (scope: SuspendScope) =>
+      guarded(async () => {
+        const currentCard = session?.next?.card;
+        if (!currentCard) return;
+        await signal((service) => service.activity(ring.id));
+        stopReading();
+        await suspendStudyCard(currentCard, scope, client);
+        card.hide();
+        const { data } = await query.refetch();
+        shownAt.current = performance.now();
+        read(data?.next);
+      }),
     answer: (grade: Grade) =>
       guarded(async () => {
         if (!cardId || !card.revealed) return;

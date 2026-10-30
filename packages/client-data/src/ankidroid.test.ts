@@ -12,6 +12,13 @@ function fakeAnkiDroid() {
   const calls: string[] = [];
   const state = { ignoreAnswers: false };
   const provider: AnkiDroidProvider = {
+    suspend: ({ noteId, ord }) =>
+      Effect.sync(() => {
+        const card = source.cards.find((c) => c.noteId === noteId && c.ord === ord);
+        if (!card) return null;
+        card.queue = -1;
+        return { ...card };
+      }),
     readDeck: (deckId) =>
       Effect.sync(() => {
         calls.push(`read ${deckId}`);
@@ -167,5 +174,82 @@ test("auto sync back after alarm sessions is on until the user turns it off", as
     expect(await run((await open()).autoSyncBack)).toBe(false);
   } finally {
     close();
+  }
+});
+
+test("suspension syncs without reviews, survives restart and retries a failed provider write", async () => {
+  const db = openData();
+  const anki = fakeAnkiDroid();
+  let attempts = 0;
+  const provider: AnkiDroidProvider = {
+    ...anki.provider,
+    suspend: (action) =>
+      Effect.sync(() => {
+        attempts++;
+        const card = anki.source.cards.find(
+          (c) => c.noteId === action.noteId && c.ord === action.ord,
+        )!;
+        if (attempts > 1) card.queue = -1;
+        return { ...card };
+      }),
+  };
+  try {
+    const data = await db.open();
+    await run(data.linkAnkiDroidDeck(anki.source));
+    const card = (await run(data.collection)).cards.find((c) => c.anki?.id === 9001)!;
+    await run(
+      data.changeCollection((c) => {
+        c.setCardsSuspended([card.id], true);
+      }),
+    );
+    await expect(run(data.syncBackAnkiDroid(provider))).rejects.toThrow(
+      "AnkiDroid didn't suspend the card",
+    );
+    const reopened = await db.open();
+    await run(reopened.syncBackAnkiDroid(provider));
+    await run(reopened.syncBackAnkiDroid(provider));
+    expect(attempts).toBe(2);
+    expect(anki.source.cards.find((c) => c.id === 9001)!.queue).toBe(-1);
+  } finally {
+    db.close();
+  }
+});
+
+test("sync back sends answers before suspension and a pull does not resend imported suspension", async () => {
+  const db = openData();
+  const anki = fakeAnkiDroid();
+  const actions: string[] = [];
+  const provider: AnkiDroidProvider = {
+    ...anki.provider,
+    answer: (a) =>
+      Effect.tap(anki.provider.answer(a), () =>
+        Effect.sync(() => {
+          actions.push("answer");
+        }),
+      ),
+    suspend: (a) =>
+      Effect.tap(anki.provider.suspend(a), () =>
+        Effect.sync(() => {
+          actions.push("suspend");
+        }),
+      ),
+  };
+  try {
+    const data = await db.open();
+    const deckId = await run(data.linkAnkiDroidDeck(anki.source));
+    const card = (await run(data.collection)).cards.find((c) => c.anki?.id === 9001)!;
+    await run(data.answerCard(card.id, 3, 100));
+    await run(
+      data.changeCollection((c) => {
+        c.setCardsSuspended([card.id], true);
+      }),
+    );
+    await run(data.syncBackAnkiDroid(provider));
+    expect(actions).toEqual(["answer", "suspend"]);
+    await run(data.pullAnkiDroid(provider, deckId));
+    expect(actions).toEqual(["answer", "suspend"]);
+    expect((await run(data.reviewLog)).filter((e) => e.kind === "review")).toHaveLength(1);
+  } finally {
+    db.close();
   }
 });

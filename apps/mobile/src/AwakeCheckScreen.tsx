@@ -1,5 +1,6 @@
+import { suspensionItems, suspendStudyCard, type SuspendScope } from "./study-suspension.ts";
 import { StudyMenu } from "./StudyMenu.tsx";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { awakeCheckSession, RING_POLICY, type Grade, type Locale } from "@app/core";
 import { Effect, type Layer } from "effect";
 import { useEffect, useRef } from "react";
@@ -94,7 +95,11 @@ export function AwakeCheckScreen({
               {timeText(now, locale, zone, use24Hour)} ·{" "}
               {t("awakeCardProgress", { seconds: String(Math.ceil(left / 1000)) })}
             </Text>
-            <StudyMenu items={[]} locale={locale} busy={prompt.busy} />
+            <StudyMenu
+              items={suspensionItems(locale, prompt.suspend)}
+              locale={locale}
+              busy={prompt.busy}
+            />
             {prompt.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
           </View>
         ) : (
@@ -128,6 +133,7 @@ function useAwakeCheck(
   onPassed: () => void,
   gradeDelayMs: number,
 ) {
+  const client = useQueryClient();
   const { busy, error, guarded } = useGuarded();
   const shownAt = useRef(0);
   const signal = signalWith(layer);
@@ -171,6 +177,14 @@ function useAwakeCheck(
     error: error || query.isError,
     card,
     pass: () => guarded(pass),
+    suspend: (scope: SuspendScope) =>
+      guarded(async () => {
+        const currentCard = session?.next?.card;
+        if (!currentCard) return;
+        await suspendStudyCard(currentCard, scope, client);
+        card.hide();
+        await query.refetch();
+      }),
     answer: (grade: Grade) =>
       guarded(async () => {
         if (!cardId || !card.revealed) return;

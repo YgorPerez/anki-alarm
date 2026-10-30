@@ -318,3 +318,37 @@ const learningStepsOf = (state: CollectionState, deckId: string) => {
   const preset = state.presets.find((p) => p.id === deck?.fields.presetId.value);
   return preset?.fields.learningSteps.value ?? [];
 };
+
+/** One field version to send once. Imported/pulled versions are baselined by the local engine. */
+export interface SyncBackSuspension {
+  entryId: string;
+  cardId: string;
+  deckId: string;
+  noteId: number;
+  ord: number;
+}
+export function syncBackSuspensions(
+  state: CollectionState,
+  deviceId: string,
+  sent: ReadonlySet<string>,
+): SyncBackSuspension[] {
+  const decks = new Set(ownedDecks(state, deviceId).map((d) => d.id));
+  return state.cards.flatMap((card) => {
+    const field = card.fields.suspended;
+    const noteId = state.notes.find((n) => n.id === card.fields.noteId.value)?.anki?.id;
+    if (!card.anki || noteId === undefined || !field.value || !decks.has(card.fields.deckId.value))
+      return [];
+    const entryId = `suspend:${card.id}:${JSON.stringify(field.hlc)}`;
+    return sent.has(entryId)
+      ? []
+      : [
+          {
+            entryId,
+            cardId: card.id,
+            deckId: card.fields.deckId.value,
+            noteId,
+            ord: card.fields.ordinal.value,
+          },
+        ];
+  });
+}

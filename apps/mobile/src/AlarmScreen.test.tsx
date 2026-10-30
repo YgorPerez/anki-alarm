@@ -477,3 +477,21 @@ test("an alarm without read aloud reads nothing", async () => {
   }
   expect(reading(native.signals())).toEqual([]);
 });
+
+test.each(["Suspender card", "Suspender nota"])(
+  "%s replaces the alarm card without progress and retains empty-deck dismissal",
+  async (action) => {
+    const { dismissed } = await ringing(`Suspend ${action}`, ["first", "second"], { need: 2 });
+    await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+    await screen.findByLabelText("Frente");
+    const before = front();
+    await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+    await fireEvent.press(screen.getByRole("button", { name: action }));
+    await waitFor(() => expect(front()).not.toBe(before));
+    await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+    await fireEvent.press(screen.getByRole("button", { name: action }));
+    await screen.findByRole("button", { name: "Desligar" });
+    expect(dismissed()).toBe(0);
+    expect(screen.getByText(/0 de 2 certos/)).toBeTruthy();
+  },
+);

@@ -27,6 +27,7 @@ export {
   linkableAnkiDroidDecks,
   syncBackPlan,
   syncBackQueue,
+  syncBackSuspensions,
 } from "./ankidroid.ts";
 export type {
   SyncBackAnswer,
@@ -212,3 +213,5 @@ export {
   quickAlarmsDone,
 } from "./quick-alarm.ts";
 export type { QuickAlarmOptions } from "./quick-alarm.ts";
+
+export type { SyncBackSuspension } from "./ankidroid.ts";

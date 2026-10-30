@@ -1,5 +1,11 @@
 import type { AnkiDroidProvider } from "@app/client-data";
-import type { AnkiDroidCard, AnkiDroidDeck, AnkiDroidSource, SyncBackAnswer } from "@app/core";
+import type {
+  AnkiDroidCard,
+  AnkiDroidDeck,
+  AnkiDroidSource,
+  SyncBackAnswer,
+  SyncBackSuspension,
+} from "@app/core";
 import { ankiDroidAccess } from "@app/core";
 import { Effect } from "effect";
 import { localData } from "./database.ts";
@@ -18,6 +24,7 @@ export class AnkiDroidError extends Error {
  * route. The Android implementation is in `ankidroid-android.ts`; tests use `memoryAnkiDroid`.
  */
 export interface AnkiDroidApi {
+  suspend: (action: SyncBackSuspension) => Effect.Effect<AnkiDroidCard | null, AnkiDroidError>;
   /** `null` when AnkiDroid isn't installed. Read on every visit and resume. */
   status: Effect.Effect<{ versionCode: number; permission: "granted" | "denied" } | null, Error>;
   requestPermission: Effect.Effect<"granted" | "prompted" | "settings", Error>;
@@ -36,6 +43,7 @@ export const ankiDroidProvider = (api: AnkiDroidApi): AnkiDroidProvider => ({
   readDeck: api.readDeck,
   cards: api.cards,
   answer: api.answer,
+  suspend: api.suspend,
 });
 
 /**
@@ -100,6 +108,15 @@ export function memoryAnkiDroid(options: {
             reps: card.reps + 1,
             lastReviewSecs: Math.floor(Date.now() / 1000),
           });
+          return { ...card };
+        }),
+      ),
+    suspend: ({ noteId, ord }: SyncBackSuspension) =>
+      fail().pipe(
+        Effect.map(() => {
+          const card = allCards().find((c) => c.noteId === noteId && c.ord === ord);
+          if (!card) return null;
+          card.queue = -1;
           return { ...card };
         }),
       ),

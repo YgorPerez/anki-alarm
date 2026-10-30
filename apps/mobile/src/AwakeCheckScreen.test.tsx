@@ -123,3 +123,31 @@ test("with no card to show, tapping I'm awake passes it", async () => {
   await waitFor(() => expect(passed()).toBe(1));
   expect(native.awakeCheck()).toBeNull();
 });
+
+test.each(["Suspender card", "Suspender nota"])(
+  "%s replaces the awake-check card without passing it",
+  async (action) => {
+    const state = await Effect.runPromise(
+      localData((data) =>
+        data.changeCollection((c) => {
+          const deck = c.createDeck(`Awake ${action}`);
+          c.addBasicNote(deck.id, "first", "back");
+          c.addBasicNote(deck.id, "second", "back");
+        }),
+      ),
+    );
+    const deckId = state.decks.find((d) => d.fields.name.value === `Awake ${action}`)!.id;
+    const { check, native } = await shownCheck(`suspend-${action}`, deckId);
+    const passed = await show(check, native.layer);
+    const first = await screen.findByLabelText("Frente");
+    const before = first.props.source.html;
+    await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+    await fireEvent.press(screen.getByRole("button", { name: action }));
+    await waitFor(() => expect(screen.getByLabelText("Frente").props.source.html).not.toBe(before));
+    expect(passed()).toBe(0);
+    await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+    await fireEvent.press(screen.getByRole("button", { name: action }));
+    await screen.findByRole("button", { name: "Estou acordado" });
+    expect(passed()).toBe(0);
+  },
+);

@@ -508,6 +508,30 @@ export class Collection {
     const options = { ...patch, ...(patch.name === undefined ? {} : { name: patch.name.trim() }) };
     for (const key of presetKeys) stamp(key, options[key]);
   }
+  /** Sets suspension and returns the previous values for action undo. Validates before changing. */
+  setCardsSuspended(cardIds: readonly string[], suspended: boolean) {
+    const cards = this.state.cards.filter((c) => cardIds.includes(c.id));
+    if (cards.length !== new Set(cardIds).size) throw new Error("Invalid card");
+    const previous = cards.map((c) => ({ cardId: c.id, suspended: c.fields.suspended.value }));
+    for (const card of cards)
+      if (card.fields.suspended.value !== suspended)
+        card.fields.suspended = { value: suspended, hlc: this.tick() };
+    return previous;
+  }
+  /** Suspends every card of a note, including siblings in other decks. */
+  suspendNote(noteId: string) {
+    if (!this.state.notes.some((n) => n.id === noteId)) throw new Error("Invalid note");
+    return this.setCardsSuspended(
+      this.cardsOf(noteId).map((c) => c.id),
+      true,
+    );
+  }
+  /** Restores suspension through new synced field clocks, without changing the review log. */
+  restoreSuspension(previous: readonly { cardId: string; suspended: boolean }[]) {
+    if (previous.some((p) => !this.state.cards.some((c) => c.id === p.cardId)))
+      throw new Error("Invalid card");
+    for (const p of previous) this.setCardsSuspended([p.cardId], p.suspended);
+  }
   moveCards(cardIds: readonly string[], deckId: string) {
     if (!this.state.decks.some((d) => d.id === deckId)) throw new Error("Invalid deck");
     const cards = this.state.cards.filter((c) => cardIds.includes(c.id));

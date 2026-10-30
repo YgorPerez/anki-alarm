@@ -204,3 +204,29 @@ test.each([
     dimensions.mockRestore();
   }
 });
+
+test("study menu suspends the card without a review", async () => {
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Suspend study");
+        c.addBasicNote(deck.id, "suspend me", "back");
+      }),
+    ),
+  );
+  const deck = state.decks.find((d) => d.fields.name.value === "Suspend study")!;
+  await render(
+    <QueryClientProvider client={new QueryClient()}>
+      <StudyScreen deckId={deck.id} locale="pt-BR" onExit={() => {}} />
+    </QueryClientProvider>,
+  );
+  await screen.findByLabelText("Frente");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Suspender card" }));
+  await screen.findByText("Nenhum cartão disponível agora. Os limites diários se aplicam.");
+  expect(
+    (await Effect.runPromise(localData((d) => d.collection))).cards.find(
+      (c) => c.fields.deckId.value === deck.id,
+    )!.fields.suspended.value,
+  ).toBe(true);
+});
