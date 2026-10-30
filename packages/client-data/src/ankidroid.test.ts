@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { Effect } from "effect";
 import { expect, test } from "vite-plus/test";
-import type { AnkiDroidCard, AnkiDroidSource } from "@app/core";
+import { answerUndo, type AnkiDroidCard, type AnkiDroidSource } from "@app/core";
 import fixture from "../../core/fixtures/ankidroid-deck.json" with { type: "json" };
 import { ClientData, clientDataLayer, type AnkiDroidProvider, type ExecuteSql } from "./index.ts";
 
@@ -204,6 +204,34 @@ test("a bury goes to AnkiDroid after the card's answers, once, and must be recor
     });
     const card = (await run(data.collection)).cards.find((c) => c.id === fresh.id)!;
     expect(card.fields.buriedUntil.value).toBeGreaterThan(NOW);
+  } finally {
+    close();
+  }
+});
+
+test("an answer, suspend or bury undone before sync back never reaches AnkiDroid", async () => {
+  const { open, close } = openData();
+  const ankiDroid = fakeAnkiDroid();
+  const provider: AnkiDroidProvider = {
+    ...ankiDroid.provider,
+    suspend: (a) => {
+      ankiDroid.calls.push(`suspend ${a.noteId}:${a.ord}`);
+      return ankiDroid.provider.suspend(a);
+    },
+  };
+  try {
+    const data = await open();
+    await run(data.linkAnkiDroidDeck(ankiDroid.source));
+    const fresh = (await run(data.collection)).cards.find((c) => c.anki?.id === 9001)!;
+    const answer = await run(data.answerCard(fresh.id, 3, 5000));
+    const suspend = await run(data.studyAction({ kind: "suspendNote", cardId: fresh.id }));
+    const bury = await run(data.studyAction({ kind: "buryCard", cardId: fresh.id }));
+    await run(data.undoStudy(bury));
+    await run(data.undoStudy(suspend));
+    await run(data.undoStudy(answerUndo(answer)));
+    ankiDroid.calls.length = 0;
+    expect(await run(data.syncBackAnkiDroid(provider))).toMatchObject({ sent: 0, buried: 0 });
+    expect(ankiDroid.calls.filter((call) => !call.startsWith("cards"))).toEqual([]);
   } finally {
     close();
   }
