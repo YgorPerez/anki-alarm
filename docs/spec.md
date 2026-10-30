@@ -221,6 +221,18 @@ session** is a special mode of it on the phone.
   It rings again at the occurrence after; the skip syncs like the other properties and clears
   itself once the skipped time has passed. Decided in #78.
 
+### Phone alarm editor
+
+- No top bar. A fixed bottom bar holds neutral Cancelar / Cancel and solid Salvar / Save while the
+  settings scroll above it. Saving turns the alarm on.
+- Cancel and Android system Back leave immediately when the draft matches the opened alarm. With
+  unsaved changes they ask "Descartar alterações?" / "Discard changes?". Keeping the draft stays
+  in the editor; discarding leaves without saving. Back closes an open settings sheet first.
+- Saved alarms show Pular o próximo / Skip next, Duplicar alarme / Duplicate alarm and Excluir
+  alarme / Delete alarm at the end of the scroll. New alarms show none of these actions. Skip is
+  available for enabled repeating alarms, can be undone, and is saved with the draft. Delete
+  still asks for confirmation; Duplicate opens a new draft with the current settings.
+
 ### Ringing
 
 - Scheduled as exact alarms with `AlarmManager.setAlarmClock`, so they show as the next alarm in

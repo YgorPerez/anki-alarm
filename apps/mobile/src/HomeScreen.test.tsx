@@ -124,13 +124,13 @@ test("the card menu skips the next ring of a repeating alarm, shows the ring aft
   const result = await render(view([alarm]));
   await fireEvent.press(screen.getByRole("button", { name: "Mais opções: Trabalho" }));
   expect(screen.getAllByRole("button", { name: "Mais opções: Trabalho" })).toHaveLength(1);
-  expect(screen.getByRole("button", { name: "Pular a próxima" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Pular o próximo" })).toBeTruthy();
   await fireEvent.press(screen.getByRole("button", { name: "Duplicar alarme" }));
   expect(duplicated).toEqual([alarm]);
   await fireEvent.press(screen.getByRole("button", { name: "Mais opções: Trabalho" }));
-  await fireEvent.press(screen.getByRole("button", { name: "Pular a próxima" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Pular o próximo" }));
   expect(saved.at(-1)?.skip).toBe(Date.parse("2026-10-30T06:30:00Z"));
-  expect(screen.queryByRole("button", { name: "Pular a próxima" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Pular o próximo" })).toBeNull();
 
   await result.rerender(view([saved.at(-1)!]));
   expect(screen.getByText("Pulado · toca seg., 2 de nov.")).toBeTruthy();
@@ -183,7 +183,7 @@ test.each(["Desligado", "Uma vez"])(
       />,
     );
     await fireEvent.press(screen.getByRole("button", { name: `Mais opções: ${label}` }));
-    expect(screen.queryByRole("button", { name: "Pular a próxima" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pular o próximo" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Desfazer pulo" })).toBeNull();
     await fireEvent.press(screen.getByRole("button", { name: "Duplicar alarme" }));
     expect(duplicated.map((alarm) => alarm.id)).toEqual([label === "Desligado" ? "off" : "once"]);

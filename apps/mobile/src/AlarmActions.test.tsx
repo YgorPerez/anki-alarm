@@ -44,7 +44,6 @@ test("the editor duplicates its current settings without saving the source", asy
       onDuplicate={(a) => copies.push(a)}
     />,
   );
-  await fireEvent.press(screen.getByRole("button", { name: "Mais opções" }));
   await fireEvent.press(screen.getByRole("button", { name: "Duplicar alarme" }));
   expect(copies).toEqual([alarm]);
 });
