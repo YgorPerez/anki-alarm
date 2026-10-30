@@ -371,6 +371,12 @@ function useStudySession(deckId: string, onExit: () => void) {
     });
     return () => handler.remove();
   }, [onExit, screenActive]);
+  async function refresh() {
+    await Promise.all([
+      client.invalidateQueries({ queryKey: ["study", deckId] }),
+      client.invalidateQueries({ queryKey: ["reviewLog"] }),
+    ]);
+  }
   async function answer(grade: Grade) {
     if (!cardId || !revealed || lock.current) return;
     lock.current = true;
@@ -389,8 +395,7 @@ function useStudySession(deckId: string, onExit: () => void) {
       setAnswers((list) => [...list, entry]);
       setUndone(undefined);
       setRevealedId(undefined);
-      await client.invalidateQueries({ queryKey: ["study", deckId] });
-      await client.invalidateQueries({ queryKey: ["reviewLog"] });
+      await refresh();
     } catch {
       setError(true);
     }
@@ -408,8 +413,7 @@ function useStudySession(deckId: string, onExit: () => void) {
       setAnswers((list) => list.slice(0, -1));
       setUndone(last.cardId);
       setRevealedId(undefined);
-      await client.invalidateQueries({ queryKey: ["study", deckId] });
-      await client.invalidateQueries({ queryKey: ["reviewLog"] });
+      await refresh();
     } catch {
       setError(true);
     }
