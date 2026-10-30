@@ -1,3 +1,4 @@
+import { StudyScreen } from "./StudyScreen.tsx";
 import { RuntimeContext, useRuntime } from "./runtime.ts";
 import { useNow } from "./clock.tsx";
 import { regular, bold } from "./fonts.ts";
@@ -113,11 +114,18 @@ export function DecksRoute() {
     <ScreenActivity value={focused}>
       <CollectionScreen
         locale={useUI().locale}
+        onStudy={(deckId) => router.push({ pathname: "/study/[deckId]", params: { deckId } })}
         ankiDroid={androidAnkiDroid}
         onTheme={() => router.push("/settings/theme")}
       />
     </ScreenActivity>
   );
+}
+/** Study sits above the tabs so both system Back and the back link return to the deck. */
+export function StudyRoute() {
+  const { deckId } = useLocalSearchParams<{ deckId: string }>();
+  const router = useRouter();
+  return <StudyScreen deckId={deckId} locale={useUI().locale} onExit={() => router.back()} />;
 }
 /** Links an AnkiDroid deck from Home's empty state; the new deck then shows on Home. */
 export function AnkiDroidRoute() {

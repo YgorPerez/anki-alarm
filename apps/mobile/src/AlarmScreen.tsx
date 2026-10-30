@@ -1,3 +1,4 @@
+import { StudyMenu } from "./StudyMenu.tsx";
 import { useQuery } from "@tanstack/react-query";
 import {
   alarmSession,
@@ -128,6 +129,7 @@ export function AlarmScreen({
                 onPress={alarm.snooze}
               />
             )}
+            <StudyMenu items={[]} locale={locale} busy={alarm.busy} />
             {alarm.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
           </View>
         }

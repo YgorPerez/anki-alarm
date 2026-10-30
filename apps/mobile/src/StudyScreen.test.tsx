@@ -37,8 +37,8 @@ test.each([1, 2, 3, 4] as const)(
       ).toBeNull();
       expect(screen.getByLabelText("Frente").props.source.html).toContain("casa");
       expect(screen.getByLabelText("Frente").props.source.html).not.toContain("house");
-      expect(screen.queryByRole("button", { name: "Mostrar resposta" })).toBeNull();
-      screen.getByText("Toque para ver a resposta");
+      expect(screen.getByRole("button", { name: "Mostrar resposta" })).toBeTruthy();
+
       const front = screen.getByLabelText("Frente");
       expect(front.props.javaScriptEnabled).toBe(false);
       expect(front.props.textZoom).toBe(100);
@@ -89,14 +89,27 @@ test("Undo voids the last answer and brings its card back to the front", async (
       <StudyScreen deckId={deck.id} locale="pt-BR" onExit={() => {}} />
     </QueryClientProvider>,
   );
-  expect(screen.queryByRole("button", { name: "Desfazer" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Desfazer" })).toHaveProperty(
+    "props.accessibilityState.disabled",
+    true,
+  );
   await fireEvent(await screen.findByLabelText("Frente"), "accessibilityAction", {
     nativeEvent: { actionName: "activate" },
   });
   const first = String(screen.getByLabelText("Verso").props.source.html);
   await fireEvent.press(screen.getByRole("button", { name: "Fácil" }));
-  await fireEvent.press(await screen.findByRole("button", { name: "Desfazer" }));
-  await waitFor(() => expect(screen.queryByRole("button", { name: "Desfazer" })).toBeNull());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Desfazer" }).props.accessibilityState.disabled).toBe(
+      false,
+    ),
+  );
+  await fireEvent.press(screen.getByRole("button", { name: "Desfazer" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Desfazer" })).toHaveProperty(
+      "props.accessibilityState.disabled",
+      true,
+    ),
+  );
   const log = await Effect.runPromise(localData((data) => data.reviewLog));
   const review = log.findLast((e) => e.kind === "review")!;
   expect(log.at(-1)).toMatchObject({ kind: "void", targetId: review.id, cardId: review.cardId });
@@ -144,3 +157,43 @@ const controls = (revealed: boolean, gradesShown = true) => (
     onAnswer={async () => {}}
   />
 );
+
+test.each([
+  { fontScale: 1, height: 56 },
+  { fontScale: 2, height: 124 },
+])("Decks reveal bar and grades reserve $height pixels", async ({ fontScale, height }) => {
+  const native = await import("react-native");
+  const dimensions = vi
+    .spyOn(native, "useWindowDimensions")
+    .mockReturnValue({ width: 400, height: 800, scale: 2, fontScale });
+  const reveal = vi.fn<() => void>();
+  try {
+    const view = await render(
+      <AnswerControls
+        revealed={false}
+        locale="pt-BR"
+        busy={false}
+        onReveal={reveal}
+        gradeHeight={56}
+        onAnswer={async () => {}}
+      />,
+    );
+    expect(view.toJSON()).toMatchObject({ props: { style: { height } } });
+    await fireEvent.press(screen.getByRole("button", { name: "Mostrar resposta" }));
+    expect(reveal).toHaveBeenCalledOnce();
+    await view.rerender(
+      <AnswerControls
+        revealed
+        locale="pt-BR"
+        busy={false}
+        onReveal={reveal}
+        gradeHeight={56}
+        onAnswer={async () => {}}
+      />,
+    );
+    expect(view.toJSON()).toMatchObject({ props: { style: { height } } });
+    expect(screen.getAllByRole("button")).toHaveLength(4);
+  } finally {
+    dimensions.mockRestore();
+  }
+});

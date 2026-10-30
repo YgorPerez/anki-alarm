@@ -195,14 +195,20 @@ session** is a special mode of it on the phone.
 - On the phone, alarm sessions, awake checks and Decks study give the card the width and remaining
   height of the screen, without a frame. The compact header shows time and progress on an alarm,
   with Snooze at the end; the awake check shows time, one-card progress and seconds remaining.
-  Decks study shows a back link with the deck name and Undo. The big clock and alarm label stay on
-  Start and other stages without a card.
+  Decks study opens outside the tabs, without the Settings header. Its compact top bar shows a back
+  link with the deck name, New/Learning/Review counts in Anki blue/red/green and an Undo icon.
+  Core computes the counts for the deck and subdecks within the remaining daily limits. System Back
+  and the back link return to the deck. All three study headers share a card-action menu, hidden
+  until it has actions. The big clock and alarm label stay on Start and other stages without a card.
 - A native tap on the card reveals its back; dragging scrolls its HTML without revealing. The
   WebView keeps JavaScript disabled, preserves deck CSS and defaults to 28px text following system
   font scale. A screen reader gets the reveal hint and an accessibility action.
-- The bottom strip reserves 64px for the reveal hint or four 64px grade pills. At large font scales
+- Decks study has a full-width 56px "Mostrar resposta" / "Show answer" bar and 56px grade pills;
+  the alarm and awake check keep the reveal hint and 64px pills. At large font scales
   the grades use two rows and the strip reserves both rows on front and back, including during the
   alarm's grade delay, so the card height stays fixed.
+- On a deck page, today's counts and Estudar / Study sit directly below the deck name, before
+  AnkiDroid controls and editing options.
 - The phone has a full editor: notes, decks, deck options. Editing note types (templates and CSS)
   is web only.
 

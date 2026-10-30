@@ -4,6 +4,7 @@ import {
   Collection,
   replayCard,
   studyQueue,
+  studyCounts,
   nextStudyCard,
   type LogEntry,
   type Note,
@@ -309,4 +310,50 @@ test("a subdeck's card schedules with the subdeck's own preset", () => {
   expect(studyQueue(state, log, parent.id, now)).toHaveLength(0);
   state.decks.find((d) => d.id === child.id)!.fields.desiredRetention.value = 0.99;
   expect(studyQueue(state, log, parent.id, now).map((item) => item.card.id)).toEqual([cardId]);
+});
+
+test("study counts respect daily allowance and move answered cards into learning, including undo", () => {
+  const { state, deckId, cardId, preset } = fixture();
+  preset.fields.newPerDay.value = 1;
+  expect(studyCounts(state, [], deckId, now)).toEqual({ new: 1, learning: 0, review: 0 });
+  const log: LogEntry[] = [
+    { kind: "review", id: "a", cardId, at: now, grade: 1, durationMs: 1, origin: "alarm" },
+  ];
+  expect(studyCounts(state, log, deckId, now + 61_000)).toEqual({ new: 0, learning: 1, review: 0 });
+  log.push({ kind: "void", id: "v", cardId, at: now + 62_000, targetId: "a" });
+  expect(studyCounts(state, log, deckId, now + 62_000)).toEqual({ new: 1, learning: 0, review: 0 });
+});
+
+test("study counts separate due reviews from relearning and exclude suspended and future cards", () => {
+  const { state, deckId, cardId } = fixture();
+  const second = state.cards[1]!.id;
+  const snapshot = (id: string, cardState: 2 | 3, due: number): LogEntry => ({
+    kind: "snapshot",
+    id: `snapshot-${id}`,
+    cardId: id,
+    at: now - 1000,
+    state: {
+      state: cardState,
+      due,
+      stability: 5,
+      difficulty: 5,
+      elapsed_days: 0,
+      scheduled_days: 5,
+      learning_steps: 0,
+      reps: 2,
+      lapses: 1,
+    },
+  });
+  const log = [snapshot(cardId, 2, now), snapshot(second, 3, now)];
+  expect(studyCounts(state, log, deckId, now)).toEqual({ new: 0, learning: 1, review: 1 });
+  state.cards[0]!.fields.suspended = {
+    value: true,
+    hlc: { wallMs: now, counter: 0, deviceId: "a" },
+  };
+  expect(studyCounts(state, log, deckId, now)).toEqual({ new: 0, learning: 1, review: 0 });
+  expect(studyCounts(state, [snapshot(second, 3, now + 1000)], deckId, now)).toEqual({
+    new: 0,
+    learning: 0,
+    review: 0,
+  });
 });

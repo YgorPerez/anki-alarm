@@ -1,18 +1,22 @@
+import { useNow } from "./clock.tsx";
+import { StudyCounts } from "./StudyCounts.tsx";
 import { useContext } from "react";
 import { ScreenActivity } from "./screen-activity.ts";
 import {
   cardMemory,
+  studyCounts,
   cardsStayInApp,
   type Collection,
   type CollectionState,
   type Deck,
   type Locale,
+  type LogEntry,
   type Note,
   type NoteDraft,
 } from "@app/core";
 import type { ClientData } from "@app/client-data";
 import { useForm } from "@tanstack/react-form";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Alert,
   BackHandler,
@@ -51,20 +55,7 @@ const plain = (html: string | undefined) =>
     .replace(/\s+/g, " ")
     .trim();
 
-export function CollectionScreen({
-  locale,
-  onExit,
-  onTheme,
-  ankiDroid,
-}: {
-  locale: Locale;
-  onExit?: () => void;
-  onTheme: () => void;
-
-  ankiDroid: AnkiDroidApi;
-}) {
-  const [linking, setLinking] = useState(false);
-  const queryClient = useQueryClient();
+function useCollectionData() {
   const query = useQuery({
     queryKey: ["collection"],
     queryFn: () => Effect.runPromise(localData((data) => data.collection)),
@@ -73,6 +64,26 @@ export function CollectionScreen({
     queryKey: ["reviewLog"],
     queryFn: () => Effect.runPromise(localData((data) => data.reviewLog)),
   });
+  return { query, log };
+}
+
+export function CollectionScreen({
+  locale,
+  onExit,
+  onTheme,
+  ankiDroid,
+  onStudy,
+}: {
+  locale: Locale;
+  onStudy?: (deckId: string) => void;
+  onExit?: () => void;
+  onTheme: () => void;
+
+  ankiDroid: AnkiDroidApi;
+}) {
+  const [linking, setLinking] = useState(false);
+  const queryClient = useQueryClient();
+  const { query, log } = useCollectionData();
   const state = query.data;
   const [studying, setStudying] = useState(false);
   const [deckId, setDeckId] = useState<string>();
@@ -82,7 +93,6 @@ export function CollectionScreen({
   const [error, setError] = useState(false);
   const [notice, setNotice] = useState("");
   const t = copy(locale);
-  const insets = useSafeAreaInsets();
   const goBack = useCallback(() => {
     if (studying || linking) return false;
     if (locked.current) return true;
@@ -295,7 +305,6 @@ export function CollectionScreen({
             setError(false);
             setForm(next);
           }}
-          study={() => setStudying(true)}
           remove={confirmDelete}
         />
       );
@@ -316,39 +325,132 @@ export function CollectionScreen({
     );
   };
   return (
+    <CollectionPage>
+      <CollectionHeading
+        t={t}
+        locale={locale}
+        form={form}
+        deck={deck}
+        busy={busy}
+        goBack={goBack}
+        onExit={onExit}
+        onTheme={onTheme}
+      />
+      <DeckStudyStart
+        deck={deck}
+        editing={Boolean(form)}
+        state={state}
+        log={log.data}
+        locale={locale}
+        busy={busy}
+        onStudy={onStudy}
+        onLocalStudy={() => setStudying(true)}
+      />
+      <AnkiDroidEntry
+        ankiDroid={ankiDroid}
+        locale={locale}
+        deck={deck}
+        editing={form !== undefined}
+        busy={busy}
+        onLink={() => setLinking(true)}
+      />
+      {error || query.isError ? (
+        <Text accessibilityRole="alert" style={regular} className="text-body text-destructive">
+          {t(state ? "error" : "loadError")}
+        </Text>
+      ) : null}
+      {content()}
+    </CollectionPage>
+  );
+}
+function CollectionHeading({
+  t,
+  locale,
+  form,
+  deck,
+  busy,
+  goBack,
+  onExit,
+  onTheme,
+}: {
+  t: Translate;
+  locale: Locale;
+  form: Form | undefined;
+  deck: Deck | undefined;
+  busy: boolean;
+  goBack: () => void;
+  onExit: (() => void) | undefined;
+  onTheme: () => void;
+}) {
+  return (
+    <>
+      <View className="flex-row flex-wrap items-center justify-between gap-2">
+        {form || deck ? (
+          <Button label={t("back")} disabled={busy} onPress={goBack} />
+        ) : (
+          onExit && <Button label={t("alarms")} disabled={busy} onPress={onExit} />
+        )}
+        {!form && !deck && <Button label={t("theme")} disabled={busy} onPress={onTheme} />}
+      </View>
+      <Text
+        numberOfLines={2}
+        accessibilityRole="header"
+        style={bold}
+        className="text-title text-foreground"
+      >
+        {screenTitle(t, locale, form, deck)}
+      </Text>
+    </>
+  );
+}
+
+function CollectionPage({ children }: { children: ReactNode }) {
+  const insets = useSafeAreaInsets();
+  return (
     <KeyboardAvoidingView
       behavior="padding"
       className="flex-1 bg-background"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
       <ScrollView contentContainerClassName="gap-6 p-6" keyboardShouldPersistTaps="handled">
-        <View className="flex-row flex-wrap items-center justify-between gap-2">
-          {form || deck ? (
-            <Button label={t("back")} disabled={busy} onPress={goBack} />
-          ) : (
-            onExit && <Button label={t("alarms")} disabled={busy} onPress={onExit} />
-          )}
-          {!form && !deck && <Button label={t("theme")} disabled={busy} onPress={onTheme} />}
-        </View>
-        <AnkiDroidEntry
-          ankiDroid={ankiDroid}
-          locale={locale}
-          deck={deck}
-          editing={form !== undefined}
-          busy={busy}
-          onLink={() => setLinking(true)}
-        />
-        <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
-          {screenTitle(t, locale, form, deck)}
-        </Text>
-        {error || query.isError ? (
-          <Text accessibilityRole="alert" style={regular} className="text-body text-destructive">
-            {t(state ? "error" : "loadError")}
-          </Text>
-        ) : null}
-        {content()}
+        {children}
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+
+/** The primary deck action comes before linked-deck controls and editing. */
+function DeckStudyStart({
+  deck,
+  editing,
+  state,
+  log,
+  locale,
+  busy,
+  onStudy,
+  onLocalStudy,
+}: {
+  deck: Deck | undefined;
+  editing: boolean;
+  state: CollectionState | undefined;
+  log: readonly LogEntry[] | undefined;
+  locale: Locale;
+  busy: boolean;
+  onStudy: ((id: string) => void) | undefined;
+  onLocalStudy: () => void;
+}) {
+  const now = useNow();
+  if (!deck || editing || !state || !log) return null;
+  return (
+    <>
+      <StudyCounts counts={studyCounts(state, log, deck.id, now)} locale={locale} />
+      <Button
+        label={copy(locale)("study")}
+        primary
+        disabled={busy}
+        onPress={() => (onStudy ? onStudy(deck.id) : onLocalStudy())}
+      />
+    </>
   );
 }
 /** On the deck list: the way to AnkiDroid. On a linked deck: that it is linked. */
@@ -435,7 +537,6 @@ function DeckDetails({
   notes,
   busy,
   edit,
-  study,
   remove,
 }: {
   t: Translate;
@@ -444,12 +545,10 @@ function DeckDetails({
   notes: Note[];
   busy: boolean;
   edit: (form: Form) => void;
-  study: () => void;
   remove: () => void;
 }) {
   return (
     <>
-      <Button label={t("study")} primary disabled={busy} onPress={study} />
       <Text style={regular} className="text-label text-muted-foreground">
         {notes.length} {t("cards")}
       </Text>

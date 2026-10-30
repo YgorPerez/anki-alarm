@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react-native/pure";
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test, vi } from "vite-plus/test";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -7,7 +7,7 @@ import { CollectionScreen } from "./CollectionScreen.tsx";
 import { memoryAnkiDroid } from "./ankidroid.ts";
 
 /** The decks screen over the phone's local database, as Home opens it. */
-const show = () =>
+const show = (onStudy?: (id: string) => void) =>
   render(
     <QueryClientProvider
       client={
@@ -15,6 +15,7 @@ const show = () =>
       }
     >
       <CollectionScreen
+        onStudy={onStudy}
         locale="pt-BR"
         onExit={() => {}}
         onTheme={() => {}}
@@ -38,4 +39,17 @@ describe("CollectionScreen", () => {
     await show();
     expect(await screen.findByRole("button", { name: /Verbos/ })).toBeDefined();
   });
+});
+
+test("Study opens the selected deck through the navigation boundary", async () => {
+  const study = vi.fn<(id: string) => void>();
+  await show(study);
+  await fireEvent.press(await screen.findByRole("button", { name: "Criar baralho" }));
+  await fireEvent.changeText(screen.getByLabelText("Nome do baralho"), "Navigation deck");
+  await fireEvent.press(screen.getByRole("button", { name: "Salvar" }));
+  await fireEvent.press(await screen.findByRole("button", { name: /Navigation deck/ }));
+  expect(await screen.findByLabelText("0 novos")).toBeTruthy();
+  await fireEvent.press(screen.getByRole("button", { name: "Estudar" }));
+  expect(study).toHaveBeenCalledWith(expect.any(String));
+  expect(screen.getByRole("header", { name: "Navigation deck" })).toBeTruthy();
 });
