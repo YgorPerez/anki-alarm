@@ -155,7 +155,7 @@ export function AlarmEditorScreen({
       </ScrollView>
       <View className="gap-2 border-t border-border px-6 pt-4 pb-4">
         {error ? (
-          <Text accessibilityRole="alert" style={regular} className="text-body text-destructive">
+          <Text accessibilityRole="alert" style={regular} className="text-body text-attention">
             {error}
           </Text>
         ) : null}
