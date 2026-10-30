@@ -1,4 +1,6 @@
-import { StudyMenu } from "./StudyMenu.tsx";
+import { StudyAnnotations } from "./StudyAnnotations.tsx";
+import type { Collection } from "@app/core";
+import type { ReactNode } from "react";
 import { StudyCounts } from "./StudyCounts.tsx";
 import { useContext } from "react";
 import { ScreenActivity } from "./screen-activity.ts";
@@ -52,6 +54,9 @@ export function StudyScreen({
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
       <StudyNavigation
+        annotations={
+          <StudyAnnotations next={study.next} locale={locale} busy={busy} change={study.change} />
+        }
         counts={study.counts}
         title={deckName ?? t("study")}
         busy={busy}
@@ -151,6 +156,7 @@ function StudyFeedback({
 }
 
 function StudyNavigation({
+  annotations,
   counts,
   title,
   busy,
@@ -158,6 +164,7 @@ function StudyNavigation({
   onExit,
   onUndo,
 }: {
+  annotations: ReactNode;
   counts: ReturnType<typeof studyCounts> | undefined;
   title: string;
   busy: boolean;
@@ -189,7 +196,7 @@ function StudyNavigation({
       >
         <Text className="text-body text-foreground">↶</Text>
       </Pressable>
-      <StudyMenu items={[]} locale={locale} busy={busy} />
+      {annotations}
     </View>
   );
 }
@@ -377,6 +384,20 @@ function useStudySession(deckId: string, onExit: () => void) {
       client.invalidateQueries({ queryKey: ["reviewLog"] }),
     ]);
   }
+  async function change(command: (c: Collection) => void) {
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setError(false);
+    try {
+      await Effect.runPromise(localData((data) => data.changeCollection(command)));
+      await Promise.all([refresh(), client.invalidateQueries({ queryKey: ["collection"] })]);
+    } catch {
+      setError(true);
+    }
+    lock.current = false;
+    setBusy(false);
+  }
   async function answer(grade: Grade) {
     if (!cardId || !revealed || lock.current) return;
     lock.current = true;
@@ -425,6 +446,7 @@ function useStudySession(deckId: string, onExit: () => void) {
       ? studyCounts(query.data.collection, query.data.log, deckId, query.data.now)
       : undefined,
     query,
+    next,
     card,
     note: next?.note,
     type: next?.type,
@@ -433,6 +455,7 @@ function useStudySession(deckId: string, onExit: () => void) {
     revealed,
     reveal: () => setRevealedId(cardId),
     answer,
+    change,
     canUndo: answers.length > 0,
     undo,
   };

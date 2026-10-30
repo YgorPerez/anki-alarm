@@ -356,3 +356,27 @@ test("what Anki makes of an export comes back as the same records and reviews", 
     "review",
   ]);
 });
+
+test("all seven flags and the marked tag survive an apkg round-trip", async () => {
+  const c = new Collection(environment());
+  const deck = c.createDeck("Flags");
+  for (let flag = 1; flag <= 7; flag++) {
+    const note = c.addBasicNote(deck.id, String(flag), "back");
+    const card = c.snapshot().cards.at(-1)!;
+    c.setCardFlag(card.id, flag);
+    c.setNoteMarked(note.id, true);
+  }
+  const result = await writeApkg(writeHost, {
+    collection: c.snapshot(),
+    log: [],
+    deckId: deck.id,
+    now: NOW,
+  });
+  const parsed = await readApkg(readHost(result));
+  const restored = new Collection(environment("other"));
+  restored.importAnki(parsed.package);
+  expect(restored.snapshot().cards.map((item) => item.fields.flag.value)).toEqual([
+    1, 2, 3, 4, 5, 6, 7,
+  ]);
+  expect(restored.snapshot().notes.every((n) => n.fields.tags.value.includes("marked"))).toBe(true);
+});

@@ -1,4 +1,5 @@
-import { StudyMenu } from "./StudyMenu.tsx";
+import { StudyAnnotations } from "./StudyAnnotations.tsx";
+import { useStudyAnnotationChange } from "./study-annotations.ts";
 import { useQuery } from "@tanstack/react-query";
 import {
   alarmSession,
@@ -129,7 +130,12 @@ export function AlarmScreen({
                 onPress={alarm.snooze}
               />
             )}
-            <StudyMenu items={[]} locale={locale} busy={alarm.busy} />
+            <StudyAnnotations
+              next={session.next}
+              locale={locale}
+              busy={alarm.busy}
+              change={alarm.change}
+            />
             {alarm.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
           </View>
         }
@@ -424,6 +430,7 @@ function useAlarmSession(
     await signal((service) => service.dismiss(ring.id, after));
     onDismissed();
   };
+  const change = useStudyAnnotationChange(guarded, () => query.refetch());
   return {
     session,
     started,
@@ -458,6 +465,7 @@ function useAlarmSession(
       card.reveal();
       void signal((service) => service.activity(ring.id)).catch(() => setError(true));
     },
+    change,
     answer: (grade: Grade) =>
       guarded(async () => {
         if (!cardId || !card.revealed) return;

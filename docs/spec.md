@@ -192,6 +192,12 @@ The same study flow on the phone and the web: show the front, reveal the back, g
 session** is a special mode of it on the phone.
 
 - Normal study follows the deck options and daily limits.
+- The study card menu on Decks, alarm sessions and awake checks sets one of Anki's seven flags
+  (red, orange, green, blue, pink, turquoise, purple) or clears it, and toggles the note's
+  `marked` tag. Flag and star icons appear in the top bar, outside the card HTML. Flags sync per
+  card and survive `.apkg` import/export; mark syncs through note tags. Browser search accepts
+  `flag:1` through `flag:7` and `is:marked`, including negation. On linked AnkiDroid decks,
+  these choices stay in the app; pulling preserves them while updating other tags.
 - On the phone, alarm sessions, awake checks and Decks study give the card the width and remaining
   height of the screen, without a frame. The compact header shows time and progress on an alarm,
   with Snooze at the end; the awake check shows time, one-card progress and seconds remaining.

@@ -204,3 +204,33 @@ test.each([
     dimensions.mockRestore();
   }
 });
+
+test("flag and mark stay in the top bar and can be cleared without answering", async () => {
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Annotations");
+        c.addBasicNote(deck.id, "word", "meaning");
+      }),
+    ),
+  );
+  await render(
+    <QueryClientProvider client={new QueryClient()}>
+      <StudyScreen deckId={state.decks.at(-1)!.id} locale="pt-BR" onExit={() => {}} />
+    </QueryClientProvider>,
+  );
+  await screen.findByLabelText("Frente");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Bandeira 5: Rosa" }));
+  await screen.findByLabelText("Bandeira 5: Rosa");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Marcar nota" }));
+  await screen.findByLabelText("Nota marcada");
+  expect(screen.getByLabelText("Frente").props.source.html).not.toContain("★");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Desmarcar nota" }));
+  await waitFor(() => expect(screen.queryByLabelText("Nota marcada")).toBeNull());
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Remover bandeira" }));
+  await waitFor(() => expect(screen.queryByLabelText("Bandeira 5: Rosa")).toBeNull());
+});

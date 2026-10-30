@@ -480,7 +480,7 @@ function cardRow(
     left,
     0,
     0,
-    0,
+    card.fields.flag.value,
     JSON.stringify(data),
   ];
 }

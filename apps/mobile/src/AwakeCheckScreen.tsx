@@ -1,4 +1,5 @@
-import { StudyMenu } from "./StudyMenu.tsx";
+import { StudyAnnotations } from "./StudyAnnotations.tsx";
+import { useStudyAnnotationChange } from "./study-annotations.ts";
 import { useQuery } from "@tanstack/react-query";
 import { awakeCheckSession, RING_POLICY, type Grade, type Locale } from "@app/core";
 import { Effect, type Layer } from "effect";
@@ -94,7 +95,12 @@ export function AwakeCheckScreen({
               {timeText(now, locale, zone, use24Hour)} ·{" "}
               {t("awakeCardProgress", { seconds: String(Math.ceil(left / 1000)) })}
             </Text>
-            <StudyMenu items={[]} locale={locale} busy={prompt.busy} />
+            <StudyAnnotations
+              next={next}
+              locale={locale}
+              busy={prompt.busy}
+              change={prompt.change}
+            />
             {prompt.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
           </View>
         ) : (
@@ -165,12 +171,14 @@ function useAwakeCheck(
     if (alreadyPassed) void guarded(pass);
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once the log says it passed.
   }, [alreadyPassed]);
+  const change = useStudyAnnotationChange(guarded, () => query.refetch());
   return {
     session,
     busy,
     error: error || query.isError,
     card,
     pass: () => guarded(pass),
+    change,
     answer: (grade: Grade) =>
       guarded(async () => {
         if (!cardId || !card.revealed) return;

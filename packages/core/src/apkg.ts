@@ -71,6 +71,7 @@ export interface AnkiPackage {
     ordinal: number;
     mtime: number;
     suspended: boolean;
+    flag?: number;
   }[];
   /** Revlog rows as log entries. Cram rows and rows without a grade or schedule change are gone. */
   revlog: ({ id: number; cardId: number; at: number } & (
@@ -246,7 +247,7 @@ async function readCollection(db: AnkiDatabase): Promise<Omit<AnkiPackage, "vers
     tags: text(r.tags).split(/\s+/).filter(Boolean),
     fields: text(r.flds).split("\x1f"),
   }));
-  const cards = (await db.all("SELECT id, nid, did, odid, ord, mod, queue FROM cards")).map(
+  const cards = (await db.all("SELECT id, nid, did, odid, ord, mod, queue, flags FROM cards")).map(
     (r) => ({
       id: int(r.id),
       noteId: int(r.nid),
@@ -254,6 +255,7 @@ async function readCollection(db: AnkiDatabase): Promise<Omit<AnkiPackage, "vers
       ordinal: int(r.ord),
       mtime: int(r.mod) * 1000,
       suspended: int(r.queue) === -1,
+      flag: int(r.flags) & 7,
     }),
   );
   const revlog: AnkiPackage["revlog"] = [];
