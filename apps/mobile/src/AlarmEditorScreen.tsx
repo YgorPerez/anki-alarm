@@ -14,6 +14,7 @@ import {
   BackHandler,
   Pressable,
   ScrollView,
+  Switch,
   Text,
   TextInput,
   ToastAndroid,
@@ -258,30 +259,43 @@ function RepeatSummaryLine({
   );
 }
 
-/** "Name — current value ›": opens the sheet that sets it. */
+/**
+ * The name above its current value, each with the row's full width so neither squeezes the other
+ * into a mid-word break. A tap opens the sheet that sets it; the switch, beside it, doesn't.
+ */
 export function EditorRow({
   label,
   value,
   onPress,
+  toggle,
 }: {
   label: string;
   value: string;
   onPress: () => void;
+  toggle?: { value: boolean; onChange: (value: boolean) => void };
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${label}, ${value}`}
-      onPress={onPress}
-      className="min-h-16 flex-row items-center justify-between gap-4 px-4 py-3"
-    >
-      <Text style={regular} className="shrink text-body text-foreground">
-        {label}
-      </Text>
-      <Text style={regular} className="shrink text-right text-body text-muted-foreground">
-        {value} ›
-      </Text>
-    </Pressable>
+    <View className="min-h-16 flex-row items-center gap-3 pr-4">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}, ${value}`}
+        onPress={onPress}
+        className="min-h-16 min-w-0 flex-1 justify-center py-3 pl-4"
+      >
+        <Text style={regular} className="text-body text-foreground">
+          {label}
+        </Text>
+        <Text style={regular} className="text-label text-muted-foreground">
+          {value}
+        </Text>
+      </Pressable>
+      {toggle && (
+        <>
+          <View className="h-8 w-px bg-border" />
+          <Switch accessibilityLabel={label} value={toggle.value} onValueChange={toggle.onChange} />
+        </>
+      )}
+    </View>
   );
 }
 

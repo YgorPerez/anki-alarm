@@ -319,6 +319,12 @@ seven day letters, and the name field. Letters are 48dp pills, Sunday first; a s
 `primary-ink` bold on `primary-tint`, the rest are foreground with no fill. Their row runs 12dp past
 the 24dp margin so seven targets fit a 360dp phone, and wraps on anything narrower.
 
+Then two `surface` blocks. The cards block: a Label "Cartões de" over the deck name in Body bold,
+at most two lines, then a hairline and N's label beside a 48dp − value + stepper whose buttons fill
+with the ground. The settings block: rows at least 64dp tall with a hairline between them, the name
+in Body above the value in Label `muted-foreground`. A row's text takes all the width left of its
+switch, which sits after a short hairline, so a label can't break mid-word at 1.3×.
+
 The phone editor has no top bar. Its settings scroll above a fixed, full-width bottom bar with a
 hairline top border and safe-area padding. Cancelar / Cancel is a neutral pill; Salvar / Save is
 the solid primary pill. Both share the width equally and follow system font scale. Saved alarms
