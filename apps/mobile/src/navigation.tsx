@@ -83,27 +83,23 @@ export function TabBar({
           className="min-h-16 flex-1 items-center justify-center gap-1 py-2"
         >
           <View
+            style={{ width: 64, height: 32, borderRadius: 16 }}
             className={
               active === name
-                ? "items-center rounded-pill bg-primary-tint px-5 py-1"
-                : "items-center rounded-pill px-5 py-1"
+                ? "items-center justify-center bg-primary-tint"
+                : "items-center justify-center"
             }
           >
-            <Text
-              style={regular}
-              className={active === name ? "text-primary-ink" : "text-muted-foreground"}
-            >
-              <Icon
-                name={name}
-                color={
-                  colors
-                    ? active === name
-                      ? colors["primary-ink"]
-                      : colors["muted-foreground"]
-                    : "currentColor"
-                }
-              />
-            </Text>
+            <Icon
+              name={name}
+              color={
+                colors
+                  ? active === name
+                    ? colors["primary-ink"]
+                    : colors["muted-foreground"]
+                  : "currentColor"
+              }
+            />
           </View>
           <Text
             style={active === name ? bold : regular}

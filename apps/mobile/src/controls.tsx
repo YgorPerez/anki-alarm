@@ -35,10 +35,10 @@ export function Button({
         style={regular}
         className={
           destructive
-            ? "text-body text-destructive"
+            ? "text-center text-body text-destructive"
             : primary
-              ? "text-body text-primary-foreground"
-              : "text-body text-foreground"
+              ? "text-center text-body text-primary-foreground"
+              : "text-center text-body text-foreground"
         }
       >
         {label}
