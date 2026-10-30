@@ -112,9 +112,10 @@ Every answer is a **review**: an immutable event with its own id (UUIDv7), the c
 AnkiDroid import, alarm session). Reviews are only ever appended. Undo appends a **void** for the
 review, and replay skips voided reviews.
 
-A card can be **buried** until the next study day starts: study and alarm sessions skip it until
-then. That is a synced card property, the time the bury ends (the start of the next study day),
-so it expires without a write. `.apkg` import reads Anki's buried queues (-2, -3) as buried until
+A card can be **buried** until the next study day starts: normal study skips it until then, and
+alarm sessions and awake checks show it only when nothing else is left. That is a synced card
+property, the time the bury ends (the start of the next study day, at a fixed 4 am, because deck
+presets have no day-boundary field), so it expires without a write. `.apkg` import reads Anki's buried queues (-2, -3) as buried until
 the study day after the card's last change; export writes a buried card in queue -3.
 
 A card's **memory state** (stability, difficulty, due date, learning step) is not stored as truth.
@@ -211,8 +212,10 @@ session** is a special mode of it on the phone.
   these choices stay in the app; pulling preserves them while updating other tags.
 - The card menu in Decks study, alarm sessions and awake checks suspends the current card or all
   cards of its note, including siblings in other decks. Suspension syncs and takes effect immediately
-  without an answer or progress toward N. The alarm and awake check show another card, keeping
-  their existing empty-deck actions if none remain. Linked cards are suspended in AnkiDroid on the
+  without an answer or progress toward N. The alarm and awake check show another card; suspended
+  cards come back last, after buried ones, only when nothing else is left, so suspending never ends
+  an alarm or passes an awake check. Their empty-deck actions are for a deck with no cards at all.
+  Linked cards are suspended in AnkiDroid on the
   next sync back, after pending answers; failed writes retry. Suspension undo restores the app's
   previous values. AnkiDroid's API has no unsuspend operation, so the phone remembers each
   suspension it sent, and a card unsuspended here stays unsuspended on pull until AnkiDroid's queue
@@ -254,7 +257,9 @@ session** is a special mode of it on the phone.
   AnkiDroid controls and editing options.
 - The card-action menu offers "Enterrar até amanhã" / "Bury until tomorrow" on all three screens.
   On an alarm or awake check the buried card leaves without counting toward N and another comes;
-  buried cards come back only when nothing else is left, so burying never ends an alarm. The web's
+  buried cards come back only when nothing else is left, so burying never ends an alarm or passes
+  an awake check. The bury lasts until a fixed 4 am, because deck presets have no day-boundary
+  field. The web's
   browser finds buried cards with `is:buried`.
 - The phone has a full editor: notes, decks, deck options. Editing note types (templates and CSS)
   is web only.
