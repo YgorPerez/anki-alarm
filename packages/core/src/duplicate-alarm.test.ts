@@ -24,3 +24,9 @@ test("duplicating preserves every setting under a new id", () => {
   expect(copy).toEqual({ ...source, id: "copy" });
   expect(source.id).toBe("source");
 });
+
+test("a duplicate drops expired skips and preserves future skips", () => {
+  const source = { ...newAlarm("source"), skip: 1000 };
+  expect(duplicateAlarm(source, "expired", 1000).skip).toBeNull();
+  expect(duplicateAlarm(source, "future", 999).skip).toBe(1000);
+});

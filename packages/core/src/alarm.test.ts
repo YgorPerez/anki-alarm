@@ -6,6 +6,7 @@ import {
   nextAlarmRing,
   parseAlarmSound,
   readAlarm,
+  clearExpiredSkip,
   skipNextRing,
   skipOffer,
   undoSkip,
@@ -196,4 +197,14 @@ describe("skip the next ring", () => {
     expect(readAlarm({ ...legacy, skip: "tomorrow" }).skip).toBeNull();
     expect(readAlarm({ ...legacy, skip: 1_800_000_000_000 }).skip).toBe(1_800_000_000_000);
   });
+});
+
+it("clears expired skips without changing future skips or the source alarm", () => {
+  const alarm = { ...newAlarm("a"), skip: 1000 };
+  expect(clearExpiredSkip(alarm, 999)).toBe(alarm);
+  expect(clearExpiredSkip(alarm, 1000)).toEqual({ ...alarm, skip: null });
+  expect(clearExpiredSkip(alarm, 1001).skip).toBeNull();
+  expect(alarm.skip).toBe(1000);
+  const fresh = newAlarm("fresh");
+  expect(clearExpiredSkip(fresh, 1001)).toBe(fresh);
 });
