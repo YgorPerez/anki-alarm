@@ -104,14 +104,12 @@ export function alarmSession({
   const right = answers.filter((a) => isRight(a.grade)).length;
   const done = right >= need;
   const decks = deckId ? deckFamily(collection, deckId) : new Set<string>();
-  // Suspended cards stay out of alarm sessions, as out of normal study.
-  const inDeck = collection.cards.filter(
-    (c) => decks.has(c.fields.deckId.value) && !c.fields.suspended.value,
-  );
-  // Burying the current card brings another without counting it. Buried cards come only when
-  // nothing else is left, so burying never ends an alarm.
-  const buried = inDeck.filter((c) => isBuried(c, now));
-  const cards = inDeck.filter((c) => !isBuried(c, now));
+  const inDeck = collection.cards.filter((c) => decks.has(c.fields.deckId.value));
+  // Burying or suspending the current card brings another without counting it. Those cards come
+  // only when nothing else is left, so neither can end an alarm or an awake check.
+  const suspended = inDeck.filter((c) => c.fields.suspended.value);
+  const buried = inDeck.filter((c) => !c.fields.suspended.value && isBuried(c, now));
+  const cards = inDeck.filter((c) => !c.fields.suspended.value && !isBuried(c, now));
   const lastAnswer = new Map(
     answers.map((a, index) => [a.cardId, { right: isRight(a.grade), index }]),
   );
@@ -153,7 +151,7 @@ export function alarmSession({
     ...missed.map((card) => ({ card, again: true })),
     // A deck smaller than N repeats the cards already right, longest ago first.
     ...answered(true).map((card) => ({ card, again: false })),
-    ...buried.map((card) => ({ card, again: false })),
+    ...[...buried, ...suspended].map((card) => ({ card, again: false })),
   ];
   const pick = done ? undefined : (order.find((o) => o.card.id === undone) ?? order[0]);
   const note = pick && collection.notes.find((n) => n.id === pick.card.fields.noteId.value);

@@ -9,6 +9,8 @@ import { AwakeCheckScreen } from "./AwakeCheckScreen.tsx";
 import { AlarmService, memoryAlarmService, type AwakeCheck, type Ring } from "./alarms.ts";
 
 const front = () => String(screen.getByLabelText("Frente").props.source.html);
+const menuEnabled = () =>
+  !screen.getByRole("button", { name: "Ações do cartão" }).props.accessibilityState?.disabled;
 /** Picks `item` from the card-action menu. */
 async function fromMenu(item: string) {
   await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
@@ -181,7 +183,10 @@ test.each(["Suspender card", "Suspender nota"])(
     expect(passed()).toBe(0);
     await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
     await fireEvent.press(screen.getByRole("button", { name: action }));
-    await screen.findByRole("button", { name: "Estou acordado" });
+    // Nothing else left: a suspended card comes back, so suspending can't pass the check.
+    await waitFor(() => expect(menuEnabled()).toBe(true));
+    expect(screen.getByLabelText("Frente")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Estou acordado" })).toBeNull();
     expect(passed()).toBe(0);
   },
 );
