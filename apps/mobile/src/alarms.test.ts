@@ -200,3 +200,17 @@ it("a quick alarm deletes itself once its ring is dismissed, and others stay", a
   expect(await Effect.runPromise(controller.list)).toEqual([alarm]);
   expect(await run(Effect.flatMap(AlarmService, (service) => service.list))).toEqual([alarm]);
 });
+
+it("restoring a deleted alarm through save restores its native schedule", async () => {
+  const native = memoryAlarmService();
+  const controller = alarmController(memoryAlarmRepository());
+  const run = <A>(effect: Effect.Effect<A, Error, AlarmService>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(native.layer)));
+  await run(controller.save(alarm));
+  await run(controller.remove(alarm.id));
+  expect(await run(Effect.flatMap(AlarmService, (service) => service.list))).toEqual([]);
+  const restored = { ...alarm, id: "restored" };
+  await run(controller.save(restored));
+  expect(await run(Effect.flatMap(AlarmService, (service) => service.list))).toEqual([restored]);
+  expect(await Effect.runPromise(controller.list)).toEqual([restored]);
+});

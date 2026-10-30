@@ -1,18 +1,16 @@
+import { AlarmSettingsRows } from "./AlarmSettingsRows.tsx";
 import { HomeScreen } from "./HomeScreen.tsx";
-import { AlarmSoundSettings } from "./AlarmSoundSettings.tsx";
-import { AlarmDeckSettings, useAlarmDecks } from "./AlarmDeckSettings.tsx";
+import { useAlarmDecks } from "./AlarmDeckSettings.tsx";
 import { AlarmEditorScreen } from "./AlarmEditorScreen.tsx";
-import { AlarmSnoozeSettings } from "./AlarmSnoozeSettings.tsx";
-import { AlarmReadAloudSettings } from "./AlarmReadAloudSettings.tsx";
 import { AlarmScreen } from "./AlarmScreen.tsx";
 import { AwakeCheckScreen } from "./AwakeCheckScreen.tsx";
-import { AlarmAwakeCheckSettings } from "./AlarmAwakeCheckSettings.tsx";
 import { ReliabilityScreen } from "./ReliabilityScreen.tsx";
 import { reliabilityCopy } from "./reliability-copy.ts";
 import { UpdateOffer } from "./UpdateOffer.tsx";
 import { AccountPanel } from "./AccountPanel.tsx";
 import { appSync } from "./app-sync.ts";
 import {
+  duplicateAlarm,
   newAlarmFor,
   quickAlarm,
   quickAlarmOptions,
@@ -71,7 +69,7 @@ const repository = {
 
 const RuntimeContext = createContext<{
   alarms: ReactNode;
-  editor: (id: string) => ReactNode;
+  editor: (id: string, duplicate?: string) => ReactNode;
   reliability: (onExit: () => void) => ReactNode;
 } | null>(null);
 function RuntimeProvider({
@@ -81,7 +79,7 @@ function RuntimeProvider({
   children,
 }: {
   alarms: ReactNode;
-  editor: (id: string) => ReactNode;
+  editor: (id: string, duplicate?: string) => ReactNode;
   reliability: (onExit: () => void) => ReactNode;
   children: ReactNode;
 }) {
@@ -97,8 +95,8 @@ export function AlarmsRoute() {
   return useRuntime().alarms;
 }
 export function AlarmEditorRoute() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  return useRuntime().editor(id);
+  const { id, duplicate } = useLocalSearchParams<{ id: string; duplicate?: string }>();
+  return useRuntime().editor(id, duplicate);
 }
 export function ReliabilityRoute() {
   const router = useRouter();
@@ -377,6 +375,11 @@ function Home({ children }: { children: ReactNode }) {
       }
       onEdit={(alarm) => router.push({ pathname: "/alarm/[id]", params: { id: alarm.id } })}
       onAdd={() => router.push({ pathname: "/alarm/[id]", params: { id: "new" } })}
+      onDuplicate={(alarm) =>
+        router.push({ pathname: "/alarm/[id]", params: { id: "new", duplicate: alarm.id } })
+      }
+      onDelete={remove}
+      onRestore={(alarm) => save({ ...alarm, id: native.createId() })}
       onToggle={toggle}
       onSkip={toggle}
       refreshing={refreshing}
@@ -416,9 +419,10 @@ function Home({ children }: { children: ReactNode }) {
     />
   );
   // The editor waits on the saved alarms: a new alarm starts with the last saved one's deck and N.
-  const editor = (id: string) => (
+  const editor = (id: string, duplicate?: string) => (
     <EditorRoute
       id={id}
+      duplicate={duplicate}
       alarms={alarmsQuery.isSuccess ? alarms : null}
       locale={locale}
       use24Hour={use24Hour}
@@ -446,6 +450,7 @@ function Home({ children }: { children: ReactNode }) {
 /** The editor route: a saved alarm by id, or "new" with Core's defaults. Leaving discards it. */
 function EditorRoute({
   id,
+  duplicate,
   alarms,
   locale,
   use24Hour,
@@ -453,6 +458,7 @@ function EditorRoute({
   onDelete,
 }: {
   id: string;
+  duplicate?: string;
   /** Null until they're read. */
   alarms: readonly Alarm[] | null;
   locale: Locale;
@@ -464,13 +470,18 @@ function EditorRoute({
   const [newId] = useState(() => native.createId());
   const lastSavedId = useUI((ui) => ui.lastSavedAlarm);
   const decks = useAlarmDecks(locale);
+  const [duplicateDraft, setDuplicateDraft] = useState<Alarm | null>(null);
+  const source = alarms?.find((item) => item.id === duplicate);
   const alarm =
-    alarms === null
-      ? undefined
-      : id === "new"
-        ? decks.data &&
-          newAlarmFor(newId, { alarms, lastSavedId, deckIds: decks.data.map((deck) => deck.id) })
-        : alarms.find((item) => item.id === id);
+    duplicateDraft ??
+    (source
+      ? duplicateAlarm(source, newId)
+      : alarms === null
+        ? undefined
+        : id === "new"
+          ? decks.data &&
+            newAlarmFor(newId, { alarms, lastSavedId, deckIds: decks.data.map((deck) => deck.id) })
+          : alarms.find((item) => item.id === id));
   if (!alarm)
     return (
       <View className="flex-1 bg-background p-6">
@@ -478,19 +489,14 @@ function EditorRoute({
       </View>
     );
   const settings = (draft: Alarm, onChange: (alarm: Alarm) => void) => (
-    <View className="gap-6">
-      <AlarmDeckSettings alarm={draft} locale={locale} onChange={onChange} />
-      <AlarmSoundSettings alarm={draft} locale={locale} onChange={onChange} />
-      <AlarmSnoozeSettings alarm={draft} locale={locale} onChange={onChange} />
-      <AlarmAwakeCheckSettings alarm={draft} locale={locale} onChange={onChange} />
-      <AlarmReadAloudSettings alarm={draft} locale={locale} onChange={onChange} />
-    </View>
+    <AlarmSettingsRows alarm={draft} locale={locale} onChange={onChange} />
   );
   return (
     <AlarmEditorScreen
       key={alarm.id}
       alarm={alarm}
-      saved={id !== "new"}
+      saved={id !== "new" && !duplicateDraft}
+      onDuplicate={(draft) => setDuplicateDraft(duplicateAlarm(draft, native.createId()))}
       locale={locale}
       hour24={use24Hour}
       onSave={onSave}

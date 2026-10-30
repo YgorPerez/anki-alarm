@@ -497,3 +497,18 @@ test("storing media writes the file and records its hash; the same bytes again q
     MediaStorageRefused,
   );
 });
+
+test("an alarm restored by a normal save survives an already pushed delete", async () => {
+  const { phone, web, sync } = await pair();
+  const alarm = { ...newAlarm("deleted"), label: "Work", deckId: "deck", need: 8 };
+  await phone.run(phone.data.saveAlarm(alarm));
+  await sync(phone, web);
+  await phone.run(phone.data.deleteAlarm(alarm.id));
+  await sync(phone, web);
+  expect(await web.run(web.data.alarms)).toEqual([]);
+  // Tombstones are permanent. Undo saves the captured settings with a fresh identity.
+  await phone.run(phone.data.saveAlarm({ ...alarm, id: "restored" }));
+  await sync(phone, web);
+  expect(await phone.run(phone.data.alarms)).toEqual([{ ...alarm, id: "restored" }]);
+  expect(await web.run(web.data.alarms)).toEqual([{ ...alarm, id: "restored" }]);
+});
