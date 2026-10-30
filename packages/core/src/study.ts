@@ -50,12 +50,7 @@ export function replayEntries(
 ): MemoryState {
   const entries = [...cardLog].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
   const voided = new Set(entries.filter((e) => e.kind === "void").map((e) => e.targetId));
-  const scheduler = fsrs({
-    request_retention: preset.fields.desiredRetention.value,
-    w: preset.fields.fsrsParameters.value,
-    enable_fuzz: false,
-    learning_steps: preset.fields.learningSteps.value.map((n) => `${n}m` as const),
-  });
+  const scheduler = schedulerFor(preset);
   let state = createEmptyCard(new Date(now));
   for (const entry of entries) {
     if (voided.has(entry.id)) continue;
@@ -85,6 +80,32 @@ export function replayEntries(
   }
   return state;
 }
+function schedulerFor(preset: Preset) {
+  return fsrs({
+    request_retention: preset.fields.desiredRetention.value,
+    w: preset.fields.fsrsParameters.value,
+    enable_fuzz: false,
+    learning_steps: preset.fields.learningSteps.value.map((n) => `${n}m` as const),
+  });
+}
+
+/** Seconds until each grade's due date, using the card's own preset, without adding reviews. */
+export function nextIntervals(
+  collection: CollectionState,
+  log: readonly LogEntry[],
+  cardId: string,
+  now: number,
+): Record<Grade, number> | undefined {
+  const card = collection.cards.find((c) => c.id === cardId);
+  const deck = collection.decks.find((d) => d.id === card?.fields.deckId.value);
+  const preset = deck && deckPreset(collection, deck);
+  if (!preset) return undefined;
+  const memory = replayCard(cardId, log, preset, now);
+  const choices = schedulerFor(preset).repeat(memory, new Date(now));
+  const seconds = (grade: Grade) => (choices[grade].card.due.getTime() - now) / 1000;
+  return { 1: seconds(1), 2: seconds(2), 3: seconds(3), 4: seconds(4) };
+}
+
 /** A card's memory state under its deck's preset, or undefined when the card is gone. */
 export function cardMemory(
   collection: CollectionState,
@@ -146,6 +167,8 @@ export function newPosition(card: Card, log: readonly LogEntry[], voided: Readon
       .map((e) => e.at),
   );
 }
+/** Whether the card is buried at `now`: `buryCard` keeps it out of study until the next day. */
+export const isBuried = (card: Card, now: number) => (card.fields.buriedUntil?.value ?? 0) > now;
 /** Local calendar arithmetic keeps the 4am boundary correct across DST. */
 export function studyDayStart(now: number, hour = 4): number {
   const date = new Date(now);
@@ -181,7 +204,7 @@ export function deckFamily(collection: CollectionState, deckId: string) {
  * The cards to study now in a deck and its subdecks, as Anki studies them. Each card schedules
  * with its own deck's preset; the daily limits are the studied deck's.
  */
-export function studyQueue(
+function studyCandidates(
   collection: CollectionState,
   log: readonly LogEntry[],
   deckId: string,
@@ -201,7 +224,7 @@ export function studyQueue(
   }
   const presetOf = (card: Card) => presets.get(card.fields.deckId.value)!;
   const cards = collection.cards.filter(
-    (c) => family.has(c.fields.deckId.value) && !c.fields.suspended?.value,
+    (c) => family.has(c.fields.deckId.value) && !c.fields.suspended?.value && !isBuried(c, now),
   );
   const voided = new Set(log.filter((e) => e.kind === "void").map((e) => e.targetId));
   // Each card replays only its own entries.
@@ -239,7 +262,7 @@ export function studyQueue(
       else if (before.state === State.Review) reviewCount++;
     }
   }
-  return cards
+  const queue = cards
     .map((card) => ({
       card,
       memory: replayCard(card.id, entries.get(card.id) ?? [], presetOf(card), now),
@@ -259,6 +282,42 @@ export function studyQueue(
           : a.memory.due.getTime() - b.memory.due.getTime()) ||
         a.card.id.localeCompare(b.card.id),
     );
+  return {
+    queue,
+    newRemaining: Math.max(0, preset.fields.newPerDay.value - newCount),
+    reviewRemaining: Math.max(0, preset.fields.reviewsPerDay.value - reviewCount),
+  };
+}
+
+export function studyQueue(
+  collection: CollectionState,
+  log: readonly LogEntry[],
+  deckId: string,
+  now: number,
+  dayStart = studyDayStart(now),
+) {
+  return studyCandidates(collection, log, deckId, now, dayStart).queue;
+}
+
+/** Cards available now, including subdecks, capped by the studied deck's remaining daily limits. */
+export function studyCounts(
+  collection: CollectionState,
+  log: readonly LogEntry[],
+  deckId: string,
+  now: number,
+) {
+  const { queue, newRemaining, reviewRemaining } = studyCandidates(collection, log, deckId, now);
+  const counts = { new: 0, learning: 0, review: 0 };
+  for (const { memory } of queue) {
+    if (memory.state === State.New) counts.new++;
+    else if (memory.state === State.Review) counts.review++;
+    else counts.learning++;
+  }
+  return {
+    ...counts,
+    new: Math.min(counts.new, newRemaining),
+    review: Math.min(counts.review, reviewRemaining),
+  };
 }
 
 /**

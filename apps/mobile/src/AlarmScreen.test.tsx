@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
+import { pressBack } from "../test/native/react-native.ts";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
 import { expect, test, vi } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Effect } from "effect";
@@ -9,6 +10,12 @@ import { AlarmScreen } from "./AlarmScreen.tsx";
 import { memoryAlarmService, type Ring } from "./alarms.ts";
 import { mediaUrl } from "./media.ts";
 
+/** Picks `item` from the card-action menu. */
+async function fromMenu(item: string) {
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: item }));
+}
+
 const front = () => String(screen.getByLabelText("Frente").props.source.html);
 async function revealAndGrade(grade: string) {
   await fireEvent(screen.getByLabelText("Frente"), "accessibilityAction", {
@@ -16,7 +23,9 @@ async function revealAndGrade(grade: string) {
   });
   // The grades wait a moment after the reveal.
   expect(screen.queryByRole("button", { name: grade })).toBeNull();
-  await fireEvent.press(await screen.findByRole("button", { name: grade }));
+  const button = await screen.findByRole("button", { name: grade });
+  expect(button.props.accessibilityHint).toMatch(/\d/);
+  await fireEvent.press(button);
 }
 
 /** A ring of an alarm on a new deck `name` with `fronts`, delivered by the memory native. */
@@ -128,6 +137,26 @@ test("Start silences the ring, cards count toward N and N right dismisses it", a
   } finally {
     await api.dispose();
   }
+});
+
+test("burying the alarm's card brings another without counting toward N", async () => {
+  const { native } = await ringing("Enterrar", ["pedra", "areia"], { need: 1 });
+  await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+  await screen.findByLabelText("Frente");
+  const first = front();
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Enterrar até amanhã" }));
+  await waitFor(() => expect(front()).not.toBe(first));
+  expect(screen.getByText(/ · 0 de 1 certos · faltam 1/)).toBeTruthy();
+  expect(native.signals()).toContain("activity:ring-Enterrar");
+  const state = await Effect.runPromise(localData((data) => data.collection));
+  const buried = state.cards.filter((c) => (c.fields.buriedUntil.value ?? 0) > Date.now());
+  expect(buried).toHaveLength(1);
+  expect(first).toContain(
+    state.notes.find((n) => n.id === buried[0]!.fields.noteId.value)!.values[0]!.value,
+  );
+  const log = await Effect.runPromise(localData((data) => data.reviewLog));
+  expect(log.filter((e) => e.kind === "review" && e.ringId === "ring-Enterrar")).toEqual([]);
 });
 
 test("the ring's clock is Home's: the system's 12 or 24 h setting, in the phone's zone", async () => {
@@ -476,4 +505,105 @@ test("an alarm without read aloud reads nothing", async () => {
     await view.unmount();
   }
   expect(reading(native.signals())).toEqual([]);
+});
+
+test.each(["Suspender cartão", "Suspender nota"])(
+  "%s replaces the alarm card without progress and can't reach the no-cards dismissal",
+  async (action) => {
+    const { dismissed } = await ringing(`Suspend ${action}`, ["first", "second"], { need: 2 });
+    await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+    await screen.findByLabelText("Frente");
+    const before = front();
+    await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+    await fireEvent.press(screen.getByRole("button", { name: action }));
+    await waitFor(() => expect(front()).not.toBe(before));
+    await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+    await fireEvent.press(screen.getByRole("button", { name: action }));
+    // Nothing else left: a suspended card comes back, so suspending can't end the alarm.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Ações do cartão" }).props.accessibilityState?.disabled,
+      ).toBeFalsy(),
+    );
+    expect(screen.getByLabelText("Frente")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Desligar" })).toBeNull();
+    expect(dismissed()).toBe(0);
+    expect(screen.getByText(/0 de 2 certos/)).toBeTruthy();
+  },
+);
+
+test("Edit note opens only after Start and Back returns to the same card, not out of the alarm", async () => {
+  const { native, dismissed } = await ringing("Editar no alarme", ["lua"], { need: 1 });
+  expect(screen.queryByRole("button", { name: "Ações do cartão" })).toBeNull();
+  await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+  await screen.findByLabelText("Frente");
+  const before = front();
+
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Editar nota" }));
+  expect((await screen.findByLabelText("Frente")).props.value).toBe("lua");
+  await act(async () => {
+    expect(pressBack()).toBe(true);
+  });
+  await waitFor(() => expect(front()).toBe(before));
+  expect(dismissed()).toBe(0);
+
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Editar nota" }));
+  const quiet = native.signals().filter((s) => s === "activity:ring-Editar no alarme").length;
+  // Typing counts as activity, so the idle time doesn't ring the alarm again mid-edit.
+  await fireEvent.changeText(await screen.findByLabelText("Frente"), "lua cheia");
+  expect(native.signals().filter((s) => s === "activity:ring-Editar no alarme").length).toBe(
+    quiet + 1,
+  );
+  await fireEvent.press(screen.getByRole("button", { name: "Salvar" }));
+  await waitFor(() => expect(front()).toContain("lua cheia"));
+  screen.getByText(/ · 0 de 1 certos · faltam 1/);
+  expect(dismissed()).toBe(0);
+});
+
+test("the active alarm card can be flagged and marked without counting an answer", async () => {
+  await ringing("Alarm annotations", ["word"], { need: 1 });
+  await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+  await screen.findByLabelText("Frente");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Bandeira 1: Vermelha" }));
+  await screen.findByLabelText("Bandeira 1: Vermelha");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Marcar nota" }));
+  await screen.findByLabelText("Nota marcada");
+  expect(front()).toContain("word");
+  expect(front()).not.toContain("★");
+  expect(screen.getByText(/0 de 1 certos/)).toBeTruthy();
+});
+
+test("Undo in the card menu takes a grade off the progress and brings its card back", async () => {
+  const { dismissed } = await ringing("Desfazer no alarme", ["sol", "mar"], { need: 2 });
+  await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+  await screen.findByLabelText("Frente");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  expect(screen.getByRole("button", { name: "Desfazer" })).toHaveProperty(
+    "props.accessibilityState.disabled",
+    true,
+  );
+  await fireEvent.press(screen.getByRole("button", { name: "Cancelar" }));
+  const first = front();
+  await revealAndGrade("Bom");
+  await screen.findByText("1 de 2 certos · faltam 1");
+  await waitFor(() => expect(front()).not.toBe(first));
+
+  await fromMenu("Desfazer");
+  await screen.findByText("0 de 2 certos · faltam 2");
+  await waitFor(() => expect(front()).toBe(first));
+  expect(screen.queryByLabelText("Verso")).toBeNull();
+  const log = await Effect.runPromise(localData((data) => data.reviewLog));
+  const review = log.findLast((e) => e.kind === "review" && e.ringId === "ring-Desfazer no alarme");
+  expect(log.at(-1)).toMatchObject({ kind: "void", targetId: review!.id });
+
+  await fromMenu("Enterrar até amanhã");
+  await waitFor(() => expect(front()).not.toBe(first));
+  await fromMenu("Desfazer");
+  await waitFor(() => expect(front()).toBe(first));
+  screen.getByText(/0 de 2 certos/);
+  expect(dismissed()).toBe(0);
 });

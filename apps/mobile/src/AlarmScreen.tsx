@@ -1,26 +1,28 @@
-import { useQuery } from "@tanstack/react-query";
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
+import { StudyMenu } from "./StudyMenu.tsx";
+import { StudyAnnotations } from "./StudyAnnotations.tsx";
+import { studyMenuItems, takeStudyAction, useStudyChange } from "./study-menu.ts";
+import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   alarmSession,
+  answerUndo,
   awakeCheckAfter,
+  type Card,
   readAloudFor,
   ringNeed,
   snoozeOffer,
   type Grade,
   type Locale,
   type ReadAloud,
+  type StudyAction,
+  type UndoStep,
 } from "@app/core";
 import { Effect, type Layer } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { AlarmService, Ring } from "./alarms.ts";
-import {
-  AlarmCard,
-  AlarmFrame,
-  PillButton,
-  useBlockBack,
-  useGuarded,
-  useReveal,
-} from "./alarm-ui.tsx";
+import { AlarmCard, AlarmFrame, PillButton, useGuarded, useAlarmStudy } from "./alarm-ui.tsx";
 import { GRADE_DELAY_MS, signalWith } from "./alarm-screen.ts";
 import { bold, regular } from "./fonts.ts";
 import { Clock, useNow } from "./clock.tsx";
@@ -103,38 +105,7 @@ export function AlarmScreen({
     <SnoozeLink offer={offer} busy={alarm.busy} locale={locale} onPress={alarm.snooze} />
   );
   if (stage === "card" && session?.next)
-    return (
-      <AlarmFrame
-        studying
-        top={
-          <View className="min-h-12 flex-row items-center justify-between px-4">
-            <View className="shrink">
-              <Text
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.5}
-                className="text-body text-foreground"
-                style={regular}
-              >
-                {time(now)} · <Progress session={session} locale={locale} />
-              </Text>
-            </View>
-            {offer && (
-              <SnoozeLink
-                compact
-                offer={offer}
-                busy={alarm.busy}
-                locale={locale}
-                onPress={alarm.snooze}
-              />
-            )}
-            {alarm.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
-          </View>
-        }
-      >
-        <SessionCard next={session.next} alarm={alarm} locale={locale} />
-      </AlarmFrame>
-    );
+    return <CardStage next={session.next} alarm={alarm} locale={locale} time={time(now)} />;
   return (
     <AlarmFrame
       top={
@@ -147,6 +118,83 @@ export function AlarmScreen({
       <View className="flex-1" />
       <StageAction stage={stage} alarm={alarm} locale={locale} />
       {snooze}
+    </AlarmFrame>
+  );
+}
+
+/**
+ * A session's card under the compact header: time, progress, Snooze and the card menu. Edit note
+ * opens the editor in place of the card; Back returns to the card.
+ */
+function CardStage({
+  next,
+  alarm,
+  locale,
+  time,
+}: {
+  next: NonNullable<Session["next"]>;
+  alarm: ReturnType<typeof useAlarmSession>;
+  locale: Locale;
+  time: string;
+}) {
+  const t = copy(locale);
+  const { session, offer } = alarm;
+  const [editing, setEditing] = useState<string>();
+  if (editing)
+    return (
+      <AlarmFrame studying top={null}>
+        <StudyNoteEditor
+          cardId={editing}
+          locale={locale}
+          onSaved={alarm.refetch}
+          onClose={() => setEditing(undefined)}
+          onActivity={alarm.activity}
+        />
+      </AlarmFrame>
+    );
+  return (
+    <AlarmFrame
+      studying
+      top={
+        <View className="min-h-12 flex-row items-center justify-between px-4">
+          <View className="shrink">
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.5}
+              className="text-body text-foreground"
+              style={regular}
+            >
+              {time} · {session && <Progress session={session} locale={locale} />}
+            </Text>
+          </View>
+          {offer && (
+            <SnoozeLink
+              compact
+              offer={offer}
+              busy={alarm.busy}
+              locale={locale}
+              onPress={alarm.snooze}
+            />
+          )}
+          <StudyAnnotations next={next} locale={locale} />
+          <StudyMenu
+            items={studyMenuItems({
+              next,
+              locale,
+              undo: { canUndo: alarm.canUndo, run: alarm.undo },
+              edit: setEditing,
+              leave: alarm.leave,
+              change: alarm.change,
+            })}
+            locale={locale}
+            busy={alarm.busy}
+          />
+          {alarm.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
+        </View>
+      }
+    >
+      <SessionCard next={next} alarm={alarm} locale={locale} />
     </AlarmFrame>
   );
 }
@@ -348,6 +396,7 @@ function useAlarmSession(
   gradeDelayMs: number,
 ) {
   const [started, setStarted] = useState(false);
+  const client = useQueryClient();
   const { busy, error, setError, guarded } = useGuarded();
   // The ring as a signal just left it, until the caller passes native's next one.
   const [local, setLocal] = useState<{ from: Ring; ring: Ring }>();
@@ -371,11 +420,10 @@ function useAlarmSession(
     });
     if (reading) void readFront(signal, reading, () => id === readingId.current).catch(() => {});
   };
-  const query = useQuery({
+  const { query, cardId, history, card } = useAlarmStudy(
     // Each snooze raises N.
-    queryKey: ["alarmSession", ring.id, current.snoozes],
-    networkMode: "always",
-    queryFn: async () => {
+    ["alarmSession", ring.id, current.snoozes],
+    async (undone) => {
       const { collection, log, alarms, events } = await Effect.runPromise(
         localData((data) =>
           Effect.all({
@@ -393,13 +441,12 @@ function useAlarmSession(
         need: ringNeed(current, events, alarms),
         ringId: ring.id,
         now: Date.now(),
+        undone,
       });
     },
-  });
+    gradeDelayMs,
+  );
   const session = query.data;
-  const cardId = session?.next?.card.id;
-  const card = useReveal(cardId, gradeDelayMs);
-  useBlockBack();
   const readsAloud = ring.alarm.readAloud;
   /** Stops a reading under way, as a snooze or leaving the screen does. */
   const stopReading = () => {
@@ -416,12 +463,42 @@ function useAlarmSession(
     [layer, readsAloud],
   );
 
+  /** A tap or edit in the session: quiets the ring again and restarts its idle time. */
+  const activity = () => {
+    void signal((service) => service.activity(ring.id)).catch(() => setError(true));
+  };
+  /**
+   * The current card goes through `change` (an answer, or a card leaving without one), then the
+   * session's next card shows, or the ring is dismissed once N are right.
+   */
+  const replaceCard = (change: (target: Card) => Promise<UndoStep>) =>
+    guarded(async () => {
+      const target = session?.next?.card;
+      if (!target) return;
+      await signal((service) => service.activity(ring.id));
+      history.replaced(await change(target));
+      card.hide();
+      const { data } = await query.refetch();
+      shownAt.current = performance.now();
+      if (data?.done) await finish();
+      else read(data?.next);
+    });
+  /**
+   * Takes the current card out of the session without an answer (suspend, bury): progress stays
+   * and the next card comes, read aloud.
+   */
+  const leave = (action: StudyAction) =>
+    replaceCard(() => {
+      stopReading();
+      return takeStudyAction(action, client);
+    });
   /** A deck with no cards can't give the awake check a card, so that dismissal skips it. */
   const finish = async (awakeCheck = true) => {
     const after = awakeCheck ? awakeCheckAfter(ring.alarm) : null;
     await signal((service) => service.dismiss(ring.id, after));
     onDismissed();
   };
+  const change = useStudyChange(guarded, () => query.refetch(), history.record);
   return {
     session,
     started,
@@ -454,21 +531,38 @@ function useAlarmSession(
     reveal: () => {
       if (!cardId) return;
       card.reveal();
-      void signal((service) => service.activity(ring.id)).catch(() => setError(true));
+      activity();
     },
-    answer: (grade: Grade) =>
-      guarded(async () => {
-        if (!cardId || !card.revealed) return;
-        await signal((service) => service.activity(ring.id));
+    leave,
+    activity,
+    refetch: () => query.refetch(),
+    change,
+    answer: async (grade: Grade) => {
+      if (!card.revealed) return;
+      await replaceCard(async (target) => {
         const durationMs = Math.max(0, performance.now() - shownAt.current);
-        await Effect.runPromise(
-          localData((data) => data.answerCard(cardId, grade, durationMs, ring.id)),
+        const entry = await Effect.runPromise(
+          localData((data) => data.answerCard(target.id, grade, durationMs, ring.id)),
         );
+        return answerUndo(entry);
+      });
+    },
+    canUndo: history.canUndo,
+    /**
+     * Reverses the session's newest answer or card-menu action: an undone grade leaves the
+     * progress, and the card comes back on its front, read aloud again.
+     */
+    undo: () =>
+      guarded(async () => {
+        if (!history.canUndo) return;
+        await signal((service) => service.activity(ring.id));
+        stopReading();
+        await history.undo();
         card.hide();
         const { data } = await query.refetch();
         shownAt.current = performance.now();
-        if (data?.done) await finish();
-        else read(data?.next);
+        read(data?.next);
+        await client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY });
       }),
     dismiss: () => guarded(() => finish(false)),
   };

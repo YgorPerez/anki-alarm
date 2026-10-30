@@ -1,3 +1,4 @@
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import type { Deck, Locale } from "@app/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Effect } from "effect";
@@ -65,8 +66,8 @@ export function LinkedDeckPanel({
       });
     }
     await Promise.all(
-      ["collection", "reviewLog", "study"].map((key) =>
-        client.invalidateQueries({ queryKey: [key] }),
+      [COLLECTION_QUERY_KEY, ["reviewLog"], ["study"]].map((queryKey) =>
+        client.invalidateQueries({ queryKey }),
       ),
     );
     busy.current = false;

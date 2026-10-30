@@ -26,6 +26,10 @@ export const androidAlarmService = Layer.succeed(AlarmService, {
   snooze: (id, minutes) => attempt(() => decodeRing(native.snooze(id, minutes) ?? "null")),
   dismiss: (id, awakeCheckAfter) => attempt(() => native.dismiss(id, awakeCheckAfter)),
   getAwakeCheck: attempt(() => decodeAwakeCheck(native.getAwakeCheck() ?? "null")),
+  awakeCheckActivity: (id) =>
+    attempt(() => {
+      native.awakeCheckActivity(id);
+    }),
   awakeCheckPassed: (id) =>
     attempt(() => {
       native.awakeCheckPassed(id);

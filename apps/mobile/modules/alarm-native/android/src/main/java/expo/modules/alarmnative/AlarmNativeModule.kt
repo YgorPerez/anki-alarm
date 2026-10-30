@@ -89,6 +89,8 @@ class AlarmNativeModule : Module() {
       }
     }
     Function("getAwakeCheck") { AwakeCheck.pending(context)?.toString() }
+    // Editing the check's note restarts its timeout. Ignores a check that isn't the pending one.
+    Function("awakeCheckActivity") { checkId: String -> AwakeCheck.activity(context, checkId) }
     // The check's card was answered, any grade. Ignores a check that isn't the pending one.
     Function("awakeCheckPassed") { checkId: String -> AwakeCheck.passed(context, checkId) }
     // Read aloud: each resolves when its reading ends, is replaced or is stopped.

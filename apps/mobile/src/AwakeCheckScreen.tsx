@@ -1,17 +1,21 @@
-import { useQuery } from "@tanstack/react-query";
-import { awakeCheckSession, RING_POLICY, type Grade, type Locale } from "@app/core";
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
+import { StudyMenu } from "./StudyMenu.tsx";
+import { StudyAnnotations } from "./StudyAnnotations.tsx";
+import { studyMenuItems, takeStudyAction, useStudyChange } from "./study-menu.ts";
+import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  awakeCheckSession,
+  RING_POLICY,
+  type Grade,
+  type Locale,
+  type StudyAction,
+} from "@app/core";
 import { Effect, type Layer } from "effect";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import type { AlarmService, AwakeCheck } from "./alarms.ts";
-import {
-  AlarmCard,
-  AlarmFrame,
-  PillButton,
-  useBlockBack,
-  useGuarded,
-  useReveal,
-} from "./alarm-ui.tsx";
+import { AlarmCard, AlarmFrame, PillButton, useGuarded, useAlarmStudy } from "./alarm-ui.tsx";
 import { GRADE_DELAY_MS, signalWith } from "./alarm-screen.ts";
 import { bold, regular } from "./fonts.ts";
 import { Clock, useNow } from "./clock.tsx";
@@ -46,8 +50,24 @@ export function AwakeCheckScreen({
   const t = copy(locale);
   const now = useNow();
   const prompt = useAwakeCheck(check, layer, onPassed, gradeDelayMs);
-  const left = Math.max(0, (check.shownAt ?? now) + TIMEOUT_MS - now);
+  // `now` ticks, so a restart can be newer than it.
+  const elapsed = now - Math.max(check.shownAt ?? now, prompt.activeAt);
+  const left = Math.min(TIMEOUT_MS, Math.max(0, TIMEOUT_MS - elapsed));
   const next = prompt.session?.next;
+  // The card whose note is open in the editor, over the card: Back returns to the card.
+  const [editing, setEditing] = useState<string>();
+  if (next && editing)
+    return (
+      <AlarmFrame studying top={null}>
+        <StudyNoteEditor
+          cardId={editing}
+          locale={locale}
+          onSaved={prompt.refetch}
+          onClose={() => setEditing(undefined)}
+          onActivity={prompt.activity}
+        />
+      </AlarmFrame>
+    );
   const top = (
     <>
       <Clock at={now} locale={locale} zone={zone} use24Hour={use24Hour} />
@@ -82,17 +102,33 @@ export function AwakeCheckScreen({
       studying={Boolean(next)}
       top={
         next ? (
-          <View className="min-h-12 justify-center px-4">
+          <View className="min-h-12 flex-row items-center justify-between px-4">
             <Text
               numberOfLines={1}
               adjustsFontSizeToFit
               minimumFontScale={0.5}
-              className="text-body text-attention"
+              className="shrink text-body text-attention"
               style={regular}
             >
               {timeText(now, locale, zone, use24Hour)} ·{" "}
               {t("awakeCardProgress", { seconds: String(Math.ceil(left / 1000)) })}
             </Text>
+            <StudyAnnotations next={next} locale={locale} />
+            <StudyMenu
+              items={studyMenuItems({
+                next,
+                locale,
+                undo: { canUndo: prompt.canUndo, run: prompt.undo },
+                edit: (cardId) => {
+                  prompt.activity();
+                  setEditing(cardId);
+                },
+                leave: prompt.leave,
+                change: prompt.change,
+              })}
+              locale={locale}
+              busy={prompt.busy}
+            />
             {prompt.error && <Text accessibilityRole="alert">{t("alarmError")}</Text>}
           </View>
         ) : (
@@ -126,13 +162,25 @@ function useAwakeCheck(
   onPassed: () => void,
   gradeDelayMs: number,
 ) {
-  const { busy, error, guarded } = useGuarded();
+  const client = useQueryClient();
+  const { busy, error, setError, guarded } = useGuarded();
   const shownAt = useRef(0);
   const signal = signalWith(layer);
-  const query = useQuery({
-    queryKey: ["awakeCheck", check.id],
-    networkMode: "always",
-    queryFn: async () => {
+  // When native last restarted the timeout. Typing sends at most one restart a second.
+  const [activeAt, setActiveAt] = useState(0);
+  const lastActivity = useRef(0);
+  const activity = () => {
+    const at = Date.now();
+    if (at - lastActivity.current < 1000) return;
+    lastActivity.current = at;
+    void signal((service) => service.awakeCheckActivity(check.id)).then(
+      () => setActiveAt(at),
+      () => setError(true),
+    );
+  };
+  const { query, cardId, history, card } = useAlarmStudy(
+    ["awakeCheck", check.id],
+    async (undone) => {
       const { collection, log } = await Effect.runPromise(
         localData((data) => Effect.all({ collection: data.collection, log: data.reviewLog })),
       );
@@ -142,17 +190,24 @@ function useAwakeCheck(
         deckId: check.alarm.deckId,
         checkId: check.id,
         now: Date.now(),
+        undone,
       });
     },
-  });
+    gradeDelayMs,
+  );
   const session = query.data;
-  const cardId = session?.next?.card.id;
-  const card = useReveal(cardId, gradeDelayMs);
-  useBlockBack();
   useEffect(() => {
     // When the card appeared, on the monotonic clock: the answer's time taken.
     if (cardId) shownAt.current = performance.now();
   }, [cardId]);
+  /** Takes the current card out without an answer (suspend, bury): the check stays, with another card. */
+  const leave = (action: StudyAction) =>
+    guarded(async () => {
+      if (!session?.next) return;
+      history.replaced(await takeStudyAction(action, client));
+      card.hide();
+      await query.refetch();
+    });
   const pass = async () => {
     await signal((service) => service.awakeCheckPassed(check.id));
     onPassed();
@@ -163,12 +218,30 @@ function useAwakeCheck(
     if (alreadyPassed) void guarded(pass);
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once the log says it passed.
   }, [alreadyPassed]);
+  const change = useStudyChange(guarded, () => query.refetch(), history.record);
   return {
     session,
     busy,
     error: error || query.isError,
     card,
     pass: () => guarded(pass),
+    leave,
+    refetch: () => query.refetch(),
+    activity,
+    activeAt,
+    change,
+    canUndo: history.canUndo,
+    /** Reverses the check's newest card-menu action; its card comes back. Answers pass the check. */
+    undo: () =>
+      guarded(async () => {
+        if (!history.canUndo) return;
+        await history.undo();
+        card.hide();
+        await Promise.all([
+          query.refetch(),
+          client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY }),
+        ]);
+      }),
     answer: (grade: Grade) =>
       guarded(async () => {
         if (!cardId || !card.revealed) return;

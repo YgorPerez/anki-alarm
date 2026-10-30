@@ -1,8 +1,13 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import type { SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import {
+  sentSuspensionKey,
+  syncBackBuries,
+  syncBackBuryPlan,
   syncBackPlan,
   syncBackQueue,
+  syncBackSuspensions,
+  type SyncBackSuspension,
   type AnkiDroidCard,
   type AnkiDroidLink,
   type AnkiDroidSource,
@@ -10,6 +15,7 @@ import {
   type CollectionState,
   type LogEntry,
   type SyncBackAnswer,
+  type SyncBackBury,
 } from "@app/core";
 import { Data, Deferred, Effect } from "effect";
 
@@ -21,6 +27,8 @@ import { inBatches, query, type CommandRejected, type StorageFailed } from "./sq
  * a failure is the provider's own error.
  */
 export interface AnkiDroidProvider {
+  /** Suspends and reads back the card; null when deleted. */
+  suspend: (action: SyncBackSuspension) => Effect.Effect<AnkiDroidCard | null, Error>;
   /** An AnkiDroid deck with its subdecks, notes, note types and cards. */
   readDeck: (ankiDeckId: number) => Effect.Effect<AnkiDroidSource, Error>;
   /** Every card of these AnkiDroid notes, with scheduling. */
@@ -30,6 +38,8 @@ export interface AnkiDroidProvider {
    * such card. AnkiDroid reports success even when the answer failed, so the reps tell.
    */
   answer: (answer: SyncBackAnswer) => Effect.Effect<AnkiDroidCard | null, Error>;
+  /** Buries the card and reads it back; `null` when AnkiDroid has no such card. */
+  bury: (bury: SyncBackBury) => Effect.Effect<AnkiDroidCard | null, Error>;
 }
 export interface SyncBackSummary {
   sent: number;
@@ -39,14 +49,19 @@ export interface SyncBackSummary {
   gone: number;
   /** Cards AnkiDroid reviewed since we last saw them. */
   snapshots: number;
+  /** Cards buried in the app that this sync back buried in AnkiDroid. */
+  buried: number;
 }
 export interface PullSummary extends SyncBackSummary {
   added: number;
   edited: number;
 }
 
-/** AnkiDroid took the answer but its reps didn't move: it didn't record it. */
-export class AnswerNotRecorded extends Data.TaggedError("AnswerNotRecorded")<{
+/**
+ * AnkiDroid took a writeback (answer, suspend, bury) but reading the card back shows no change:
+ * it didn't record it.
+ */
+export class WritebackNotRecorded extends Data.TaggedError("WritebackNotRecorded")<{
   message: string;
 }> {}
 /** Pull asked for a deck this phone didn't link. */
@@ -100,6 +115,10 @@ export function ankiDroidEngine(deps: Deps) {
         .values(batch.map((id) => ({ id })))
         .onConflictDoNothing(),
     );
+  const forgetSent = (ids: readonly string[]) =>
+    inBatches(ids, (batch) =>
+      db.delete(ankiDroidSent).where(inArray(ankiDroidSent.id, [...batch])),
+    );
 
   /** Links or pulls one AnkiDroid deck, with snapshots, seen reps and the take-over baseline. */
   const link = (source: AnkiDroidSource) =>
@@ -109,13 +128,20 @@ export function ankiDroidEngine(deps: Deps) {
         Effect.gen(function* () {
           const log = yield* deps.readLog;
           const seen = yield* readSeen;
+          const sent = yield* readSent;
           return yield* deps.runCollection(
             (c) => {
-              const linked = c.linkAnkiDroid(source, log, seen);
+              const linked = c.linkAnkiDroid(source, log, seen, sent);
               // Reviews of a deck this phone just took over were another phone's to send.
               const baseline = syncBackQueue(c.snapshot(), log, deps.deviceId, new Set())
                 .filter((a) => linked.claimed.includes(a.deckId))
                 .map((a) => a.entryId);
+              const importedNotes = new Set(source.notes.map((n) => n.id));
+              baseline.push(
+                ...syncBackSuspensions(c.snapshot(), deps.deviceId, new Set())
+                  .filter((a) => importedNotes.has(a.noteId))
+                  .map((a) => a.entryId),
+              );
               return { ...linked, baseline };
             },
             (linked) =>
@@ -123,6 +149,7 @@ export function ankiDroidEngine(deps: Deps) {
                 yield* deps.appendNew(linked.snapshots);
                 yield* storeSeen(linked.seen);
                 yield* markSent(linked.baseline);
+                yield* forgetSent(linked.released);
               }),
           );
         }),
@@ -143,10 +170,14 @@ export function ankiDroidEngine(deps: Deps) {
         }),
       );
       const queue = syncBackQueue(state, log, deps.deviceId, sent);
-      const summary: SyncBackSummary = { sent: 0, held: 0, gone: 0, snapshots: 0 };
-      if (!queue.length) return summary;
-      const cards = yield* provider.cards([...new Set(queue.map((a) => a.noteId))]);
+      const summary: SyncBackSummary = { sent: 0, held: 0, gone: 0, snapshots: 0, buried: 0 };
+      const suspensions = syncBackSuspensions(state, deps.deviceId, sent);
+      const buries = syncBackBuries(state, deps.deviceId, sent, deps.now());
+      if (!queue.length && !suspensions.length && !buries.length) return summary;
+      const noteIds = [...queue, ...buries].map((a) => a.noteId);
+      const cards = yield* provider.cards([...new Set(noteIds)]);
       const plan = syncBackPlan(state, log, queue, cards, seen, deps.now());
+      const buryPlan = syncBackBuryPlan(buries, cards);
       const reps = new Map(cards.map((c) => [key(c), c.reps]));
       const added = yield* deps.write(
         Effect.gen(function* () {
@@ -154,6 +185,7 @@ export function ankiDroidEngine(deps: Deps) {
           const byCard = new Map(queue.map((a) => [a.cardId, key(a)]));
           yield* storeSeen(plan.snapshots.map((s) => [s.cardId, reps.get(byCard.get(s.cardId)!)!]));
           yield* markSent(plan.gone.map((a) => a.entryId));
+          yield* markSent(buryPlan.done.map((b) => b.key));
           return count;
         }),
       );
@@ -164,7 +196,7 @@ export function ankiDroidEngine(deps: Deps) {
         const before = reps.get(key(answer)) ?? 0;
         const after = yield* provider.answer(answer);
         if (!after || after.reps <= before)
-          return yield* new AnswerNotRecorded({ message: "AnkiDroid didn't record the answer" });
+          return yield* new WritebackNotRecorded({ message: "AnkiDroid didn't record the answer" });
         reps.set(key(answer), after.reps);
         yield* deps.write(
           Effect.gen(function* () {
@@ -174,18 +206,35 @@ export function ankiDroidEngine(deps: Deps) {
         );
         summary.sent++;
       }
+      // Answers go first: suspending beforehand would hold their writeback indefinitely.
+      for (const action of suspensions) {
+        const after = yield* provider.suspend(action);
+        if (after && after.queue !== -1)
+          return yield* new WritebackNotRecorded({ message: "AnkiDroid didn't suspend the card" });
+        yield* deps.write(
+          markSent(after ? [action.entryId, sentSuspensionKey(action.cardId)] : [action.entryId]),
+        );
+      }
+      // Buries go after the answers: an answer would put a buried card back in AnkiDroid's queue.
+      for (const bury of buryPlan.send) {
+        const after = yield* provider.bury(bury);
+        if (after && after.queue >= 0)
+          return yield* new WritebackNotRecorded({ message: "AnkiDroid didn't record the bury" });
+        yield* deps.write(markSent([bury.key]));
+        summary.buried++;
+      }
       return summary;
     });
   // Two sync backs at once would send the same answers twice: a second joins the first.
   let running:
-    | Deferred.Deferred<SyncBackSummary, Error | StorageFailed | AnswerNotRecorded>
+    | Deferred.Deferred<SyncBackSummary, Error | StorageFailed | WritebackNotRecorded>
     | undefined;
   const syncBack = (provider: AnkiDroidProvider) =>
     Effect.suspend(() => {
       if (running) return Deferred.await(running);
       const done = Deferred.makeUnsafe<
         SyncBackSummary,
-        Error | StorageFailed | AnswerNotRecorded
+        Error | StorageFailed | WritebackNotRecorded
       >();
       running = done;
       return syncBackOnce(provider).pipe(

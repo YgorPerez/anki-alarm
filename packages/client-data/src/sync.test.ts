@@ -1,6 +1,15 @@
 /* oxlint-disable eslint/no-await-in-loop -- Devices sync one after another, in order. */
 import { DatabaseSync } from "node:sqlite";
-import { newAlarm, type AlarmEvent } from "@app/core";
+import {
+  answerUndo,
+  isBuried,
+  newAlarm,
+  popUndo,
+  pushUndo,
+  studyQueue,
+  type AlarmEvent,
+  type UndoStack,
+} from "@app/core";
 import { fakeSyncApi, memorySyncServer, type FakeSyncApi } from "@app/contracts/testing";
 import { Effect } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -172,6 +181,48 @@ test("a deck linked from AnkiDroid reaches the other device with its tags, Anki 
   expect(notes(synced)).toEqual(notes(local));
   expect(notes(synced).length).toBeGreaterThan(0);
   expect(synced.cards.filter((c) => c.anki)).toEqual(local.cards.filter((c) => c.anki));
+});
+
+test("study undo syncs as later edits: no review is lost or counted twice", async () => {
+  const { phone, web, sync, deck } = await pair();
+  const cardId = (await phone.run(phone.data.collection)).cards[0]!.id;
+  phone.clock.now = 2_000;
+  let stack: UndoStack = [];
+  const answer = await phone.run(phone.data.answerCard(cardId, 3, 1200));
+  stack = pushUndo(stack, answerUndo(answer));
+  for (const action of [
+    { kind: "setCardFlag", cardId, flag: 1 },
+    { kind: "setNoteMarked", cardId, marked: true },
+    { kind: "buryCard", cardId },
+    { kind: "suspendNote", cardId },
+  ] as const)
+    stack = pushUndo(stack, await phone.run(phone.data.studyAction(action)));
+  await sync(phone, web);
+  const onWeb = (await web.run(web.data.collection)).cards[0]!;
+  expect(onWeb.fields).toMatchObject({ flag: { value: 1 }, suspended: { value: true } });
+
+  phone.clock.now = 3_000;
+  for (let top = popUndo(stack); top; top = popUndo(stack)) {
+    await phone.run(phone.data.undoStudy(top.step));
+    stack = top.rest;
+  }
+  // The same card again, answered once more after the undo.
+  await phone.run(phone.data.answerCard(cardId, 4, 900));
+  await sync(phone, web);
+
+  for (const side of [phone, web]) {
+    const state = await side.run(side.data.collection);
+    const log = await side.run(side.data.reviewLog);
+    const [card] = state.cards;
+    expect(card!.fields).toMatchObject({ flag: { value: 0 }, suspended: { value: false } });
+    expect(isBuried(card!, 3_000)).toBe(false);
+    expect(state.notes[0]!.fields.tags.value).not.toContain("marked");
+    const voided = new Set(log.flatMap((e) => (e.kind === "void" ? [e.targetId] : [])));
+    expect(log.filter((e) => e.kind === "review" && !voided.has(e.id))).toMatchObject([
+      { cardId, grade: 4 },
+    ]);
+    expect(studyQueue(state, log, deck.id, 3_000)).toHaveLength(0);
+  }
 });
 
 test("a delete beats a later rename on the other device, and the deck stays deleted", async () => {
@@ -511,4 +562,34 @@ test("an alarm restored by a normal save survives an already pushed delete", asy
   await sync(phone, web);
   expect(await phone.run(phone.data.alarms)).toEqual([{ ...alarm, id: "restored" }]);
   expect(await web.run(web.data.alarms)).toEqual([{ ...alarm, id: "restored" }]);
+});
+
+test("flag and mark sync independently from card moves and note field edits", async () => {
+  const { phone, web, sync, note } = await pair();
+  const cardId = (await phone.run(phone.data.collection)).cards[0]!.id;
+  phone.clock.now = 2000;
+  web.clock.now = 3000;
+  await phone.run(
+    phone.data.changeCollection((c) => {
+      c.setCardFlag(cardId, 6);
+      c.setNoteMarked(note.id, true);
+    }),
+  );
+  await web.run(
+    web.data.changeCollection((c) => {
+      c.editNote(note.id, ["casa", "home"]);
+      const deck = c.createDeck("Moved");
+      c.moveCards([cardId], deck.id);
+    }),
+  );
+  await sync(phone, web, phone);
+  for (const side of [phone, web]) {
+    const state = await side.run(side.data.collection);
+    expect(state.cards[0]!.fields.flag.value).toBe(6);
+    expect(state.notes[0]!.fields.tags.value).toEqual(["marked"]);
+    expect(state.notes[0]!.values[1]!.value).toBe("home");
+    expect(state.cards[0]!.fields.deckId.value).toBe(
+      state.decks.find((d) => d.fields.name.value === "Moved")!.id,
+    );
+  }
 });

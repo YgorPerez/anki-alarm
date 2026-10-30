@@ -129,8 +129,39 @@ class AnkiDroidReader(private val resolver: ContentResolver, authority: String =
       put("time_taken", timeTakenMs)
     }
     resolver.update(Uri.withAppendedPath(base, "schedule"), values, null, null)
+    return readBack(noteId, ord)
+  }
+
+  /**
+   * Buries a card the way AnkiDroid's own Bury does (queue -3, until its next study day), then
+   * reads it back. Like answers, a failed bury still reports success: callers check the queue.
+   * null when AnkiDroid has no such card.
+   */
+  fun bury(noteId: Long, ord: Int): JSONObject? {
+    val values = ContentValues().apply {
+      put("note_id", noteId)
+      put("ord", ord)
+      // FlashCardsContract.ReviewInfo.BURY: the provider buries instead of answering.
+      put("buried", 1)
+    }
+    resolver.update(Uri.withAppendedPath(base, "schedule"), values, null, null)
+    return readBack(noteId, ord)
+  }
+
+  private fun readBack(noteId: Long, ord: Int): JSONObject? {
     val cards = cards(listOf(noteId))
     return (0 until cards.length()).map { cards.getJSONObject(it) }.firstOrNull { it.getInt("ord") == ord }
+  }
+
+  /** FlashCardsContract.ReviewInfo.SUSPEND is a write-only integer on /schedule. */
+  fun suspendCard(noteId: Long, ord: Int): JSONObject? {
+    val values = ContentValues().apply {
+      put("note_id", noteId)
+      put("ord", ord)
+      put("suspended", 1)
+    }
+    resolver.update(Uri.withAppendedPath(base, "schedule"), values, null, null)
+    return readBack(noteId, ord)
   }
 
   private fun card(c: Cursor) = JSONObject()

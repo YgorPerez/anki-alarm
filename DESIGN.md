@@ -219,7 +219,7 @@ at 1.3×.
 - **Answer** 23/32 regular, in `answer`: the revealed back.
 - **Body** 17/24: rows, buttons, normal text.
 - **Label** 15/20: deck path, counts, links, "2 de 5 certos".
-- **Caption** 13/18: grade intervals under a grade, tab labels.
+- **Caption** 13/18: grade intervals above the grade name, tab labels.
 
 Card content itself is Anki HTML with the deck's own CSS, so its type is the deck author's. On the
 alarm and in study the card renders in Anki's night mode on dark grounds (`.nightMode`,
@@ -231,21 +231,30 @@ Phone first, one column, 16–24px side margins except the full-width study card
 
 While an alarm card is showing, the top is one compact line of Body text: time, progress and a
 small Snooze link at the end. The awake check uses time, one-card progress and seconds remaining.
-Decks study uses a back link with the deck name on the left and Undo on the right.
+Decks study opens above the tabs with no Settings header. Its top bar has a back link with the
+deck name, New/Learning/Review counts in Anki blue/red/green, an Undo icon and a shared card-action
+menu. The menu stays hidden while empty; alarm and awake check use it in their compact headers
+too, with "Desfazer" first (disabled until there is something to undo) in place of an Undo icon.
+A set flag appears as a 20px flag in its Anki color and a marked note as a 20px gold star,
+between the counts/Undo area and the menu. Both have translated accessibility labels and stay
+outside the card HTML. Flag colors identify Anki metadata and are independent of the theme.
 The big clock and alarm label remain on Start; stages without cards retain their existing layout.
 
 The card fills the width and all height between the header and bottom strip, with no frame.
 Its default text stays 28px and follows system font scale; deck CSS is preserved. Short content
 leaves blank space below it and long content scrolls inside the card. A tap reveals the answer;
-a drag only scrolls. The faint hint "Toque para ver a resposta" / "Tap to see the answer" and a
-screen-reader accessibility action replace the Show answer button.
+a drag only scrolls. Decks study also has a full-width 56px "Mostrar resposta" / "Show answer"
+bar. On the alarm and awake check, the faint hint "Toque para ver a resposta" / "Tap to see the
+answer" and a screen-reader accessibility action remain available.
 
-The bottom strip reserves 64px before and after reveal. Four equal 64px grade pills share a row;
-when scaled text cannot fit, they use two rows and reserve that height on both sides of the card.
+The bottom strip reserves 56px in Decks study and 64px on the alarm and awake check, before and
+after reveal. Four equal grade pills share a row; when scaled text cannot fit, they use two rows and reserve that height on both sides of the card.
 The alarm's grade delay keeps the same space reserved. Card height never jumps on reveal.
 
 Phone screens use Expo Router with three bottom tabs, in order: Alarmes, Baralhos, Estatísticas
-(Alarms, Decks, Stats). Every tab has a Settings gear at the top. Settings groups alarm reliability,
+(Alarms, Decks, Stats). Every tab has a Settings gear at the top. Study sits outside this tab layout.
+On a deck page, the name, today's counts and Estudar / Study come before the AnkiDroid panel and
+editing options. Settings groups alarm reliability,
 theme, language, account and the update offer; theme and reliability open within its stack. The web
 uses shadcn's sidebar.
 
@@ -268,6 +277,9 @@ segments use `rounded-pill` (999px). Cards, fields, sheets, dialogs and banners 
 radius aliases, arbitrary values or dynamic class names. Inline `borderRadius` and corner radius
 properties accept only the numeric literals `16` and `999`.
 
+One recorded exception: Decks study's "Mostrar resposta" / "Show answer" bar is flat and full-width,
+with no radius. A user decision in #86.
+
 The web keeps its existing scale: pills for controls, `lg` 16px for sheets and dialogs, and `xl`
 20px for the today card. The shared radius tokens remain unchanged.
 
@@ -275,9 +287,14 @@ The web keeps its existing scale: pills for controls, `lg` 16px for sheets and d
 
 ### Grade buttons
 
-A row of four equal pills, 64px tall, label in Body bold with the interval in Caption under it:
-De novo, Difícil, Bom, Fácil, in Anki's order. They appear a few seconds after the reveal. Good is
+A row of four equal pills, 56px tall in Decks study and 64px on the alarm and awake check. Labels
+use Body bold: De novo, Difícil, Bom, Fácil, in Anki's order. The alarm delays the grades for a few
+seconds after reveal. Good is
 solid primary; the others are their hue on its tint.
+
+Each pill shows the next interval in Caption above the grade name, using Anki's localized short
+form (for example, "<1min(s)" in pt-BR and "<1m" in English). At large font scales, the pills grow
+to hold both lines; the front and grade delay reserve that same height.
 
 ### Primary and neutral buttons
 

@@ -2,8 +2,10 @@ import { describe, expect, test } from "vite-plus/test";
 import {
   alarmFromRecord,
   alarmTombstone,
+  Collection,
   mergeRecord,
   newAlarm,
+  parseRecord,
   resolveChange,
   signInPlan,
   syncSlot,
@@ -74,6 +76,31 @@ describe("mergeRecord", () => {
     expect(mergeRecord(deck("phone-a", 5), deck("phone-b", 8)).fields.linkedBy?.value).toBe(
       "phone-b",
     );
+  });
+
+  test("a bury on the phone survives a move on the web; cards stored before bury read unburied", () => {
+    const at = new Date(2026, 9, 30, 12).getTime();
+    const env = (deviceId: string) => ({
+      deviceId,
+      now: () => at,
+      random: () => new Uint8Array(16),
+    });
+    const phone = new Collection(env("phone"));
+    const deck = phone.createDeck("Words");
+    phone.addBasicNote(deck.id, "one", "um");
+    const stored = phone.snapshot().cards[0]!;
+    const web = new Collection(env("web"), phone.snapshot());
+    phone.buryCard(stored.id);
+    const other = web.createDeck("Other");
+    web.moveCards([stored.id], other.id);
+    const merged = mergeRecord(phone.snapshot().cards[0], web.snapshot().cards[0]!);
+    expect(merged.fields.buriedUntil.value).toBe(new Date(2026, 9, 31, 4).getTime());
+    expect(merged.fields.deckId.value).toBe(other.id);
+    const { buriedUntil: _, ...older } = stored.fields;
+    expect(parseRecord("cards", { id: stored.id, fields: older }).fields.buriedUntil).toEqual({
+      value: null,
+      hlc: stored.fields.ordinal.hlc,
+    });
   });
 });
 

@@ -13,7 +13,7 @@ test("card ids use the note namespace and decimal ordinal (UUIDv5)", () => {
   );
 });
 
-import { Collection } from "./index.ts";
+import { Collection, mergeRecord } from "./index.ts";
 const environment = () => {
   let n = 0;
   return {
@@ -104,4 +104,63 @@ test("imported records take UUIDv5 ids from their Anki identity", () => {
   expect(importId("deck", 1700000000001)).toBe("251484e5-82fc-52c7-a91e-62baf563233f");
   // Anki's Default deck has id 1 in every collection, so it is keyed by name.
   expect(importId("deck", 1, "Default")).toBe("e68befdc-758f-57d8-9c60-1e276eeae6d3");
+});
+
+test("suspending a note removes its cards without answers and restores their previous suspension", () => {
+  const c = new Collection(environment());
+  const deck = c.createDeck("Words");
+  const note = c.addBasicNote(deck.id, "one", "back");
+  const other = c.addBasicNote(deck.id, "two", "back");
+  const first = cardId(note.id, 0);
+  const previous = c.setCardsSuspended([first], true);
+  expect(c.snapshot().cards.find((x) => x.id === first)!.fields.suspended.value).toBe(true);
+  const change = c.suspendNote(other.id);
+  expect(c.snapshot().cards.every((x) => x.fields.suspended.value)).toBe(true);
+  c.restoreSuspension(change);
+  c.restoreSuspension(previous);
+  expect(c.snapshot().cards.every((x) => !x.fields.suspended.value)).toBe(true);
+  expect(() => c.setCardsSuspended([first, "missing"], true)).toThrow("Invalid card");
+  expect(c.snapshot().cards.every((x) => !x.fields.suspended.value)).toBe(true);
+});
+
+test("suspend note includes siblings across decks and undo preserves an already suspended sibling", () => {
+  const c = new Collection(environment());
+  const deck = c.createDeck("Words");
+  const note = c.addBasicNote(deck.id, "front", "back");
+  c.editNoteType(note.fields.noteTypeId.value, {
+    name: "Reversed",
+    fields: [
+      { name: "Front", from: 0 },
+      { name: "Back", from: 1 },
+    ],
+    css: "",
+    templates: [
+      { name: "Forward", front: "{{Front}}", back: "{{Back}}", from: 0 },
+      { name: "Reverse", front: "{{Back}}", back: "{{Front}}" },
+    ],
+  });
+  const reverse = c.snapshot().cards.find((card) => card.fields.ordinal.value === 1)!;
+  c.moveCards([reverse.id], c.createDeck("Other").id);
+  c.setCardsSuspended([reverse.id], true);
+  const previous = c.suspendNote(note.id);
+  expect(c.snapshot().cards.every((card) => card.fields.suspended.value)).toBe(true);
+  c.restoreSuspension(previous);
+  expect(c.snapshot().cards.map((card) => card.fields.suspended.value)).toEqual([false, true]);
+});
+
+test("a suspension from one device merges with another device's move of the same card", () => {
+  const phone = new Collection(environment());
+  const deck = phone.createDeck("Words");
+  const note = phone.addBasicNote(deck.id, "front", "back");
+  const shared = phone.snapshot();
+  const web = new Collection({ ...environment(), deviceId: "web" }, structuredClone(shared));
+  const other = web.createDeck("Other");
+  web.moveCards([cardId(note.id, 0)], other.id);
+  phone.suspendNote(note.id);
+  const onPhone = phone.snapshot().cards[0]!;
+  const onWeb = web.snapshot().cards[0]!;
+  for (const merged of [mergeRecord(onPhone, onWeb), mergeRecord(onWeb, onPhone)]) {
+    expect(merged.fields.suspended.value).toBe(true);
+    expect(merged.fields.deckId.value).toBe(other.id);
+  }
 });

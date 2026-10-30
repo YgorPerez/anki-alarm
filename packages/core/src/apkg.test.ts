@@ -266,7 +266,9 @@ test("Anki template syntax: sections, filters, special fields and unclosed cloze
         fields: ["<b>gato</b>", " <br> ", "猫[ねこ]"],
       },
     ],
-    cards: [{ id: 6, noteId: 5, deckId: 1, ordinal: 0, mtime: 1000, suspended: false }],
+    cards: [
+      { id: 6, noteId: 5, deckId: 1, ordinal: 0, mtime: 1000, suspended: false, buried: false },
+    ],
     revlog: [],
   };
   const collection = new Collection(environment());

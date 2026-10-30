@@ -1,7 +1,7 @@
 import { State } from "ts-fsrs";
 import type { Card, CollectionState } from "./collection.ts";
 import { importId } from "./ids.ts";
-import type { LogEntry } from "./study.ts";
+import { isBuried, type LogEntry } from "./study.ts";
 
 /**
  * What `modules/ankidroid` reads from AnkiDroid's ContentProvider (`FlashCardsContract`), close to
@@ -191,6 +191,20 @@ const voidedIn = (log: readonly LogEntry[]) =>
 const ownedDecks = (state: CollectionState, deviceId: string) =>
   state.decks.filter((d) => d.anki && d.fields.linkedBy?.value === deviceId);
 
+/** Linked cards of decks this phone linked, with AnkiDroid's note id: what sync back can reach. */
+function linkedCards(state: CollectionState, deviceId: string) {
+  const decks = new Set(ownedDecks(state, deviceId).map((d) => d.id));
+  const notes = new Map(state.notes.map((n) => [n.id, n]));
+  return new Map(
+    state.cards.flatMap((c) => {
+      const noteId = notes.get(c.fields.noteId.value)?.anki?.id;
+      return c.anki && noteId !== undefined && decks.has(c.fields.deckId.value)
+        ? [[c.id, { card: c, noteId }] as const]
+        : [];
+    }),
+  );
+}
+
 /**
  * The reviews sync back still has to send, in answer-time order: every review of a card in a deck
  * this phone linked, from any origin but import (those came from Anki), not voided and not in
@@ -202,16 +216,7 @@ export function syncBackQueue(
   deviceId: string,
   sent: ReadonlySet<string>,
 ): SyncBackAnswer[] {
-  const decks = new Set(ownedDecks(state, deviceId).map((d) => d.id));
-  const notes = new Map(state.notes.map((n) => [n.id, n]));
-  const cards = new Map(
-    state.cards.flatMap((c) => {
-      const noteId = notes.get(c.fields.noteId.value)?.anki?.id;
-      return c.anki && noteId !== undefined && decks.has(c.fields.deckId.value)
-        ? [[c.id, { card: c, noteId }] as const]
-        : [];
-    }),
-  );
+  const cards = linkedCards(state, deviceId);
   const voided = voidedIn(log);
   return (
     log
@@ -318,3 +323,74 @@ const learningStepsOf = (state: CollectionState, deckId: string) => {
   const preset = state.presets.find((p) => p.id === deck?.fields.presetId.value);
   return preset?.fields.learningSteps.value ?? [];
 };
+
+/** One field version to send once. Imported/pulled versions are baselined by the local engine. */
+export interface SyncBackSuspension {
+  entryId: string;
+  cardId: string;
+  deckId: string;
+  noteId: number;
+  ord: number;
+}
+/**
+ * Stands in what sync back sent for "AnkiDroid holds this card's suspension because we sent it".
+ * AnkiDroid's API can't unsuspend, so pull doesn't re-apply that suspension to a card unsuspended
+ * here; the key goes once AnkiDroid's queue for the card leaves suspended.
+ */
+export const sentSuspensionKey = (cardId: string) => `sent-suspension:${cardId}`;
+export function syncBackSuspensions(
+  state: CollectionState,
+  deviceId: string,
+  sent: ReadonlySet<string>,
+): SyncBackSuspension[] {
+  return [...linkedCards(state, deviceId).values()].flatMap(({ card, noteId }) => {
+    const field = card.fields.suspended;
+    const entryId = `suspend:${card.id}:${JSON.stringify(field.hlc)}`;
+    if (!field.value || sent.has(entryId)) return [];
+    const deckId = card.fields.deckId.value;
+    return [{ entryId, cardId: card.id, deckId, noteId, ord: card.fields.ordinal.value }];
+  });
+}
+/** A bury to send to AnkiDroid after the card's answers. AnkiDroid finds it by note id and ord. */
+export interface SyncBackBury {
+  /** Stands for this bury in what sync back sent: the card and the time the bury ends. */
+  key: string;
+  cardId: string;
+  /** AnkiDroid's note id. */
+  noteId: number;
+  ord: number;
+}
+/**
+ * The buries sync back still has to send: this phone's linked cards buried at `now` whose bury
+ * isn't in `sent`. A bury that already ended stays in the app; burying again sends again. A
+ * suspended card's bury waits: AnkiDroid would take the card out of its suspension to bury it.
+ */
+export function syncBackBuries(
+  state: CollectionState,
+  deviceId: string,
+  sent: ReadonlySet<string>,
+  now: number,
+): SyncBackBury[] {
+  return [...linkedCards(state, deviceId).values()].flatMap(({ card, noteId }) => {
+    const key = `bury:${card.id}:${card.fields.buriedUntil.value}`;
+    if (!isBuried(card, now) || card.fields.suspended.value || sent.has(key)) return [];
+    return [{ key, cardId: card.id, noteId, ord: card.fields.ordinal.value }];
+  });
+}
+/**
+ * Which buries to send given AnkiDroid's cards before this sync back's answers. A card out of
+ * AnkiDroid's queue (suspended or buried there) keeps its answers held and needs no bury, and a
+ * card AnkiDroid deleted has nothing to bury: both are `done`.
+ */
+export function syncBackBuryPlan(
+  buries: readonly SyncBackBury[],
+  cards: readonly AnkiDroidCard[],
+): { send: SyncBackBury[]; done: SyncBackBury[] } {
+  const there = new Map(cards.map((c) => [`${c.noteId}:${c.ord}`, c]));
+  const plan = { send: [] as SyncBackBury[], done: [] as SyncBackBury[] };
+  for (const bury of buries) {
+    const ad = there.get(`${bury.noteId}:${bury.ord}`);
+    (ad && ad.queue >= 0 ? plan.send : plan.done).push(bury);
+  }
+  return plan;
+}

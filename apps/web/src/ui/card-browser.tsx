@@ -98,7 +98,12 @@ export function CardBrowser({
               >
                 <span className="truncate text-body font-bold">{row.question || "…"}</span>
                 <span className="truncate text-label text-muted-foreground">
-                  {[row.deck, row.card, row.suspended ? t("suspended") : ""]
+                  {[
+                    row.deck,
+                    row.card,
+                    row.suspended ? t("suspended") : "",
+                    row.buried ? t("buried") : "",
+                  ]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>

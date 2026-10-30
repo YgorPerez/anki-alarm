@@ -1,13 +1,24 @@
-import { useContext } from "react";
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
+import { intervalText } from "./interval-text.ts";
+import { StudyMenu } from "./StudyMenu.tsx";
+import { StudyAnnotations } from "./StudyAnnotations.tsx";
+import { studyMenuItems, takeStudyAction, useStudyChange } from "./study-menu.ts";
+import { useUndoStack } from "./study-undo.ts";
+import { StudyCounts } from "./StudyCounts.tsx";
+import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
+import { useContext, type ReactNode } from "react";
 import { ScreenActivity } from "./screen-activity.ts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  answerUndo,
   renderCard,
   nextStudyCard,
+  nextIntervals,
+  studyCounts,
   type Grade,
   type Locale,
-  type LogEntry,
   type RenderInput,
+  type StudyAction,
 } from "@app/core";
 import { Effect } from "effect";
 import { useEffect, useRef, useState } from "react";
@@ -42,13 +53,32 @@ export function StudyScreen({
   const dark = useColorScheme() === "dark";
   const study = useStudySession(deckId, onExit);
   const { query, busy, error, canUndo, undo } = study;
+  const [editing, setEditing] = useState<string>();
   const deckName = query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value;
+  const frame = { paddingTop: insets.top, paddingBottom: insets.bottom };
+  if (editing)
+    return (
+      <View className="flex-1 bg-background" style={frame}>
+        <StudyNoteEditor
+          cardId={editing}
+          locale={locale}
+          onSaved={study.refresh}
+          onClose={() => setEditing(undefined)}
+        />
+      </View>
+    );
   return (
-    <View
-      className="flex-1 bg-background"
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
-    >
+    <View className="flex-1 bg-background" style={frame}>
       <StudyNavigation
+        annotations={<StudyAnnotations next={study.next} locale={locale} />}
+        counts={study.counts}
+        items={studyMenuItems({
+          next: study.next,
+          locale,
+          edit: setEditing,
+          leave: study.leave,
+          change: study.change,
+        })}
         title={deckName ?? t("study")}
         busy={busy}
         locale={locale}
@@ -102,7 +132,15 @@ function StudyReview({
               ...(deckName === undefined ? {} : { deckName }),
             }}
           />
-          <AnswerControls revealed={revealed} busy={busy} locale={locale} onAnswer={answer} />
+          <AnswerControls
+            intervals={study.intervals}
+            onReveal={reveal}
+            gradeHeight={56}
+            revealed={revealed}
+            busy={busy}
+            locale={locale}
+            onAnswer={answer}
+          />
         </>
       ) : (
         <Text className="text-body text-attention">
@@ -140,12 +178,18 @@ function StudyFeedback({
 }
 
 function StudyNavigation({
+  annotations,
+  counts,
+  items,
   title,
   busy,
   locale,
   onExit,
   onUndo,
 }: {
+  annotations: ReactNode;
+  counts: ReturnType<typeof studyCounts> | undefined;
+  items: Parameters<typeof StudyMenu>[0]["items"];
   title: string;
   busy: boolean;
   locale: Locale;
@@ -164,18 +208,20 @@ function StudyNavigation({
           ‹ {title}
         </Text>
       </Pressable>
-      {onUndo && (
-        <Pressable
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={() => {
-            void onUndo();
-          }}
-          className="min-h-12 justify-center px-2"
-        >
-          <Text className="text-body text-foreground">{editingCopy(locale)("undo")}</Text>
-        </Pressable>
-      )}
+      {counts && <StudyCounts counts={counts} locale={locale} />}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={editingCopy(locale)("undo")}
+        disabled={busy || !onUndo}
+        onPress={() => {
+          void onUndo?.();
+        }}
+        className="min-h-12 min-w-12 items-center justify-center px-2"
+      >
+        <Text className="text-body text-foreground">↶</Text>
+      </Pressable>
+      {annotations}
+      <StudyMenu items={items} locale={locale} busy={busy} />
     </View>
   );
 }
@@ -248,26 +294,46 @@ const gradeText = { 1: "text-again", 2: "text-hard", 3: "text-good-foreground", 
 export function AnswerControls({
   revealed,
   gradesShown = true,
+  gradeHeight = 64,
+  intervals,
+  onReveal,
   busy,
   locale,
   onAnswer,
 }: {
   revealed: boolean;
   gradesShown?: boolean;
+  gradeHeight?: 56 | 64;
+  intervals?: Record<Grade, number> | undefined;
+  onReveal?: () => void;
   busy: boolean;
   locale: Locale;
   onAnswer: (grade: Grade) => Promise<void>;
 }) {
   const t = copy(locale);
-  const rows = gradeRows(useWindowDimensions());
-  const height = rows.length === 1 ? 64 : 140;
+  const dimensions = useWindowDimensions();
+  const rows = gradeRows(dimensions);
+  const rowHeight = Math.max(gradeHeight, 42 * dimensions.fontScale + 8);
+  const height = rows.length * rowHeight + (rows.length - 1) * 12;
   if (!revealed || !gradesShown)
     return (
-      <View style={{ height }} className="items-center justify-center px-4">
-        {!revealed && (
-          <Text accessibilityLiveRegion="polite" className="text-label text-muted-foreground">
-            {t("revealHint")}
-          </Text>
+      <View style={{ height }} className="items-center justify-center">
+        {!revealed && onReveal ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={onReveal}
+            style={{ height: gradeHeight, alignSelf: "stretch" }}
+            className="items-center justify-center bg-surface"
+          >
+            <Text className="text-body text-foreground">{t("reveal")}</Text>
+          </Pressable>
+        ) : (
+          !revealed && (
+            <Text accessibilityLiveRegion="polite" className="text-label text-muted-foreground">
+              {t("revealHint")}
+            </Text>
+          )
         )}
       </View>
     );
@@ -279,12 +345,20 @@ export function AnswerControls({
             <Pressable
               key={grade}
               accessibilityRole="button"
+              accessibilityLabel={t(gradeLabels[grade])}
+              accessibilityHint={intervals ? intervalText(intervals[grade], locale) : undefined}
               disabled={busy}
               onPress={() => {
                 void onAnswer(grade);
               }}
-              className={`h-16 flex-1 items-center justify-center rounded-pill px-1 ${gradeClasses[grade]}`}
+              style={{ height: rowHeight }}
+              className={`flex-1 items-center justify-center rounded-pill px-1 ${gradeClasses[grade]}`}
             >
+              {intervals && (
+                <Text className={`text-caption ${gradeText[grade]}`}>
+                  {intervalText(intervals[grade], locale)}
+                </Text>
+              )}
               <Text className={`text-body ${gradeText[grade]}`} style={bold}>
                 {t(gradeLabels[grade])}
               </Text>
@@ -310,8 +384,8 @@ function useStudySession(deckId: string, onExit: () => void) {
   const [revealedId, setRevealedId] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
-  /** This session's answers, newest last: what Undo voids. */
-  const [answers, setAnswers] = useState<LogEntry[]>([]);
+  /** This session's answers and card-menu actions, newest last: what Undo reverses. */
+  const history = useUndoStack();
   const [undone, setUndone] = useState<string>();
   const lock = useRef(false);
   const query = useQuery({
@@ -340,12 +414,31 @@ function useStudySession(deckId: string, onExit: () => void) {
     });
     return () => handler.remove();
   }, [onExit, screenActive]);
-  async function answer(grade: Grade) {
-    if (!cardId || !revealed || lock.current) return;
+  async function refresh() {
+    await Promise.all([
+      client.invalidateQueries({ queryKey: ["study", deckId] }),
+      client.invalidateQueries({ queryKey: ["reviewLog"] }),
+    ]);
+  }
+  /** Runs one study operation at a time; a failure shows the error and keeps the card. */
+  async function guarded(operation: () => Promise<void>) {
+    if (lock.current) return;
     lock.current = true;
     setBusy(true);
     setError(false);
     try {
+      await operation();
+    } catch {
+      setError(true);
+    }
+    lock.current = false;
+    setBusy(false);
+  }
+  /** Flag or mark: the card stays, revealed or not. */
+  const change = useStudyChange(guarded, refresh, history.record);
+  async function answer(grade: Grade) {
+    if (!cardId || !revealed) return;
+    await guarded(async () => {
       const entry = await Effect.runPromise(
         localData((data) =>
           data.answerCard(
@@ -355,36 +448,41 @@ function useStudySession(deckId: string, onExit: () => void) {
           ),
         ),
       );
-      setAnswers((list) => [...list, entry]);
+      history.record(answerUndo(entry));
       setUndone(undefined);
       setRevealedId(undefined);
-      await client.invalidateQueries({ queryKey: ["study", deckId] });
-    } catch {
-      setError(true);
-    }
-    lock.current = false;
-    setBusy(false);
+      await refresh();
+    });
   }
-  async function undo() {
-    const last = answers.at(-1);
-    if (!last || lock.current) return;
-    lock.current = true;
-    setBusy(true);
-    setError(false);
-    try {
-      await Effect.runPromise(localData((data) => data.undo(last.id)));
-      setAnswers((list) => list.slice(0, -1));
-      setUndone(last.cardId);
+  /** Takes the current card out without an answer (suspend, bury); the next one comes. */
+  async function leave(action: StudyAction) {
+    if (!card) return;
+    await guarded(async () => {
+      history.record(await takeStudyAction(action, client));
       setRevealedId(undefined);
-      await client.invalidateQueries({ queryKey: ["study", deckId] });
-    } catch {
-      setError(true);
-    }
-    lock.current = false;
-    setBusy(false);
+      setUndone(undefined);
+      await refresh();
+    });
+  }
+  /** Reverses the newest answer or card-menu action; its card comes back, on its front. */
+  async function undo() {
+    if (!history.canUndo) return;
+    await guarded(async () => {
+      setUndone(await history.undo());
+      setRevealedId(undefined);
+      await Promise.all([refresh(), client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY })]);
+    });
   }
   return {
+    intervals:
+      query.data && cardId
+        ? nextIntervals(query.data.collection, query.data.log, cardId, query.data.now)
+        : undefined,
+    counts: query.data
+      ? studyCounts(query.data.collection, query.data.log, deckId, query.data.now)
+      : undefined,
     query,
+    next,
     card,
     note: next?.note,
     type: next?.type,
@@ -393,7 +491,10 @@ function useStudySession(deckId: string, onExit: () => void) {
     revealed,
     reveal: () => setRevealedId(cardId),
     answer,
-    canUndo: answers.length > 0,
+    change,
+    leave,
+    canUndo: history.canUndo,
     undo,
+    refresh,
   };
 }

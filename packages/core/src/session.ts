@@ -3,7 +3,15 @@ import { Rating, State, type Grade } from "ts-fsrs";
 import type { Alarm } from "./alarm.ts";
 import type { Card, CollectionState } from "./collection.ts";
 import { deckLanguage } from "./read-aloud.ts";
-import { deckFamily, deckPreset, newPosition, replayCard, type LogEntry } from "./study.ts";
+import {
+  deckFamily,
+  deckPreset,
+  isBuried,
+  nextIntervals,
+  newPosition,
+  replayCard,
+  type LogEntry,
+} from "./study.ts";
 
 /**
  * Fixed session timings and rules. `gradeDelaySeconds` keeps the grades hidden for a moment after
@@ -74,22 +82,34 @@ export interface AlarmSessionInput {
   need: number;
   ringId: string;
   now: number;
+  /** A card the session just undid an action on: it comes back first, as Decks study does. */
+  undone?: string | undefined;
 }
 
 /**
  * Where a ring's session stands, from the review log alone: its answers carry the ring id, so the
  * progress survives a restart. Daily limits don't apply: the session always gets its cards.
  */
-export function alarmSession({ collection, log, deckId, need, ringId, now }: AlarmSessionInput) {
+export function alarmSession({
+  collection,
+  log,
+  deckId,
+  need,
+  ringId,
+  now,
+  undone,
+}: AlarmSessionInput) {
   const voided = voidedIds(log);
   const answers = answersFor(log, ringId, voided);
   const right = answers.filter((a) => isRight(a.grade)).length;
   const done = right >= need;
   const decks = deckId ? deckFamily(collection, deckId) : new Set<string>();
-  // Suspended cards stay out of alarm sessions, as out of normal study.
-  const cards = collection.cards.filter(
-    (c) => decks.has(c.fields.deckId.value) && !c.fields.suspended.value,
-  );
+  const inDeck = collection.cards.filter((c) => decks.has(c.fields.deckId.value));
+  // Burying or suspending the current card brings another without counting it. Those cards come
+  // only when nothing else is left, so neither can end an alarm or an awake check.
+  const suspended = inDeck.filter((c) => c.fields.suspended.value);
+  const buried = inDeck.filter((c) => !c.fields.suspended.value && isBuried(c, now));
+  const cards = inDeck.filter((c) => !c.fields.suspended.value && !isBuried(c, now));
   const lastAnswer = new Map(
     answers.map((a, index) => [a.cardId, { right: isRight(a.grade), index }]),
   );
@@ -131,8 +151,9 @@ export function alarmSession({ collection, log, deckId, need, ringId, now }: Ala
     ...missed.map((card) => ({ card, again: true })),
     // A deck smaller than N repeats the cards already right, longest ago first.
     ...answered(true).map((card) => ({ card, again: false })),
+    ...[...buried, ...suspended].map((card) => ({ card, again: false })),
   ];
-  const pick = done ? undefined : order[0];
+  const pick = done ? undefined : (order.find((o) => o.card.id === undone) ?? order[0]);
   const note = pick && collection.notes.find((n) => n.id === pick.card.fields.noteId.value);
   const noteType = note && collection.noteTypes.find((t) => t.id === note.fields.noteTypeId.value);
   const deckName =
@@ -145,6 +166,7 @@ export function alarmSession({ collection, log, deckId, need, ringId, now }: Ala
       pick && note && noteType
         ? {
             ...pick,
+            intervals: nextIntervals(collection, log, pick.card.id, now),
             note,
             noteType,
             deckName,
@@ -161,15 +183,24 @@ export interface AwakeCheckInput {
   /** Native's id for the check. Its answer carries it as `ringId`, so a restart sees it passed. */
   checkId: string;
   now: number;
+  /** A card the check just undid an action on: it comes back. */
+  undone?: string | undefined;
 }
 
 /**
  * The awake check's one card, picked as a session's first card would be. Any grade passes it:
  * the answer only has to prove someone is awake.
  */
-export function awakeCheckSession({ collection, log, deckId, checkId, now }: AwakeCheckInput) {
+export function awakeCheckSession({
+  collection,
+  log,
+  deckId,
+  checkId,
+  now,
+  undone,
+}: AwakeCheckInput) {
   const passed = answersFor(log, checkId, voidedIds(log)).length > 0;
   if (passed) return { passed, next: null };
-  const { next } = alarmSession({ collection, log, deckId, need: 1, ringId: checkId, now });
+  const { next } = alarmSession({ collection, log, deckId, need: 1, ringId: checkId, now, undone });
   return { passed, next };
 }

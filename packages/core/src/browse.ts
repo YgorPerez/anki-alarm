@@ -1,6 +1,7 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh arrays are sorted. */
 import type { CollectionState } from "./collection.ts";
 import { unescapeHtml } from "./media.ts";
+import { isBuried } from "./study.ts";
 
 /** A card as the browser lists it. */
 export interface BrowseRow {
@@ -16,6 +17,9 @@ export interface BrowseRow {
   /** The template's name, or "Cloze N". */
   card: string;
   suspended: boolean;
+  /** Buried until the next study day starts. */
+  buried: boolean;
+  flag: number;
 }
 
 /**
@@ -53,20 +57,27 @@ function names(pattern: string, children: boolean) {
 /**
  * Every card matching an Anki-style search, by its note's first field. Words and quoted phrases
  * match the note's text (case, accents and HTML ignored); `deck:`, `note:`, `card:` (name or
- * number), `tag:` and `is:suspended` filter, `*` is any text, and `-` negates any term.
+ * number), `tag:`, `flag:1`…`flag:7`, `is:marked`, `is:suspended` and `is:buried` (at `now`)
+ * filter, `*` is any text, and `-` negates any term.
  */
-export function browseCards(state: CollectionState, query: string): BrowseRow[] {
+export function browseCards(state: CollectionState, query: string, now: number): BrowseRow[] {
   const decks = new Map(state.decks.map((d) => [d.id, d.fields.name.value]));
   const types = new Map(state.noteTypes.map((t) => [t.id, t]));
   const notes = new Map(state.notes.map((n) => [n.id, n]));
   const checks = terms(query).map(({ negated, term }) => {
-    const [, prefix, rest = ""] = /^(deck|note|card|tag|is):(.*)$/.exec(term) ?? [];
+    const [, prefix, rest = ""] = /^(deck|note|card|tag|is|flag):(.*)$/.exec(term) ?? [];
     const test = (row: BrowseRow, haystack: string, tags: string[], ordinal: number): boolean => {
       if (prefix === "deck") return names(rest, true)(row.deck);
       if (prefix === "note") return names(rest, false)(row.noteType);
       if (prefix === "card") return rest === String(ordinal + 1) || names(rest, false)(row.card);
       if (prefix === "tag") return tags.some(names(rest, true));
-      if (prefix === "is") return rest === "suspended" && row.suspended;
+      if (prefix === "flag") return /^[1-7]$/.test(rest) && row.flag === Number(rest);
+      if (prefix === "is")
+        return (
+          (rest === "marked" && tags.includes("marked")) ||
+          (rest === "suspended" && row.suspended) ||
+          (rest === "buried" && row.buried)
+        );
       return haystack.includes(term);
     };
     return { negated, test };
@@ -91,6 +102,8 @@ export function browseCards(state: CollectionState, query: string): BrowseRow[] 
         ? `Cloze ${ordinal + 1}`
         : (type.fields.templates.value[ordinal]?.name ?? `${ordinal + 1}`),
       suspended: card.fields.suspended.value,
+      buried: isBuried(card, now),
+      flag: card.fields.flag.value,
     };
     const haystack = fold(values.join(" "));
     const tags = note.fields.tags.value;

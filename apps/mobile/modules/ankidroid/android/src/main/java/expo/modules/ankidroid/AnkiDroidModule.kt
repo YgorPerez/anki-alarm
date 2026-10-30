@@ -63,6 +63,12 @@ class AnkiDroidModule : Module() {
       provider(promise) { AnkiDroidReader(context.contentResolver).read(deckId.toLong()).toString() }
     }
 
+    AsyncFunction("suspend") { noteId: Double, ord: Int, promise: Promise ->
+      provider(promise) {
+        AnkiDroidReader(context.contentResolver).suspendCard(noteId.toLong(), ord)?.toString() ?: "null"
+      }
+    }
+
     AsyncFunction("cards") { noteIds: List<Double>, promise: Promise ->
       provider(promise) { AnkiDroidReader(context.contentResolver).cards(noteIds.map { it.toLong() }).toString() }
     }
@@ -71,6 +77,13 @@ class AnkiDroidModule : Module() {
     AsyncFunction("answer") { noteId: Double, ord: Int, ease: Int, timeTakenMs: Double, promise: Promise ->
       provider(promise) {
         AnkiDroidReader(context.contentResolver).answer(noteId.toLong(), ord, ease, timeTakenMs.toLong())?.toString() ?: "null"
+      }
+    }
+
+    /** Sync back: one bury, then the card as AnkiDroid has it afterwards ("null" when it's gone). */
+    AsyncFunction("bury") { noteId: Double, ord: Int, promise: Promise ->
+      provider(promise) {
+        AnkiDroidReader(context.contentResolver).bury(noteId.toLong(), ord)?.toString() ?: "null"
       }
     }
   }

@@ -1,3 +1,4 @@
+import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import { useContext } from "react";
 import { ScreenActivity } from "./screen-activity.ts";
 import {
@@ -182,7 +183,7 @@ function useLinkSession(ankiDroid: AnkiDroidApi) {
       ),
     );
     if (Result.isSuccess(result)) {
-      await client.invalidateQueries({ queryKey: ["collection"] });
+      await client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY });
       setLinked({ deckId: result.success, name: deck.name });
       setMedia("idle");
     } else setLinkError(result.failure);

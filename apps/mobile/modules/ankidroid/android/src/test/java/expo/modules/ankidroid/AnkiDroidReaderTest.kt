@@ -18,6 +18,8 @@ class FakeAnkiDroid : ContentProvider() {
   val answers = mutableListOf<Map<String, Any?>>()
   /** Card 9001's reps: answering it raises them, as AnkiDroid's scheduler does. */
   var reps = 0
+  /** Card 9001's queue: burying it moves it to -3, the user-buried queue. */
+  var queue = 0
   override fun onCreate() = true
   override fun query(uri: Uri, projection: Array<String>?, selection: String?, args: Array<String>?, sort: String?): Cursor? {
     val columns = requireNotNull(projection)
@@ -36,7 +38,8 @@ class FakeAnkiDroid : ContentProvider() {
         searches += selection
         val card = { id: Long, did: Long, reps: Int -> mapOf(
           "_id" to id, "note_id" to 501L, "ord" to (id - 9001).toInt(), "deck_id" to did, "original_deck_id" to 0L,
-          "reps" to reps, "lapses" to 0, "type" to if (reps > 0) 2 else 0, "queue" to 0, "due" to 3L, "interval" to 4,
+          "reps" to reps, "lapses" to 0, "type" to if (reps > 0) 2 else 0, "queue" to if (id == 9001L) queue else 0,
+          "due" to 3L, "interval" to 4,
           "left" to 0, "fsrs_stability" to if (reps > 0) 5.5 else null, "fsrs_difficulty" to null,
           "last_review_time_secs" to if (reps > 0) 1760000000L else null,
         ) }
@@ -68,7 +71,9 @@ class FakeAnkiDroid : ContentProvider() {
     require(uri.pathSegments == listOf("schedule")) { "unexpected $uri" }
     val row = requireNotNull(values).keySet().associateWith { values.get(it) }
     answers += row
-    if (row["note_id"] == 501L && row["ord"] == 0) reps++
+    if (row["note_id"] == 501L && row["ord"] == 0) {
+      if (row["buried"] == 1) queue = -3 else reps++
+    }
     // AnkiDroid counts the row as updated whether or not the answer worked.
     return 1
   }
@@ -126,5 +131,15 @@ class AnkiDroidReaderTest {
     assertEquals(listOf("nid:501"), provider.searches)
     assertEquals(2, reader.cards(listOf(501, 501)).length())
     assertEquals(null, reader.answer(501, 5, 3, 4200))
+  }
+
+  @Test
+  fun `buries a card by note id and ord without answering it and reads it back`() {
+    val (reader, provider) = reader()
+    val card = requireNotNull(reader.bury(501, 0))
+    assertEquals(listOf(mapOf<String, Any?>("note_id" to 501L, "ord" to 0, "buried" to 1)), provider.answers)
+    assertEquals(-3, card.getInt("queue"))
+    assertEquals(0, card.getInt("reps"))
+    assertEquals(null, reader.bury(501, 5))
   }
 }
