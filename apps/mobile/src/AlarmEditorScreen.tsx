@@ -8,7 +8,6 @@ import {
   type Alarm,
   type Locale,
 } from "@app/core";
-import { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   Alert,
@@ -21,18 +20,15 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { clockText, repeatSummary, ringsInText } from "./alarm-text.ts";
+import { repeatSummary, ringsInText } from "./alarm-text.ts";
 import { Button } from "./controls.tsx";
 import { copy } from "./copy.ts";
 import { regular } from "./fonts.ts";
 import { RepeatSheet } from "./RepeatSheet.tsx";
 import { Sheet } from "./Sheet.tsx";
-import { Clock } from "./clock.tsx";
+import { TimeWheels } from "./TimeWheels.tsx";
 
 const deviceZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
-/** A wall time as an instant in UTC, which Clock shows with zone "UTC". */
-const utcTime = (hour: number, minute: number) => Date.UTC(2000, 0, 1, hour, minute);
-
 /**
  * The alarm editor, a screen of its own: the time large at the top, rows that open sheets, Save
  * and Cancel pinned at the bottom. Leaving asks before discarding unsaved changes.
@@ -92,18 +88,6 @@ export function AlarmEditorScreen({
   }, [sheet, leave]);
   const offer = skipOffer(draft, now(), zone);
   const { rule } = draft;
-  const time = clockText(rule.hour, rule.minute, hour24, locale);
-  const pickTime = () =>
-    DateTimePickerAndroid.open({
-      mode: "time",
-      // No is24Hour: the dialog follows the phone's setting.
-      value: new Date(2000, 0, 1, rule.hour, rule.minute),
-      onValueChange: (_event, date) =>
-        setDraft((current) => ({
-          ...current,
-          rule: { ...current.rule, hour: date.getHours(), minute: date.getMinutes() },
-        })),
-    });
   const save = () => {
     const at = now();
     const next = savedRule(rule, at, zone);
@@ -147,20 +131,19 @@ export function AlarmEditorScreen({
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
       <ScrollView className="flex-1" contentContainerClassName="gap-6 px-6 pb-6">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${t("time")}, ${time}`}
-          onPress={pickTime}
-          className="items-center py-4"
-        >
-          {/* Home's clock, which fits the width at large font scales. */}
-          <Clock
-            at={utcTime(rule.hour, rule.minute)}
-            locale={locale}
-            zone="UTC"
-            use24Hour={hour24}
-          />
-        </Pressable>
+        <TimeWheels
+          hour={rule.hour}
+          minute={rule.minute}
+          locale={locale}
+          hour24={hour24}
+          onChange={(hour, minute) =>
+            setDraft((current) =>
+              current.rule.hour === hour && current.rule.minute === minute
+                ? current
+                : { ...current, rule: { ...current.rule, hour, minute } },
+            )
+          }
+        />
         <View className="rounded-lg bg-surface">
           <EditorRow
             label={t("repeat")}
