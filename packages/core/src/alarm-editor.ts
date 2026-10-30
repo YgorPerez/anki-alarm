@@ -27,6 +27,25 @@ export function ringsIn(rule: AlarmRule, now: number, zone: string): RingsIn | n
   return at === null ? null : timeLeft(at - now);
 }
 
+/** Stable property and repeat-day order for an alarm's plain data, including nested values. */
+function canonical(key: string, value: unknown): unknown {
+  // Hermes has no toSorted; both arrays are fresh copies.
+  if (key === "repeatDays" && Array.isArray(value))
+    // oxlint-disable-next-line unicorn/no-array-sort
+    return [...value].sort((a, b) => Number(a) - Number(b));
+  if (value && typeof value === "object" && !Array.isArray(value))
+    // oxlint-disable-next-line unicorn/no-array-sort
+    return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)));
+  return value;
+}
+
+/**
+ * Whether two alarms hold the same values, however their keys and repeat days are ordered: the
+ * editor's "anything to discard?", since its sheets may return the same values in a new object.
+ */
+export const sameAlarmValues = (a: Alarm, b: Alarm) =>
+  JSON.stringify(a, canonical) === JSON.stringify(b, canonical);
+
 /**
  * A new alarm as the editor opens it: with the deck and N of the most recently saved alarm (the
  * newest one with a deck when that isn't known), so saving doesn't wait on picking a deck. A deck

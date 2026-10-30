@@ -18,8 +18,11 @@ const zone = "America/Sao_Paulo";
 const now = () => Date.parse("2026-10-29T02:18:00Z");
 
 /** The native scroll view behind a wheel; TalkBack only reaches the control around it. */
-const wheelScroll = (name: string) =>
-  screen.getByTestId(`time-wheel-${name}`, { includeHiddenElements: true });
+const wheelScroll = (name: string) => {
+  const [scroll] = screen.getByRole("adjustable", { name }).children;
+  if (!scroll || typeof scroll === "string") throw new Error(`${name} has no scroll view`);
+  return scroll;
+};
 
 /** The editor on its route: what it saved or deleted, and whether it left. */
 async function openEditor(
@@ -39,6 +42,7 @@ async function openEditor(
       saved={saved}
       locale={locale}
       hour24={hour24}
+      iconColor="#8c8c8c"
       now={now}
       zone={zone}
       onSave={async (next) => {
@@ -297,6 +301,26 @@ test("saved alarms offer Skip, Duplicate and Delete directly; new alarms offer n
     expect(screen.queryByRole("button", { name })).toBeNull();
 });
 
+test("a skip on a disabled alarm can be undone; with no skip, Skip stays off", async () => {
+  const off = { ...newAlarm("a"), deckId: "deck", enabled: false };
+  await openEditor(off, { saved: true });
+  screen.getByRole("button", { name: "Skip next", disabled: true });
+  const done = await openEditor(
+    { ...off, skip: Date.parse("2026-10-29T10:00:00Z") },
+    { saved: true },
+  );
+  await fireEvent.press(screen.getByRole("button", { name: "Undo skip", disabled: false }));
+  await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+  expect(done.saved[0]?.skip).toBeNull();
+});
+
+test("the name field sits on the ground with no box", async () => {
+  await openEditor(newAlarm("a"));
+  const name = screen.getByLabelText("Label");
+  for (const box of ["bg-surface", "rounded-lg", "p-4"])
+    expect(name.props.className.split(" ")).not.toContain(box);
+});
+
 test("reselecting the same repeat days leaves without a discard prompt", async () => {
   const alarm = newAlarm("a");
   const done = await openEditor({ ...alarm, rule: { ...alarm.rule, repeatDays: [5, 4, 3, 2, 1] } });
@@ -347,10 +371,10 @@ test("24-hour scrolling wraps and rounds to whole minutes, and Save uses the cur
   };
   const done = await openEditor(alarm, { locale: "pt-BR" });
   expect(screen.queryByRole("adjustable", { name: "AM/PM" })).toBeNull();
-  await fireEvent(wheelScroll("Hours"), "scroll", {
+  await fireEvent(wheelScroll("Horas"), "scroll", {
     nativeEvent: { contentOffset: { y: 72 * 76 } },
   });
-  await fireEvent(wheelScroll("Minutes"), "scroll", {
+  await fireEvent(wheelScroll("Minutos"), "scroll", {
     nativeEvent: { contentOffset: { y: 193.7 * 76 } },
   });
   expect(screen.getByRole("adjustable", { name: "Horas" }).props.accessibilityValue.text).toBe(

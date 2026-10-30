@@ -6,6 +6,7 @@ import { AlarmSoundSettings, AlarmVibrationSettings } from "./AlarmSoundSettings
 import { AlarmSnoozeSettings } from "./AlarmSnoozeSettings.tsx";
 import { AlarmAwakeCheckSettings } from "./AlarmAwakeCheckSettings.tsx";
 import { AlarmReadAloudSettings } from "./AlarmReadAloudSettings.tsx";
+import { needText } from "./alarm-text.ts";
 import { EditorRow } from "./AlarmEditorScreen.tsx";
 import { Sheet } from "./Sheet.tsx";
 import { StepperControl } from "./controls.tsx";
@@ -55,7 +56,7 @@ export function AlarmSettingsRows({
           <StepperControl
             value={alarm.need}
             text={String(alarm.need)}
-            spoken={t("needCount", { count: String(alarm.need) })}
+            spoken={needText(alarm.need, locale)}
             min={1}
             max={MAX_NEED}
             fewer={t("fewer")}
@@ -114,7 +115,6 @@ function settingsRows(alarm: Alarm, locale: Locale) {
         alarm.rampSeconds ? t("seconds", { count: String(alarm.rampSeconds) }) : t("noRamp"),
       ].join(" · "),
       Controls: AlarmSoundSettings,
-      toggle: undefined,
     },
     {
       id: "vibration",

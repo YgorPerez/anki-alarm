@@ -32,6 +32,7 @@ test("the editor duplicates its current settings without saving the source", asy
   const copies: Alarm[] = [];
   await render(
     <AlarmEditorScreen
+      iconColor="#8c8c8c"
       alarm={alarm}
       saved
       locale="pt-BR"

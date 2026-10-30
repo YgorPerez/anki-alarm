@@ -6,6 +6,7 @@ import {
   nextAlarmRing,
   onceRule,
   ringsIn,
+  sameAlarmValues,
   timeLeft,
 } from "./index.ts";
 
@@ -115,6 +116,22 @@ describe("a new alarm in the editor", () => {
       deckId: null,
       need: 5,
     });
+  });
+});
+
+describe("same alarm values", () => {
+  const alarm = { ...newAlarm("a"), rule: { hour: 6, minute: 30, repeatDays: [1, 3] } };
+
+  it("ignores key order, also inside the rule, and the order of repeat days", () => {
+    const { id, ...rest } = alarm;
+    const reordered = { ...rest, id, rule: { repeatDays: [3, 1], minute: 30, hour: 6 } };
+    expect(sameAlarmValues(alarm, reordered)).toBe(true);
+  });
+
+  it("tells changed values apart", () => {
+    expect(sameAlarmValues(alarm, { ...alarm, label: "Trabalho" })).toBe(false);
+    const otherDays = { ...alarm, rule: { ...alarm.rule, repeatDays: [1, 4] } };
+    expect(sameAlarmValues(alarm, otherDays)).toBe(false);
   });
 });
 

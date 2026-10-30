@@ -4,7 +4,7 @@ import { regular } from "./fonts.ts";
 
 /** A press target whose long press, or TalkBack action, opens a sheet of further actions. */
 export function LongPressMenu({
-  name,
+  accessibilityLabel,
   actionLabel,
   actionHint,
   items,
@@ -13,7 +13,7 @@ export function LongPressMenu({
   onOpen,
   className,
 }: {
-  name: string;
+  accessibilityLabel: string;
   actionLabel: string;
   actionHint: string;
   items: readonly {
@@ -37,7 +37,7 @@ export function LongPressMenu({
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={name}
+        accessibilityLabel={accessibilityLabel}
         accessibilityHint={items.length ? actionHint : undefined}
         accessibilityActions={items.length ? [{ name: "longpress", label: actionLabel }] : []}
         onAccessibilityAction={({ nativeEvent }) => {
