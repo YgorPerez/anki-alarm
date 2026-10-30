@@ -300,6 +300,14 @@ Name in Body, optional second line in Label (`muted-foreground`, or `attention` 
 atingido"), then three tabular counts: new in `easy-ink`, learning in `again-ink`, due in bold
 `primary-ink`; a zero is muted. Subdecks indent 20px. Rows are 64px with a hairline between them.
 
+### Alarm editor
+
+The phone editor has no top bar. Its settings scroll above a fixed, full-width bottom bar with a
+hairline top border and safe-area padding. Cancelar / Cancel is a neutral pill; Salvar / Save is
+the solid primary pill. Both share the width equally and follow system font scale. Saved alarms
+place Skip next, Duplicate and destructive Delete at the end of the scroll, apart from Save.
+Cancel and system Back ask before discarding changed values; Back closes a settings sheet first.
+
 ### Navigation
 
 Material 3 navigation bar on the phone: three destinations, the active one with a `primary-tint`

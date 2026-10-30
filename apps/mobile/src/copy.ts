@@ -60,7 +60,7 @@ const messages = {
     nextAlarm: "Próximo {time} · em {left}",
     noEnabledAlarms: "Nenhum alarme ativado",
     alarmMoreOptions: "Mais opções: {alarm}",
-    skipNext: "Pular a próxima",
+    skipNext: "Pular o próximo",
     undoSkip: "Desfazer pulo",
     skippedUntil: "Pulado · toca {date}",
     quickAlarmChip: "+{count} min",
