@@ -1,6 +1,7 @@
 import type { Locale } from "@app/core";
 import { useEffect, useState } from "react";
 import { AppState, Text, View, useWindowDimensions } from "react-native";
+import { timeParts } from "./alarm-text.ts";
 import { bold, regular } from "./fonts.ts";
 
 // The clock Home and the alarm screens share: the system's 12 or 24 h setting, in the phone's zone.
@@ -20,23 +21,6 @@ export function useNow() {
     };
   }, []);
   return now;
-}
-
-function timeParts(at: number, locale: Locale, zone: string, use24Hour: boolean) {
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: zone,
-    hour: use24Hour ? "2-digit" : "numeric",
-    minute: "2-digit",
-    hour12: !use24Hour,
-  }).formatToParts(at);
-}
-
-/** A time as one line of text, in the clock's format. */
-export function timeText(at: number, locale: Locale, zone: string, use24Hour: boolean) {
-  return timeParts(at, locale, zone, use24Hour)
-    .map((part) => part.value)
-    .join("")
-    .replace(/\s+/g, " ");
 }
 
 /**

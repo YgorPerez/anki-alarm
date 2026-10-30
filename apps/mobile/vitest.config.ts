@@ -24,6 +24,7 @@ export default defineConfig({
       ["expo-sqlite", "expo-sqlite.ts"],
       ["expo-crypto", "expo-crypto.ts"],
       ["expo-file-system", "expo-file-system.ts"],
+      ["@react-native-community/datetimepicker", "datetimepicker.ts"],
     ].map(([name, file]) => ({ find: new RegExp(`^${name}$`), replacement: standIn(file!) })),
   },
   test: {

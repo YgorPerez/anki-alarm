@@ -23,7 +23,8 @@ import {
 } from "./alarm-ui.tsx";
 import { GRADE_DELAY_MS, signalWith } from "./alarm-screen.ts";
 import { bold, regular } from "./fonts.ts";
-import { Clock, timeText, useNow } from "./clock.tsx";
+import { Clock, useNow } from "./clock.tsx";
+import { timeText } from "./alarm-text.ts";
 import { mediaUrl } from "./media.ts";
 import { copy } from "./copy.ts";
 import { localData } from "./database.ts";
