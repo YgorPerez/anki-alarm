@@ -8,6 +8,18 @@ import {
 } from "@app/core";
 import { copy } from "./copy.ts";
 
+const repeatDateFormat = (locale: Locale) =>
+  new Intl.DateTimeFormat(locale, {
+    timeZone: "UTC",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+const REPEAT_DATE_FORMATS: Record<Locale, Intl.DateTimeFormat> = {
+  "pt-BR": repeatDateFormat("pt-BR"),
+  en: repeatDateFormat("en"),
+};
+
 export function timeParts(at: number, locale: Locale, zone: string, use24Hour: boolean) {
   return new Intl.DateTimeFormat(locale, {
     timeZone: zone,
@@ -98,14 +110,9 @@ export function repeatLine(
   const date =
     rule.onceDate ?? (rule.repeatDays?.length ? null : savedRule(rule, now, zone)?.onceDate);
   if (!date) return repeatSummary(rule, context);
-  const parts = new Intl.DateTimeFormat(locale, {
-    timeZone: "UTC",
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  }).formatToParts(Date.parse(`${date}T12:00:00Z`));
+  const parts = REPEAT_DATE_FORMATS[locale].formatToParts(Date.parse(`${date}T12:00:00Z`));
   const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((item) => item.type === type)!.value.replace(".", "");
+    parts.find((item) => item.type === type)?.value.replace(".", "") ?? "";
   const day =
     locale === "en"
       ? `${part("weekday")}, ${part("month")} ${part("day")}`
@@ -139,7 +146,7 @@ export function repeatSummary(
 }
 
 /** A wait such as "7 h 12 min" or "1 d 8 h", from Core's `timeLeft`/`ringsIn`. */
-export function durationText({ days, hours, minutes }: RingsIn, locale: Locale) {
+function durationText({ days, hours, minutes }: RingsIn, locale: Locale) {
   const t = copy(locale);
   return [
     days ? t("durationDays", { count: String(days) }) : "",

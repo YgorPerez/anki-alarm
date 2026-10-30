@@ -159,9 +159,9 @@ function Wheel({
         onMomentumScrollEnd={(event) => settle(indexAt(event))}
       >
         <View>
-          {Array.from({ length: count * 5 }, (_, index) => (
+          {Array.from({ length: count * 5 }, (_, row) => row).map((row) => (
             <Text
-              key={index}
+              key={row}
               style={[
                 clock,
                 {
@@ -172,12 +172,12 @@ function Wheel({
                 },
               ]}
               className={
-                index % count === value
+                row % count === value
                   ? "text-center text-foreground"
                   : "text-center text-muted-foreground"
               }
             >
-              {format(index % count)}
+              {format(row % count)}
             </Text>
           ))}
         </View>

@@ -9,7 +9,7 @@ import {
   type Alarm,
   type Locale,
 } from "@app/core";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useEffectEvent, useState, type ReactNode } from "react";
 import {
   Alert,
   BackHandler,
@@ -81,15 +81,18 @@ export function AlarmEditorScreen({
       { text: t("discard"), style: "destructive", onPress: onClose },
     ]);
   }, [busy, dirty, onClose, t]);
+  const onBack = useEffectEvent(() => {
+    // Native Modal consumes Back first; keep the same priority in screen tests.
+    if (repeatOpen) setRepeatOpen(false);
+    else leave();
+  });
   useEffect(() => {
     const handler = BackHandler.addEventListener("hardwareBackPress", () => {
-      // Native Modal consumes Back first; keep the same priority in screen tests.
-      if (repeatOpen) setRepeatOpen(false);
-      else leave();
+      onBack();
       return true;
     });
     return () => handler.remove();
-  }, [repeatOpen, leave]);
+  }, []);
   const offer = skipOffer(draft, now(), zone);
   const { rule } = draft;
   const setRepeat = (repeat: Pick<Alarm["rule"], "repeatDays" | "onceDate">) =>

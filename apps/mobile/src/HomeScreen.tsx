@@ -196,6 +196,62 @@ function AlarmCard({
   );
 }
 
+function HomeHeader({
+  next,
+  locale,
+  zone,
+  use24Hour,
+  banner,
+  error,
+  setup,
+  showEmptyState,
+  hasDecks,
+  onAdd,
+}: {
+  next: ReturnType<typeof nextAlarmRing>;
+  locale: Locale;
+  zone: string;
+  use24Hour: boolean;
+  banner?: ReactNode;
+  error?: string;
+  setup?: DeckSetup;
+  showEmptyState: boolean;
+  hasDecks: boolean;
+  onAdd: () => void;
+}) {
+  const t = copy(locale);
+  return (
+    <View className="gap-4 pb-4">
+      <View className="items-center gap-2 py-8">
+        <Text
+          accessibilityRole="header"
+          style={bold}
+          className="text-title text-foreground text-center"
+        >
+          {next
+            ? t("alarmCountdown", { time: countdownText(timeLeft(next.remainingMs), locale) })
+            : t("noEnabledAlarms")}
+        </Text>
+        {next && (
+          <Text style={regular} className="text-body text-muted-foreground text-center">
+            {dayText(next.at, locale, zone)} ·{" "}
+            <Text style={clock}>{timeText(next.at, locale, zone, use24Hour)}</Text>
+          </Text>
+        )}
+      </View>
+      {banner}
+      {error ? (
+        <Text style={regular} accessibilityRole="alert" className="text-body text-attention">
+          {error}
+        </Text>
+      ) : null}
+      {setup && showEmptyState ? (
+        <HomeEmptyState locale={locale} hasDecks={hasDecks} setup={setup} onAdd={onAdd} />
+      ) : null}
+    </View>
+  );
+}
+
 export function HomeScreen({
   alarms,
   decks,
@@ -262,39 +318,18 @@ export function HomeScreen({
         refreshing={refreshing ?? false}
         onRefresh={onRefresh}
         ListHeaderComponent={
-          <View className="gap-4 pb-4">
-            <View className="items-center gap-2 py-8">
-              <Text
-                accessibilityRole="header"
-                style={bold}
-                className="text-title text-foreground text-center"
-              >
-                {next
-                  ? t("alarmCountdown", { time: countdownText(timeLeft(next.remainingMs), locale) })
-                  : t("noEnabledAlarms")}
-              </Text>
-              {next && (
-                <Text style={regular} className="text-body text-muted-foreground text-center">
-                  {dayText(next.at, locale, zone)} ·{" "}
-                  <Text style={clock}>{timeText(next.at, locale, zone, use24Hour)}</Text>
-                </Text>
-              )}
-            </View>
-            {banner}
-            {error ? (
-              <Text style={regular} accessibilityRole="alert" className="text-body text-attention">
-                {error}
-              </Text>
-            ) : null}
-            {setup && (needsDeck || !visibleAlarms.length) ? (
-              <HomeEmptyState
-                locale={locale}
-                hasDecks={decks.length > 0}
-                setup={setup}
-                onAdd={onAdd}
-              />
-            ) : null}
-          </View>
+          <HomeHeader
+            next={next}
+            locale={locale}
+            zone={zone}
+            use24Hour={use24Hour}
+            banner={banner}
+            error={error}
+            setup={setup}
+            showEmptyState={needsDeck || !visibleAlarms.length}
+            hasDecks={decks.length > 0}
+            onAdd={onAdd}
+          />
         }
         renderItem={({ item }) => (
           <SwipeAlarm
