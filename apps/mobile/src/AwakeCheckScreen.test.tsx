@@ -8,6 +8,13 @@ import { localData } from "./database.ts";
 import { AwakeCheckScreen } from "./AwakeCheckScreen.tsx";
 import { AlarmService, memoryAlarmService, type AwakeCheck, type Ring } from "./alarms.ts";
 
+const front = () => String(screen.getByLabelText("Frente").props.source.html);
+/** Picks `item` from the card-action menu. */
+async function fromMenu(item: string) {
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: item }));
+}
+
 /** A ring dismissed with the awake check on, its prompt now showing. */
 async function shownCheck(ringId: string, deckId: string | null) {
   const ring: Ring = {
@@ -232,6 +239,42 @@ test("flagging and marking the awake check card keeps the check open", async () 
   await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
   await fireEvent.press(screen.getByRole("button", { name: "Marcar nota" }));
   await screen.findByLabelText("Nota marcada");
+  expect(passed()).toBe(0);
+  expect(native.awakeCheck()).not.toBeNull();
+});
+
+test("Undo brings back a card buried or suspended on the check, which stays open", async () => {
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Noite");
+        c.addBasicNote(deck.id, "estrela", "star");
+        c.addBasicNote(deck.id, "cometa", "comet");
+      }),
+    ),
+  );
+  const deckId = state.decks.find((d) => d.fields.name.value === "Noite")!.id;
+  const { native, check } = await shownCheck("ring-undo", deckId);
+  const passed = await show(check, native.layer);
+  await screen.findByLabelText("Frente");
+  const first = front();
+  await fromMenu("Enterrar até amanhã");
+  await waitFor(() => expect(front()).not.toBe(first));
+  await fromMenu("Desfazer");
+  await waitFor(() => expect(front()).toBe(first));
+  await fromMenu("Suspender nota");
+  await waitFor(() => expect(front()).not.toBe(first));
+  await fromMenu("Desfazer");
+  await waitFor(() => expect(front()).toBe(first));
+  const after = await Effect.runPromise(localData((data) => data.collection));
+  expect(
+    after.cards
+      .filter((c) => c.fields.deckId.value === deckId)
+      .map((c) => [c.fields.suspended.value, c.fields.buriedUntil.value]),
+  ).toEqual([
+    [false, null],
+    [false, null],
+  ]);
   expect(passed()).toBe(0);
   expect(native.awakeCheck()).not.toBeNull();
 });

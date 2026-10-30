@@ -3,21 +3,22 @@ import { StudyMenu } from "./StudyMenu.tsx";
 import { buryItem, buryStudyCard } from "./study-actions.ts";
 import { StudyAnnotations } from "./StudyAnnotations.tsx";
 import { annotationItems, useStudyAnnotationChange } from "./study-annotations.ts";
+import { undoItem } from "./study-undo.ts";
 import { StudyNoteEditor } from "./StudyNoteEditor.tsx";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { awakeCheckSession, RING_POLICY, type Card, type Grade, type Locale } from "@app/core";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  awakeCheckSession,
+  RING_POLICY,
+  type Card,
+  type Grade,
+  type Locale,
+  type UndoStep,
+} from "@app/core";
 import { Effect, type Layer } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import type { AlarmService, AwakeCheck } from "./alarms.ts";
-import {
-  AlarmCard,
-  AlarmFrame,
-  PillButton,
-  useBlockBack,
-  useGuarded,
-  useReveal,
-} from "./alarm-ui.tsx";
+import { AlarmCard, AlarmFrame, PillButton, useGuarded, useAlarmStudy } from "./alarm-ui.tsx";
 import { GRADE_DELAY_MS, signalWith } from "./alarm-screen.ts";
 import { bold, regular } from "./fonts.ts";
 import { Clock, useNow } from "./clock.tsx";
@@ -115,6 +116,7 @@ export function AwakeCheckScreen({
             <StudyAnnotations next={next} locale={locale} />
             <StudyMenu
               items={[
+                undoItem(locale, prompt.canUndo, prompt.undo),
                 { id: "editNote", label: t("editNote"), onPress: () => setEditing(next.card.id) },
                 ...suspensionItems(locale, prompt.suspend),
                 buryItem(locale, prompt.bury),
@@ -160,10 +162,9 @@ function useAwakeCheck(
   const { busy, error, guarded } = useGuarded();
   const shownAt = useRef(0);
   const signal = signalWith(layer);
-  const query = useQuery({
-    queryKey: ["awakeCheck", check.id],
-    networkMode: "always",
-    queryFn: async () => {
+  const { query, cardId, history, card } = useAlarmStudy(
+    ["awakeCheck", check.id],
+    async (undone) => {
       const { collection, log } = await Effect.runPromise(
         localData((data) => Effect.all({ collection: data.collection, log: data.reviewLog })),
       );
@@ -173,23 +174,22 @@ function useAwakeCheck(
         deckId: check.alarm.deckId,
         checkId: check.id,
         now: Date.now(),
+        undone,
       });
     },
-  });
+    gradeDelayMs,
+  );
   const session = query.data;
-  const cardId = session?.next?.card.id;
-  const card = useReveal(cardId, gradeDelayMs);
-  useBlockBack();
   useEffect(() => {
     // When the card appeared, on the monotonic clock: the answer's time taken.
     if (cardId) shownAt.current = performance.now();
   }, [cardId]);
   /** Takes the current card out without an answer (suspend, bury): the check stays, with another card. */
-  const leaveCard = (change: (target: Card) => Promise<void>) =>
+  const leaveCard = (change: (target: Card) => Promise<UndoStep>) =>
     guarded(async () => {
       const target = session?.next?.card;
       if (!target) return;
-      await change(target);
+      history.replaced(await change(target));
       card.hide();
       await query.refetch();
     });
@@ -203,7 +203,7 @@ function useAwakeCheck(
     if (alreadyPassed) void guarded(pass);
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once the log says it passed.
   }, [alreadyPassed]);
-  const change = useStudyAnnotationChange(guarded, () => query.refetch());
+  const change = useStudyAnnotationChange(guarded, () => query.refetch(), history.record);
   return {
     session,
     busy,
@@ -214,6 +214,18 @@ function useAwakeCheck(
       leaveCard((target) => suspendStudyCard(target, scope, client)),
     refetch: () => query.refetch(),
     change,
+    canUndo: history.canUndo,
+    /** Reverses the check's newest card-menu action; its card comes back. Answers pass the check. */
+    undo: () =>
+      guarded(async () => {
+        if (!history.canUndo) return;
+        await history.undo();
+        card.hide();
+        await Promise.all([
+          query.refetch(),
+          client.invalidateQueries({ queryKey: ["collection"] }),
+        ]);
+      }),
     answer: (grade: Grade) =>
       guarded(async () => {
         if (!cardId || !card.revealed) return;

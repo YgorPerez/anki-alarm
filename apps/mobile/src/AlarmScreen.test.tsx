@@ -10,6 +10,12 @@ import { AlarmScreen } from "./AlarmScreen.tsx";
 import { memoryAlarmService, type Ring } from "./alarms.ts";
 import { mediaUrl } from "./media.ts";
 
+/** Picks `item` from the card-action menu. */
+async function fromMenu(item: string) {
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: item }));
+}
+
 const front = () => String(screen.getByLabelText("Frente").props.source.html);
 async function revealAndGrade(grade: string) {
   await fireEvent(screen.getByLabelText("Frente"), "accessibilityAction", {
@@ -562,4 +568,35 @@ test("the active alarm card can be flagged and marked without counting an answer
   expect(front()).toContain("word");
   expect(front()).not.toContain("★");
   expect(screen.getByText(/0 de 1 certos/)).toBeTruthy();
+});
+
+test("Undo in the card menu takes a grade off the progress and brings its card back", async () => {
+  const { dismissed } = await ringing("Desfazer no alarme", ["sol", "mar"], { need: 2 });
+  await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+  await screen.findByLabelText("Frente");
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  expect(screen.getByRole("button", { name: "Desfazer" })).toHaveProperty(
+    "props.accessibilityState.disabled",
+    true,
+  );
+  await fireEvent.press(screen.getByRole("button", { name: "Cancelar" }));
+  const first = front();
+  await revealAndGrade("Bom");
+  await screen.findByText("1 de 2 certos · faltam 1");
+  await waitFor(() => expect(front()).not.toBe(first));
+
+  await fromMenu("Desfazer");
+  await screen.findByText("0 de 2 certos · faltam 2");
+  await waitFor(() => expect(front()).toBe(first));
+  expect(screen.queryByLabelText("Verso")).toBeNull();
+  const log = await Effect.runPromise(localData((data) => data.reviewLog));
+  const review = log.findLast((e) => e.kind === "review" && e.ringId === "ring-Desfazer no alarme");
+  expect(log.at(-1)).toMatchObject({ kind: "void", targetId: review!.id });
+
+  await fromMenu("Enterrar até amanhã");
+  await waitFor(() => expect(front()).not.toBe(first));
+  await fromMenu("Desfazer");
+  await waitFor(() => expect(front()).toBe(first));
+  screen.getByText(/0 de 2 certos/);
+  expect(dismissed()).toBe(0);
 });

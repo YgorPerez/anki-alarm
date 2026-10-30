@@ -7,6 +7,14 @@ import { fakeSyncApi } from "@app/contracts/testing";
 import { localData } from "./database.ts";
 import { AnswerControls, StudyScreen } from "./StudyScreen.tsx";
 
+const frontHtml = () => String(screen.getByLabelText("Frente").props.source.html);
+const undoButton = () => screen.getByRole("button", { name: "Desfazer" });
+/** Picks `item` from the card-action menu. */
+async function fromMenu(item: string) {
+  await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
+  await fireEvent.press(screen.getByRole("button", { name: item }));
+}
+
 test.each([1, 2, 3, 4] as const)(
   "reveals before grade %i and commits a phone review while the sync API is offline",
   async (grade) => {
@@ -370,4 +378,54 @@ test("flag and mark stay in the top bar and can be cleared without answering", a
   await fireEvent.press(screen.getByRole("button", { name: "Ações do cartão" }));
   await fireEvent.press(screen.getByRole("button", { name: "Remover bandeira" }));
   await waitFor(() => expect(screen.queryByLabelText("Bandeira 5: Rosa")).toBeNull());
+});
+
+test("Undo reverses suspend, bury, flag and mark too, newest first, and the card comes back", async () => {
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Undo actions");
+        c.addBasicNote(deck.id, "sol", "sun");
+        c.addBasicNote(deck.id, "mar", "sea");
+      }),
+    ),
+  );
+  const deck = state.decks.find((d) => d.fields.name.value === "Undo actions")!;
+  await render(
+    <QueryClientProvider client={new QueryClient()}>
+      <StudyScreen deckId={deck.id} locale="pt-BR" onExit={() => {}} />
+    </QueryClientProvider>,
+  );
+  await screen.findByLabelText("Frente");
+  const first = frontHtml();
+  await fromMenu("Bandeira 5: Rosa");
+  await screen.findByLabelText("Bandeira 5: Rosa");
+  await fromMenu("Marcar nota");
+  await screen.findByLabelText("Nota marcada");
+  await fromMenu("Suspender card");
+  await waitFor(() => expect(frontHtml()).not.toBe(first));
+
+  await fireEvent.press(undoButton());
+  await waitFor(() => expect(frontHtml()).toBe(first));
+  screen.getByLabelText("Bandeira 5: Rosa");
+  screen.getByLabelText("Nota marcada");
+  await fireEvent.press(undoButton());
+  await waitFor(() => expect(screen.queryByLabelText("Nota marcada")).toBeNull());
+  await fireEvent.press(undoButton());
+  await waitFor(() => expect(screen.queryByLabelText("Bandeira 5: Rosa")).toBeNull());
+  expect(undoButton()).toHaveProperty("props.accessibilityState.disabled", true);
+
+  await fromMenu("Enterrar até amanhã");
+  await waitFor(() => expect(frontHtml()).not.toBe(first));
+  await fireEvent.press(undoButton());
+  await waitFor(() => expect(frontHtml()).toBe(first));
+  expect(screen.getByLabelText("2 novos")).toBeTruthy();
+  const after = await Effect.runPromise(localData((data) => data.collection));
+  const cards = after.cards.filter((c) => c.fields.deckId.value === deck.id);
+  expect(cards.map((c) => [c.fields.suspended.value, c.fields.buriedUntil.value])).toEqual([
+    [false, null],
+    [false, null],
+  ]);
+  const log = await Effect.runPromise(localData((data) => data.reviewLog));
+  expect(log.filter((e) => cards.some((c) => c.id === e.cardId))).toEqual([]);
 });

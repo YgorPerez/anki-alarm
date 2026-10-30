@@ -20,6 +20,10 @@ import {
   type AlarmEvent,
   stampAlarm,
   alarmTombstone,
+  runCommand,
+  runStudyAction,
+  type StudyAction,
+  type UndoStep,
 } from "@app/core";
 import {
   settings as settingsTable,
@@ -130,6 +134,10 @@ interface Data extends Engine {
   changeCollection: (
     command: (collection: Collection) => void,
   ) => Effect.Effect<CollectionState, Rejectable>;
+  /** Takes a card-menu action (suspend, bury, flag, mark); resolves with the step that undoes it. */
+  studyAction: (action: StudyAction) => Effect.Effect<UndoStep, Rejectable>;
+  /** Reverses one study step as a normal edit that syncs: a void, or the step's command. */
+  undoStudy: (step: UndoStep) => Effect.Effect<void, Rejectable>;
   /**
    * Imports an AnkiDroid deck as a linked deck owned by this phone, with a snapshot for each
    * reviewed card, in one transaction. Linking again updates it. Resolves with the deck's id.
@@ -399,6 +407,17 @@ const open = (driver: SQLiteConnection, media: MediaFiles) =>
       autoSyncBack: ankiDroid.autoSyncBack,
       setAutoSyncBack: ankiDroid.setAutoSyncBack,
       changeCollection: (command) => local(store.change(command)),
+      studyAction: (action) =>
+        local(
+          Effect.map(
+            store.run((c) => runStudyAction(c, action)),
+            ({ result }) => result,
+          ),
+        ),
+      undoStudy: (step) =>
+        step.kind === "void"
+          ? Effect.asVoid(data.undo(step.entryId))
+          : Effect.asVoid(local(store.change((c) => void runCommand(c, step.command)))),
       alarms: serial(
         Effect.map(
           query(() =>

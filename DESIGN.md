@@ -233,7 +233,8 @@ While an alarm card is showing, the top is one compact line of Body text: time, 
 small Snooze link at the end. The awake check uses time, one-card progress and seconds remaining.
 Decks study opens above the tabs with no Settings header. Its top bar has a back link with the
 deck name, New/Learning/Review counts in Anki blue/red/green, an Undo icon and a shared card-action
-menu. The menu stays hidden while empty; alarm and awake check use it in their compact headers too.
+menu. The menu stays hidden while empty; alarm and awake check use it in their compact headers
+too, with "Desfazer" first (disabled until there is something to undo) in place of an Undo icon.
 A set flag appears as a 20px flag in its Anki color and a marked note as a 20px gold star,
 between the counts/Undo area and the menu. Both have translated accessibility labels and stay
 outside the card HTML. Flag colors identify Anki metadata and are independent of the theme.

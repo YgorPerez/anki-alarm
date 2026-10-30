@@ -1,8 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { Card, Locale } from "@app/core";
-import { Effect } from "effect";
 import { copy } from "./copy.ts";
-import { localData } from "./database.ts";
+import { takeStudyAction } from "./study-undo.ts";
 import type { StudyMenuItem } from "./StudyMenu.tsx";
 
 export type SuspendScope = "card" | "note";
@@ -21,15 +20,12 @@ export function suspensionItems(
   }));
 }
 
+/** Suspends the card or its whole note and resolves with the step that undoes it. */
 export const suspendStudyCard = async (card: Card, scope: SuspendScope, client: QueryClient) => {
-  await Effect.runPromise(
-    localData((data) =>
-      data.changeCollection((c) => {
-        if (scope === "note") c.suspendNote(card.fields.noteId.value);
-        else c.setCardsSuspended([card.id], true);
-      }),
-    ),
-  );
-
+  const step = await takeStudyAction({
+    kind: scope === "note" ? "suspendNote" : "suspendCard",
+    cardId: card.id,
+  });
   await client.invalidateQueries({ queryKey: ["collection"] });
+  return step;
 };

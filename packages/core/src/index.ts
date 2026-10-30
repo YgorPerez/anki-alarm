@@ -148,6 +148,8 @@ export {
 export { browseCards } from "./browse.ts";
 export type { BrowseRow } from "./browse.ts";
 export { runCommand } from "./commands.ts";
+export { answerUndo, popUndo, pushUndo, runStudyAction, UNDO_LIMIT } from "./undo.ts";
+export type { StudyAction, UndoStack, UndoStep } from "./undo.ts";
 export { presetTexts, readPresetTexts, validPresetText } from "./preset-text.ts";
 export type { PresetTexts } from "./preset-text.ts";
 export type { CollectionCommand } from "./commands.ts";
