@@ -4,8 +4,8 @@ An alarm clock for Android that you turn off by reviewing flashcards. It is a fu
 app too: Anki-compatible decks, FSRS-6 scheduling, study on the phone and on the web, and a link to
 AnkiDroid.
 
-The name is not decided. This spec says "the app"; code uses the `@app/*` scope until it's renamed
-before the first release.
+The app is called Anki Alarm in both languages. This spec says "the app"; code keeps the `@app/*`
+scope.
 
 Words in **bold** on first use are defined in `GLOSSARY.md`.
 
