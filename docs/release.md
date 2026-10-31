@@ -1,7 +1,8 @@
 # Releasing
 
 ADR 0002 is the policy. `.github/workflows/release.yml` runs only on pushed `vX.Y.Z`
-tags. Branch pushes and merges run checks without deploying. Versions use
+tags. Its first job is the E2E workflow: a failure publishes nothing, so re-run it if it was flaky or
+tag a new version if it was a real bug. Branch pushes and merges run checks without deploying. Versions use
 `major * 10000 + minor * 100 + patch`; minor and patch must be between 0 and 99.
 `v0.0.0`, prerelease tags and versions beyond Android's versionCode limit are rejected.
 

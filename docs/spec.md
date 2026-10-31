@@ -72,8 +72,9 @@ Core.
   committed baseline that can only go down. CI fails when a file goes over its limit. This covers
   oxlint, fallow and React Doctor.
 - CI on a pull request runs only the packages the diff affects and their dependents
-  (`...[origin/main]`); main and tags run everything. Maestro has its own E2E workflow, because the
-  APK build is slow: it runs on main and tags, or by hand on a branch, and doesn't gate pull requests.
+  (`...[origin/main]`); main and tags run everything, within a 5-minute limit. Maestro has its own E2E
+  workflow, because the APK build is slow: it runs on version tags, where it gates the release, or by
+  hand on a branch.
 
 ### Release
 
