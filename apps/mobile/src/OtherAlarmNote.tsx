@@ -11,6 +11,15 @@ function calendarDay(at: number, zone: string) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: zone }).format(at);
 }
 
+function dayText(at: number, locale: Locale, zone: string) {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: zone,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(at);
+}
+
 export function OtherAlarmNote({
   alarm,
   locale,
@@ -30,12 +39,6 @@ export function OtherAlarmNote({
   const t = copy(locale);
   const app = alarm.app ?? t("otherApp");
   const time = timeText(alarm.at, locale, zone, use24Hour);
-  const day = new Intl.DateTimeFormat(locale, {
-    timeZone: zone,
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  }).format(alarm.at);
   return (
     <Pressable
       accessibilityRole="button"
@@ -45,7 +48,7 @@ export function OtherAlarmNote({
       <Text style={regular} className="text-label text-muted-foreground text-center">
         {calendarDay(alarm.at, zone) === calendarDay(now, zone)
           ? t("otherAlarmToday", { app, time })
-          : t("otherAlarmLater", { app, day, time })}
+          : t("otherAlarmLater", { app, day: dayText(alarm.at, locale, zone), time })}
       </Text>
     </Pressable>
   );

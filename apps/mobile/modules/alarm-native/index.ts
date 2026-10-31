@@ -26,8 +26,8 @@ interface NativeAlarm {
   /** Resolves when the clip ends or is stopped: false when it couldn't play. */
   playClip: (uri: string) => Promise<boolean>;
   stopReading: () => void;
-  /** Another app's next alarm as `{ at, app }` JSON. Null when there's none, or ours is sooner. */
-  otherNextAlarm: () => string | null;
+  /** Another app's next alarm. Null when there's none, or ours is sooner. `app` is null if hidden. */
+  otherNextAlarm: () => { at: number; app: string | null } | null;
   openOtherAlarm: () => boolean;
   getPermissions: () => AlarmPermissions;
   isOnboardingComplete: () => boolean;

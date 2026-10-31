@@ -5,7 +5,6 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.os.Build
-import org.json.JSONObject
 
 /**
  * Another app's next alarm, read only. Android reports just the soonest `setAlarmClock` alarm across
@@ -23,9 +22,8 @@ object OtherAlarm {
     null
   }
 
-  fun read(context: Context): JSONObject? = next(context)?.let { info ->
-    JSONObject().put("at", info.triggerTime)
-      .put("app", label(context, info.showIntent?.creatorPackage) ?: JSONObject.NULL)
+  fun read(context: Context): Map<String, Any?>? = next(context)?.let { info ->
+    mapOf("at" to info.triggerTime.toDouble(), "app" to label(context, info.showIntent?.creatorPackage))
   }
 
   /** Opens the screen the other app registered for its alarm. False when it has none or it's gone. */

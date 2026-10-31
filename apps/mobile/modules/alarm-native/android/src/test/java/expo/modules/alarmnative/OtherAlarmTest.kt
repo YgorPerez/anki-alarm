@@ -39,8 +39,8 @@ class OtherAlarmTest {
   @Test fun anotherAppsAlarmReadsItsTimeWithoutANameWhenHidden() {
     schedule("com.example.clock")
     val alarm = OtherAlarm.read(ctx)!!
-    assertEquals(at, alarm.getLong("at"))
-    assertTrue(alarm.isNull("app"))
+    assertEquals(at.toDouble(), alarm["at"])
+    assertNull(alarm["app"])
   }
 
   @Test fun openingSendsTheOtherAppsIntent() {

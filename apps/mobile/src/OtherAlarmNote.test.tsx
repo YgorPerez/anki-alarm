@@ -8,7 +8,7 @@ const note = (alarm: OtherAlarm | null, locale: "pt-BR" | "en" = "pt-BR", onOpen
 );
 
 test("names the app and the time, and opens that app when tapped", async () => {
-  const onOpen = vi.fn();
+  const onOpen = vi.fn<() => void>();
   await render(note({ at: Date.parse("2026-10-30T06:30:00Z"), app: "Relógio" }, "pt-BR", onOpen));
   await fireEvent.press(screen.getByRole("button", { name: "Relógio toca às 06:30" }));
   expect(onOpen).toHaveBeenCalledOnce();

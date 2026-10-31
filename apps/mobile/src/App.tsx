@@ -49,7 +49,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { copy } from "./copy.ts";
 import { AlarmService, alarmController, type AwakeCheck, type Ring } from "./alarms.ts";
 import { androidAlarmService, native } from "./alarm-android.ts";
-import { OtherAlarmNote, type OtherAlarm } from "./OtherAlarmNote.tsx";
+import { OtherAlarmNote } from "./OtherAlarmNote.tsx";
 import { localData } from "./database.ts";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigationTheme } from "./navigation-theme.ts";
@@ -83,35 +83,21 @@ function RuntimeProvider({
   const value = useMemo(() => ({ alarms, editor, reliability }), [alarms, editor, reliability]);
   return <RuntimeContext value={value}>{children}</RuntimeContext>;
 }
-/** Android has no event for this worth a receiver, so read it whenever the Alarm tab comes back. */
+/** Android has no event worth a receiver for this, so it's read each second while the tab shows. */
 function LiveOtherAlarmNote({
-  alarms,
   locale,
   zone,
   use24Hour,
 }: {
-  alarms: readonly Alarm[];
   locale: Locale;
   zone: string;
   use24Hour: boolean;
 }) {
   const focused = useIsFocused();
   const now = useNow();
-  const [alarm, setAlarm] = useState<OtherAlarm | null>(null);
-  useEffect(() => {
-    const read = () => {
-      const json = native.otherNextAlarm();
-      setAlarm(json ? (JSON.parse(json) as OtherAlarm) : null);
-    };
-    if (focused) read();
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") read();
-    });
-    return () => subscription.remove();
-  }, [focused, alarms]);
   return (
     <OtherAlarmNote
-      alarm={alarm}
+      alarm={focused ? native.otherNextAlarm() : null}
       locale={locale}
       now={now}
       zone={zone}
@@ -407,9 +393,7 @@ function Home({ children }: { children: ReactNode }) {
 
   const alarmsContent = (
     <HomeScreen
-      otherAlarm={
-        <LiveOtherAlarmNote alarms={alarms} locale={locale} zone={zone} use24Hour={use24Hour} />
-      }
+      otherAlarm={<LiveOtherAlarmNote locale={locale} zone={zone} use24Hour={use24Hour} />}
       alarms={alarms}
       decks={decks}
       locale={locale}
