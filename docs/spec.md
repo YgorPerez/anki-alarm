@@ -285,8 +285,9 @@ session** is a special mode of it on the phone.
   It rings again at the occurrence after; the skip syncs like the other properties and clears
   itself once the skipped time has passed. Decided in #78.
 - Other apps' alarms stay separate: Android lets no app list or edit them. The Alarm tab shows one
-  quiet line when another app's alarm is the system's next ("Relógio toca às 06:30"), and tapping it
-  opens that app. Android reports only the soonest alarm, so the line is hidden when ours comes first.
+  compact card when another app's alarm is the system's next, with that app's icon, the time and
+  "Relógio · seg., 2 de nov.", and tapping it opens that app. Android reports only the soonest alarm,
+  so the card is hidden when ours comes first.
 
 ### Phone alarm editor
 

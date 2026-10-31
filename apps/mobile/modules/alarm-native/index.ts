@@ -27,7 +27,7 @@ interface NativeAlarm {
   playClip: (uri: string) => Promise<boolean>;
   stopReading: () => void;
   /** Another app's next alarm. Null when there's none, or ours is sooner. `app` is null if hidden. */
-  otherNextAlarm: () => { at: number; app: string | null } | null;
+  otherNextAlarm: () => { at: number; app: string | null; icon: string | null } | null;
   openOtherAlarm: () => boolean;
   getPermissions: () => AlarmPermissions;
   isOnboardingComplete: () => boolean;

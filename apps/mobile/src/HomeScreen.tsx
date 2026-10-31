@@ -247,7 +247,6 @@ function HomeHeader({
           )}
         </View>
       )}
-      {otherAlarm}
       {banner}
       {error ? (
         <Text style={regular} accessibilityRole="alert" className="text-body text-attention">
@@ -257,6 +256,7 @@ function HomeHeader({
       {setup && showEmptyState ? (
         <HomeEmptyState locale={locale} hasDecks={hasDecks} setup={setup} onAdd={onAdd} />
       ) : null}
+      {otherAlarm}
     </View>
   );
 }
@@ -295,7 +295,7 @@ export function HomeScreen({
   /** Saves the alarm with its next ring skipped, or the skip undone. */
   onSkip?: (alarm: Alarm) => void;
   onDuplicate?: (alarm: Alarm) => void;
-  /** The line about another app's next alarm, under the headline. */
+  /** The card for another app's next alarm, right above the alarm cards. */
   otherAlarm?: ReactNode;
   banner?: ReactNode;
   error?: string;

@@ -16,6 +16,7 @@ const host = (name: string) =>
 
 export const View = host("View");
 export const Text = host("Text");
+export const Image = host("Image");
 export const TextInput = host("TextInput");
 export const ScrollView = host("RCTScrollView");
 export const Switch = host("RCTSwitch");
