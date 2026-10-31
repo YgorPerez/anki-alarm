@@ -6,17 +6,19 @@ const run = (args: string[]) => {
   const result = spawnSync("vp", args, { stdio: "inherit" });
   if (result.status !== 0) process.exit(result.status ?? 1);
 };
+const runAsync = (args: string[]) =>
+  new Promise<void>((resolve) => {
+    spawn("vp", args, { stdio: "inherit" }).on("close", (status) => {
+      if (status !== 0) process.exit(status ?? 1);
+      resolve();
+    });
+  });
 // Runs each group's commands in order, with the groups side by side, to stay under the CI timeout.
 const runGroups = (groups: string[][][]) =>
   Promise.all(
-    groups.map(async (group) => {
-      for (const args of group) {
-        const status = await new Promise<number | null>((resolve) =>
-          spawn("vp", args, { stdio: "inherit" }).on("close", resolve),
-        );
-        if (status !== 0) process.exit(status ?? 1);
-      }
-    }),
+    groups.map((group) =>
+      group.reduce((previous, args) => previous.then(() => runAsync(args)), Promise.resolve()),
+    ),
   );
 const base = process.env["CI_BASE"];
 const exec = (command: string, args: string[]) => {
