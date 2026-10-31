@@ -1,10 +1,8 @@
-# The release APK takes about 18 minutes to build, so this stays out of the pull request checks.
+# The release APK takes about 18 minutes to build, so this only runs as the gate before a release.
 # To run it on a branch: gh workflow run e2e.yml --ref <branch>
 name: E2E
 on:
-  push:
-    branches: [main]
-    tags: ["v*"]
+  workflow_call:
   workflow_dispatch:
 permissions:
   contents: read
@@ -47,9 +45,13 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_6
+          cores: 4
           script: |
             # A slow runner can leave the launcher's "isn't responding" dialog over the app.
             adb shell settings put global hide_error_dialogs 1
+            # Android only reads that setting on a configuration change, so force one.
+            adb shell settings put system font_scale 1.01
+            adb shell settings put system font_scale 1.0
             adb install apps/mobile/android/app/build/outputs/apk/release/app-release.apk
             # The runner runs each line on its own, so the logcat dump on failure shares the line.
             mkdir -p maestro-debug && $HOME/.maestro/bin/maestro test apps/mobile/.maestro --debug-output maestro-debug --flatten-debug-output || { adb logcat -d > maestro-debug/logcat.txt; exit 1; }

@@ -47,7 +47,8 @@ packages. Tests select Vitest projects, including portable story tests when the 
 Builds run only for selected apps. Fallow needs the complete import graph to find unused code;
 its report is gated only for selected packages on a PR. React Doctor scans selected React apps.
 
-Maestro runs on main and tags, and on PRs touching `apps/mobile/` or `modules/`. The workflow builds
-a standalone APK and runs the collection smoke journey on an API 35 emulator. Alarm ringing,
+The CI job has a 5-minute timeout; over that it fails rather than creeping up. Maestro runs on version
+tags, before the release job, or by hand with `gh workflow run e2e.yml --ref <branch>`. The workflow
+builds a standalone APK and runs the collection smoke journey on an API 35 emulator. Alarm ringing,
 lock-screen and OEM journeys still belong to the native feature tickets. The smoke flow skips
 permission grants, completes onboarding, then creates a deck.

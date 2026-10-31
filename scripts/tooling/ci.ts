@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { relative } from "node:path";
 import { ciScope } from "./affected.ts";
 
@@ -6,6 +6,20 @@ const run = (args: string[]) => {
   const result = spawnSync("vp", args, { stdio: "inherit" });
   if (result.status !== 0) process.exit(result.status ?? 1);
 };
+const runAsync = (args: string[]) =>
+  new Promise<void>((resolve) => {
+    spawn("vp", args, { stdio: "inherit" }).on("close", (status) => {
+      if (status !== 0) process.exit(status ?? 1);
+      resolve();
+    });
+  });
+// Runs each group's commands in order, with the groups side by side, to stay under the CI timeout.
+const runGroups = (groups: string[][][]) =>
+  Promise.all(
+    groups.map((group) =>
+      group.reduce((previous, args) => previous.then(() => runAsync(args)), Promise.resolve()),
+    ),
+  );
 const base = process.env["CI_BASE"];
 const exec = (command: string, args: string[]) => {
   const result = spawnSync(command, args, { encoding: "utf8" });
@@ -39,14 +53,14 @@ if (process.argv.includes("--plan")) {
     "run",
     ...(all ? [] : selected.flatMap((pkg) => ["--project", names[pkg.name] ?? pkg.name])),
   ]);
-  if (paths.includes("apps/web")) run(["run", "--filter", "@app/web", "build"]);
-  if (paths.includes("apps/web")) run(["run", "--filter", "@app/web", "build-storybook"]);
-  if (paths.includes("apps/web")) {
-    run(["exec", "--filter", "@app/web", "playwright", "install", "--with-deps", "chromium"]);
-    run(["run", "--filter", "@app/web", "test:e2e"]);
-  }
-  if (paths.includes("apps/mobile"))
-    run([
+  const web = [
+    ["run", "--filter", "@app/web", "build"],
+    ["run", "--filter", "@app/web", "build-storybook"],
+    ["exec", "--filter", "@app/web", "playwright", "install", "--with-deps", "chromium"],
+    ["run", "--filter", "@app/web", "test:e2e"],
+  ];
+  const mobile = [
+    [
       "exec",
       "--filter",
       "@app/mobile",
@@ -58,8 +72,11 @@ if (process.argv.includes("--plan")) {
       "2",
       "--output-dir",
       `${process.env["RUNNER_TEMP"] ?? "/tmp"}/anki-mobile-ci`,
-    ]);
+    ],
+    ["run", "--filter", "@app/mobile", "build-storybook"],
+  ];
+  await runGroups([
+    ...(paths.includes("apps/web") ? [web] : []),
+    ...(paths.includes("apps/mobile") ? [mobile] : []),
+  ]);
 }
-
-if (paths.includes("apps/mobile") && !process.argv.includes("--plan"))
-  run(["run", "--filter", "@app/mobile", "build-storybook"]);

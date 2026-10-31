@@ -13,7 +13,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  e2e:
+    uses: ./.github/workflows/e2e.yml
   release:
+    needs: e2e
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: production
