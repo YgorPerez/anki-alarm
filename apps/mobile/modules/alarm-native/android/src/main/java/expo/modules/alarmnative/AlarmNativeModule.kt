@@ -101,6 +101,8 @@ class AlarmNativeModule : Module() {
       ReadAloud.playClip(context, uri) { played -> promise.resolve(played) }
     }.runOnQueue(Queues.MAIN)
     Function("stopReading") { android.os.Handler(android.os.Looper.getMainLooper()).post { ReadAloud.stop() } }
+    Function("otherNextAlarm") { OtherAlarm.read(context)?.toString() }
+    Function("openOtherAlarm") { OtherAlarm.open(context) }
     Function("getPermissions") { AlarmReliability.permissions(context) }
     Function("isOnboardingComplete") { context.getSharedPreferences("onboarding", Context.MODE_PRIVATE).getBoolean("complete", false) }
     Function("completeOnboarding") { context.getSharedPreferences("onboarding", Context.MODE_PRIVATE).edit().putBoolean("complete", true).commit() }

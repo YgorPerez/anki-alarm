@@ -13,6 +13,13 @@
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+  <!-- Lets the Alarm tab name a clock app whose alarm is next. -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.SET_ALARM" />
+    </intent>
+  </queries>
+
   <application>
     <activity android:name=".LockedAlarmActivity" android:theme="@android:style/Theme.Material.NoActionBar" android:exported="false" android:directBootAware="true" android:showWhenLocked="true" android:turnScreenOn="true" />
     <!-- Our own alarm and watchdog broadcasts. Not exported. -->
