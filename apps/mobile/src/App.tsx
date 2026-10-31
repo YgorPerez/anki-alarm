@@ -11,7 +11,8 @@ import { AlarmScreen } from "./AlarmScreen.tsx";
 import { AwakeCheckScreen } from "./AwakeCheckScreen.tsx";
 import { ReliabilityScreen } from "./ReliabilityScreen.tsx";
 import { reliabilityCopy } from "./reliability-copy.ts";
-import { UpdateOffer } from "./UpdateOffer.tsx";
+import { SettingsUpdateOffer } from "./app-update.tsx";
+import { appUpdate } from "./app-update-store.ts";
 import { AccountPanel } from "./AccountPanel.tsx";
 import { appSync } from "./app-sync.ts";
 import {
@@ -128,7 +129,7 @@ export function SettingsRoute() {
       onTheme={() => router.push("/settings/theme")}
       switchLanguage={() => setLocale(locale === "en" ? "pt-BR" : "en")}
       account={<AccountPanel sync={appSync} locale={locale} />}
-      update={<UpdateOffer locale={locale} dismissible={false} />}
+      update={<SettingsUpdateOffer />}
     />
   );
 }
@@ -273,6 +274,7 @@ function Home({ children }: { children: ReactNode }) {
       if (state !== "active") return;
       refresh();
       appSync?.syncNow();
+      void appUpdate.getState().check();
     });
     // A pull that changed alarms re-arms them, as a local save does.
     const synced = appSync?.onSynced(({ changed }) => {
@@ -285,8 +287,9 @@ function Home({ children }: { children: ReactNode }) {
     };
   }, [controller, locale, client]);
   useEffect(() => {
-    // On open: resume the stored session and sync.
+    // On open: resume the stored session, sync and look for updates.
     void appSync?.start();
+    void appUpdate.getState().check();
   }, []);
   const [refreshing, setRefreshing] = useState(false);
   const pullToRefresh = useCallback(() => {

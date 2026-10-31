@@ -12,7 +12,7 @@ interface Release {
   tag_name: string;
   draft: boolean;
   prerelease: boolean;
-  assets: { name: string; browser_download_url: string }[];
+  assets: { name: string; browser_download_url: string; size: number }[];
 }
 
 /** GitHub returns newest first; ignore notes-only releases and untrusted asset URLs. */
@@ -33,7 +33,7 @@ export function newerApk(releases: readonly Release[], installedVersionCode: num
     );
     if (asset)
       return version.versionCode > installedVersionCode
-        ? { ...version, url: asset.browser_download_url }
+        ? { ...version, url: asset.browser_download_url, size: asset.size }
         : undefined;
   }
   return undefined;

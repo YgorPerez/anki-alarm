@@ -30,15 +30,21 @@ versionName is the tag's version, and versionCode is major·10000 + minor·100 +
 
 ## On the phone
 
-- **OTA updates** are checked on launch, downloaded in the background, and applied on the next cold
-  start. The app never reloads itself while an alarm rings, an alarm session is open or an awake
-  check is pending.
+- **OTA updates** are checked on launch and when the app returns to the foreground, at most every 6
+  hours, and downloaded in the background. They apply on the next cold start, or when the user taps
+  the update card. The app never reloads on its own, and the card isn't shown while an alarm rings,
+  an alarm session is open or an awake check is pending.
 - **APK check:** the app reads the newest GitHub release that has an APK (the repo is public, so no
   token) and offers it only if its versionCode is above the installed one. JS-only releases have no
   APK, so a change OTA already delivered is never offered again.
-- The offer is a dismissible banner on the home screen and a line in Settings, never during an alarm
-  or study. Accepting downloads the APK and opens Android's package installer
-  (`REQUEST_INSTALL_PACKAGES`). An old APK keeps working. It just stops getting OTA updates.
+- The offer is a card above the tab bar, and also on the Theme and Reliability screens, plus a button
+  at the top of Settings. It's never shown during an alarm, study, the alarm editor (a restart would
+  lose the draft), AnkiDroid linking (it would interrupt an import) or onboarding. Dismissing the
+  card lasts until the next cold start; the Settings button stays. A new APK takes priority over a
+  downloaded OTA, since it already contains the JS.
+- Accepting an APK downloads it, showing the percentage, and opens Android's package installer
+  (`REQUEST_INSTALL_PACKAGES`). If the installer is cancelled, the next tap reopens it without
+  downloading again. An old APK keeps working. It just stops getting OTA updates.
 
 ## Bad updates
 

@@ -3,6 +3,7 @@ import { Tabs, useRouter } from "expo-router";
 import type { BottomTabBarProps } from "expo-router/tabs";
 import { useUI } from "../../ui.ts";
 import { bold } from "../../fonts.ts";
+import { GlobalUpdateCard } from "../../app-update.tsx";
 import { SettingsButton, TabBar } from "../../navigation.tsx";
 import { tabLabels } from "../../tab-labels.ts";
 import { useNavigationTheme } from "../../navigation-theme.ts";
@@ -22,21 +23,25 @@ function SettingsGear() {
 function AppTabBar({ state, emitter, navigateToTab, insets }: BottomTabBarProps) {
   const colors = useNavigationTheme();
   return (
-    <TabBar
-      colors={colors}
-      locale={useUI().locale}
-      active={state.routes[state.index]!.name}
-      bottom={insets.bottom}
-      onSelect={(name) => {
-        const route = state.routes.find((item) => item.name === name)!;
-        const event = emitter.emit({
-          type: "tabPress",
-          target: route.key,
-          canPreventDefault: true,
-        });
-        if (!event.defaultPrevented) navigateToTab(route.key);
-      }}
-    />
+    <>
+      {/* Above the bar, in the layout: the screen shrinks, so + and its hints rise with the card. */}
+      <GlobalUpdateCard />
+      <TabBar
+        colors={colors}
+        locale={useUI().locale}
+        active={state.routes[state.index]!.name}
+        bottom={insets.bottom}
+        onSelect={(name) => {
+          const route = state.routes.find((item) => item.name === name)!;
+          const event = emitter.emit({
+            type: "tabPress",
+            target: route.key,
+            canPreventDefault: true,
+          });
+          if (!event.defaultPrevented) navigateToTab(route.key);
+        }}
+      />
+    </>
   );
 }
 const renderSettingsGear = navigationRenderer(SettingsGear);

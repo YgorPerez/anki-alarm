@@ -1,7 +1,9 @@
 import { regular } from "../../fonts.ts";
 import { navigationRenderer } from "../../navigation-renderer.tsx";
 import { Stack, useRouter } from "expo-router";
-import { Pressable, Text } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GlobalUpdateCard } from "../../app-update.tsx";
 import { useUI } from "../../ui.ts";
 import { copy } from "../../copy.ts";
 import { useNavigationTheme } from "../../navigation-theme.ts";
@@ -26,16 +28,20 @@ const renderBackButton = navigationRenderer(BackButton);
 
 export default function SettingsLayout() {
   const theme = useNavigationTheme();
+  const { bottom } = useSafeAreaInsets();
   return (
-    <Stack
-      screenOptions={{
-        title: "",
-        headerLeft: renderBackButton,
-        headerTintColor: theme.foreground,
-        headerStyle: { backgroundColor: theme.background },
-        contentStyle: { backgroundColor: theme.background },
-        headerShadowVisible: false,
-      }}
-    />
+    <View className="flex-1 bg-background">
+      <Stack
+        screenOptions={{
+          title: "",
+          headerLeft: renderBackButton,
+          headerTintColor: theme.foreground,
+          headerStyle: { backgroundColor: theme.background },
+          contentStyle: { backgroundColor: theme.background },
+          headerShadowVisible: false,
+        }}
+      />
+      <GlobalUpdateCard bottom={bottom} />
+    </View>
   );
 }

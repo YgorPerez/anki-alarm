@@ -1,66 +1,123 @@
 import type { Locale } from "@app/core";
-import { useEffect, useState } from "react";
+import X from "lucide-react-native/icons/x";
 import { Pressable, Text, View } from "react-native";
 
+import { Button } from "./controls.tsx";
 import { copy } from "./copy.ts";
-import { findApk, installApk } from "./updates.ts";
+import { bold, regular } from "./fonts.ts";
+import { ThemedIcon } from "./icons.tsx";
+import type { UpdateOffer } from "./update-store.ts";
 
 /**
- * A newer APK, offered as ADR 0002 says: a dismissible banner on Home, and a line in Settings that
- * stays until the update is installed.
+ * The card stays off screens where a tap or a restart costs something (ADR 0002): study, the alarm
+ * editor's draft, an AnkiDroid import. Settings' own screen has the button instead.
  */
-export function UpdateOffer({
-  locale,
-  dismissible = true,
-}: {
-  locale: Locale;
-  dismissible?: boolean;
-}) {
-  const [apk, setApk] = useState<Awaited<ReturnType<typeof findApk>>>();
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+export function showsUpdateCard(pathname: string) {
+  return !/^\/(study|alarm|ankidroid)(\/|$)|^\/settings\/?$/.test(pathname);
+}
+
+function offerText(offer: UpdateOffer, locale: Locale) {
   const t = copy(locale);
-  useEffect(() => {
-    let active = true;
-    void findApk()
-      .then((result) => {
-        if (active) setApk(result);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
+  if (offer.kind === "ota")
+    return {
+      title: t("otaReady"),
+      action: offer.failed ? t("retryUpdate") : t("restartToUpdate"),
+      failed: offer.failed,
+      busy: false,
     };
-  }, []);
-  if (!apk) return null;
+  const { apk, download } = offer;
+  const failed = download.kind === "failed";
+  const action =
+    download.kind === "downloading"
+      ? t("downloading", { percent: String(download.percent) })
+      : download.kind === "ready"
+        ? t("installDownloaded")
+        : failed
+          ? t("retryUpdate")
+          : t("installUpdate", { size: String(Math.round(apk.size / 1_000_000)) });
+  return {
+    title: t("updateAvailable", { version: apk.version }),
+    action,
+    failed,
+    busy: download.kind === "downloading",
+  };
+}
+
+export function UpdateOfferButton({
+  offer,
+  locale,
+  onAccept,
+}: {
+  offer: UpdateOffer;
+  locale: Locale;
+  onAccept: () => void;
+}) {
+  const t = copy(locale);
+  const { title, action, failed, busy } = offerText(offer, locale);
   return (
-    <View className="gap-3">
-      <Text className="text-body text-foreground">
-        {t("updateAvailable")} {apk.version}
+    <View className="gap-2">
+      <Text style={regular} className="text-body text-foreground">
+        {title}
       </Text>
-      <Pressable
-        accessibilityRole="button"
-        disabled={busy}
-        onPress={async () => {
-          setBusy(true);
-          setFailed(false);
-          try {
-            await installApk(apk.url);
-          } catch {
-            setFailed(true);
-          }
-          setBusy(false);
-        }}
-      >
-        <Text className="text-body text-primary">
-          {busy ? t("downloading") : t("installUpdate")}
+      <Button label={action} primary disabled={busy} onPress={onAccept} />
+      {failed && (
+        <Text style={regular} accessibilityRole="alert" className="text-body text-attention">
+          {t("updateFailed")}
         </Text>
-      </Pressable>
-      {failed && <Text className="text-body text-foreground">{t("updateFailed")}</Text>}
-      {dismissible && (
-        <Pressable accessibilityRole="button" disabled={busy} onPress={() => setApk(undefined)}>
-          <Text className="text-body text-muted-foreground">{t("dismissUpdate")}</Text>
-        </Pressable>
       )}
+    </View>
+  );
+}
+
+export function UpdateCard({
+  offer,
+  locale,
+  bottom,
+  onAccept,
+  onDismiss,
+}: {
+  offer: UpdateOffer;
+  locale: Locale;
+  bottom: number;
+  onAccept: () => void;
+  onDismiss: () => void;
+}) {
+  const t = copy(locale);
+  const { title, action, failed, busy } = offerText(offer, locale);
+  return (
+    <View className="bg-background px-4 pt-2 pb-2" style={{ marginBottom: bottom }}>
+      <View className="flex-row items-center rounded-lg bg-surface pr-1">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: busy }}
+          accessibilityLabel={`${title}. ${action}`}
+          disabled={busy}
+          onPress={onAccept}
+          className="min-h-12 flex-1 gap-1 p-4"
+        >
+          <Text style={regular} className="text-label text-foreground">
+            {title}
+          </Text>
+          <Text style={bold} className="text-body font-bold text-primary-ink">
+            {action}
+          </Text>
+          {failed && (
+            <Text style={regular} accessibilityRole="alert" className="text-label text-attention">
+              {t("updateFailed")}
+            </Text>
+          )}
+        </Pressable>
+        {!busy && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("dismissUpdate")}
+            onPress={onDismiss}
+            className="min-h-12 min-w-12 items-center justify-center rounded-pill"
+          >
+            <ThemedIcon icon={X} colorClassName="text-muted-foreground" size={20} />
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }

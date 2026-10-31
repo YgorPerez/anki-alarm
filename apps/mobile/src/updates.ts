@@ -4,7 +4,6 @@ import * as FileSystem from "expo-file-system/legacy";
 import { startActivityAsync } from "expo-intent-launcher";
 import * as Updates from "expo-updates";
 
-/** Called from Home and Settings only. Never mount update prompts in alarm or study screens. */
 export async function findApk() {
   const installed = Number(nativeBuildVersion);
   if (!Number.isSafeInteger(installed) || installed < 1) return undefined;
@@ -22,11 +21,24 @@ export async function findApk() {
   }
 }
 
-export async function installApk(url: string) {
-  const destination = `${FileSystem.cacheDirectory}anki-alarm.apk`;
-  const download = await FileSystem.downloadAsync(url, destination);
-  if (download.status !== 200) throw new Error("APK download failed");
-  const uri = await FileSystem.getContentUriAsync(download.uri);
+export async function downloadApk(url: string, onProgress: (percent: number) => void) {
+  const download = FileSystem.createDownloadResumable(
+    url,
+    `${FileSystem.cacheDirectory}anki-alarm.apk`,
+    {},
+    ({ totalBytesWritten, totalBytesExpectedToWrite }) => {
+      if (totalBytesExpectedToWrite > 0)
+        onProgress(Math.floor((totalBytesWritten / totalBytesExpectedToWrite) * 100));
+    },
+  );
+  const result = await download.downloadAsync();
+  if (result?.status !== 200) throw new Error("APK download failed");
+  return result.uri;
+}
+
+/** Resolves when the installer closes, installed or not: a cancelled install can open it again. */
+export async function openInstaller(file: string) {
+  const uri = await FileSystem.getContentUriAsync(file);
   // Android owns installation and the per-app "allow unknown sources" consent.
   await startActivityAsync("android.intent.action.VIEW", {
     data: uri,
@@ -42,6 +54,6 @@ export async function fetchOtaInBackground() {
     const check = await Updates.checkForUpdateAsync();
     if (check.isAvailable) await Updates.fetchUpdateAsync();
   } catch {
-    // Offline or no update channel: the APK offer on Home still applies.
+    // Offline or no update channel: the APK offer still applies.
   }
 }

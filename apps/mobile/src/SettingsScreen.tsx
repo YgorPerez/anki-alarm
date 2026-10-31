@@ -28,13 +28,13 @@ export function SettingsScreen({
       <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
         {r("settings")}
       </Text>
+      {update}
       <View className="gap-4">
         <Button label={r("reliability")} onPress={onReliability} />
         <Button label={t("theme")} onPress={onTheme} />
         <Button label={t("switchLanguage")} onPress={switchLanguage} />
       </View>
       {account}
-      {update}
     </ScrollView>
   );
 }

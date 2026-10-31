@@ -20,11 +20,12 @@ test("OTA releases are skipped when looking for a newer installable APK", () => 
           name: "anki-alarm.apk",
           browser_download_url:
             "https://github.com/YgorPerez/anki-alarm/releases/download/v1.4.3/anki-alarm.apk",
+          size: 131162716,
         },
       ],
     },
   ];
-  expect(newerApk(releases, 10402)?.versionCode).toBe(10403);
+  expect(newerApk(releases, 10402)).toMatchObject({ versionCode: 10403, size: 131162716 });
   expect(newerApk(releases, 10403)).toBeUndefined();
   expect(newerApk(releases, 10404)).toBeUndefined();
 });
@@ -36,7 +37,11 @@ test("a first APK or a changed runtime needs an APK; a matching runtime uses OTA
 });
 
 test("preview releases and assets outside the release are never install offers", () => {
-  const asset = { name: "anki-alarm.apk", browser_download_url: "https://example.com/app.apk" };
+  const asset = {
+    name: "anki-alarm.apk",
+    browser_download_url: "https://example.com/app.apk",
+    size: 1,
+  };
   expect(
     newerApk([{ tag_name: "v2.0.0", draft: false, prerelease: false, assets: [asset] }], 1),
   ).toBeUndefined();
