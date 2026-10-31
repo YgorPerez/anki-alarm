@@ -52,7 +52,6 @@ jobs:
             # Android only reads that setting on a configuration change, so force one.
             adb shell settings put system font_scale 1.01
             adb shell settings put system font_scale 1.0
-            adb shell dumpsys activity | grep -i mShowDialogs || true
             adb install apps/mobile/android/app/build/outputs/apk/release/app-release.apk
             # The runner runs each line on its own, so the logcat dump on failure shares the line.
             mkdir -p maestro-debug && $HOME/.maestro/bin/maestro test apps/mobile/.maestro --debug-output maestro-debug --flatten-debug-output || { adb logcat -d > maestro-debug/logcat.txt; exit 1; }
