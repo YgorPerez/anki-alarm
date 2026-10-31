@@ -204,6 +204,7 @@ function HomeHeader({
   locale,
   zone,
   use24Hour,
+  otherAlarm,
   banner,
   error,
   setup,
@@ -215,6 +216,7 @@ function HomeHeader({
   locale: Locale;
   zone: string;
   use24Hour: boolean;
+  otherAlarm?: ReactNode;
   banner?: ReactNode;
   error?: string;
   setup?: DeckSetup;
@@ -245,6 +247,7 @@ function HomeHeader({
           )}
         </View>
       )}
+      {otherAlarm}
       {banner}
       {error ? (
         <Text style={regular} accessibilityRole="alert" className="text-body text-attention">
@@ -269,6 +272,7 @@ export function HomeScreen({
   onToggle,
   onSkip,
   onDuplicate,
+  otherAlarm,
   banner,
   error,
   refreshing,
@@ -291,6 +295,8 @@ export function HomeScreen({
   /** Saves the alarm with its next ring skipped, or the skip undone. */
   onSkip?: (alarm: Alarm) => void;
   onDuplicate?: (alarm: Alarm) => void;
+  /** The line about another app's next alarm, under the headline. */
+  otherAlarm?: ReactNode;
   banner?: ReactNode;
   error?: string;
   refreshing?: boolean;
@@ -329,6 +335,7 @@ export function HomeScreen({
             locale={locale}
             zone={zone}
             use24Hour={use24Hour}
+            otherAlarm={otherAlarm}
             banner={banner}
             error={error}
             setup={setup}

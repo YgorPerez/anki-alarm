@@ -28,6 +28,9 @@ service, which rings the same ring id. `sessionStarted` on a snoozed ring is Ans
 cancels the snooze alarm and starts the service straight into a silent session. An alarm due
 while snoozed is absorbed, as during any ring. JS checks the cap and adds the snooze cost to N.
 
+`otherNextAlarm()` (polled while the Alarm tab shows) reads another app's next alarm from `AlarmManager.getNextAlarmClock()`, and
+`openOtherAlarm()` sends the intent that app registered with it. Both are read-only towards that app.
+
 #47 adds the awake check. `dismiss(ringId, awakeCheckAfter)` takes seconds (Core's
 `awakeCheckAfter(alarm)`) or null. With seconds, the dismissal and the pending check
 (`{ id, ringId, alarm, dueAt }`) commit in one write, and `AwakeCheck.advance` arms an exact alarm
