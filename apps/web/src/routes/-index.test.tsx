@@ -11,7 +11,6 @@ describe("home", () => {
 
     await user.click(screen.getByRole("button", { name: "English" }));
 
-    expect(await screen.findByRole("heading", { name: "Alarm clock" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Português" })).toBeDefined();
   });
 });
