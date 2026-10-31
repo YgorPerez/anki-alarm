@@ -5,6 +5,10 @@ import android.app.Application
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,6 +45,20 @@ class OtherAlarmTest {
     val alarm = OtherAlarm.read(ctx)!!
     assertEquals(at.toDouble(), alarm["at"])
     assertNull(alarm["app"])
+    assertNull(alarm["icon"])
+  }
+
+  @Test fun aVisibleAppsAlarmCarriesItsIcon() {
+    val pkg = "com.example.visible"
+    shadowOf(ctx.packageManager).installPackage(
+      PackageInfo().apply {
+        packageName = pkg
+        applicationInfo = ApplicationInfo().apply { packageName = pkg }
+      },
+    )
+    shadowOf(ctx.packageManager).setApplicationIcon(pkg, ColorDrawable(Color.RED))
+    schedule(pkg)
+    assertTrue((OtherAlarm.read(ctx)!!["icon"] as String).startsWith("data:image/png;base64,"))
   }
 
   @Test fun openingSendsTheOtherAppsIntent() {

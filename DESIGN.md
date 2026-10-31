@@ -360,6 +360,14 @@ bottom padding lets the last card's switch clear it. Long-press opens +10, +20 a
 card menu's sheet, and TalkBack gets a named action for it. Above +, short notices use a 16px
 `surface`; the one-time hint uses `primary-tint`, right-aligned, with a 48dp × to dismiss it.
 
+Another app's next alarm is a compact 16px `surface` card right above the alarm cards, and under
+the empty state's action when there are none: that app's real icon at 40dp, the time in 30sp Inter,
+"Clock · seg., 2 de nov." (or "Clock · hoje") in Label `muted-foreground`, and an up-right arrow
+that says it leaves the app. It has no switch and a smaller time than our own cards, so it never
+reads as an alarm that asks for cards. When Android hides the app, a muted Lucide clock and "Outro
+app" stand in. Color stays neutral: it's neither the action nor a warning. A failed open says so in
+`attention` under the card.
+
 ### Alarm editor
 
 The phone editor starts with looping hour and minute wheels in Inter Bold, with a smaller AM/PM
