@@ -2,7 +2,7 @@ import { translator, type Locale, type Messages } from "@app/core";
 
 const messages = {
   "pt-BR": {
-    title: "Despertador",
+    title: "Anki Alarm",
     storageError:
       "Não foi possível acessar o armazenamento local. Confira o espaço e as permissões do navegador e recarregue a página.",
     storageLoading: "Abrindo os dados locais…",
@@ -64,7 +64,7 @@ const messages = {
     expired: "Sua sessão expirou. Entre de novo para sincronizar.",
   },
   en: {
-    title: "Alarm clock",
+    title: "Anki Alarm",
     storageError:
       "Could not access local storage. Check browser storage space and permissions, then reload the page.",
     storageLoading: "Opening local data…",

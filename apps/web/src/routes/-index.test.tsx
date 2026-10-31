@@ -7,11 +7,10 @@ describe("home", () => {
   test("opens in Portuguese and switches to English", async () => {
     const { user } = await renderRoute("/");
 
-    expect(await screen.findByRole("heading", { name: "Despertador" })).toBeDefined();
+    expect(await screen.findByRole("heading", { name: "Anki Alarm" })).toBeDefined();
 
     await user.click(screen.getByRole("button", { name: "English" }));
 
-    expect(await screen.findByRole("heading", { name: "Alarm clock" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Português" })).toBeDefined();
   });
 });

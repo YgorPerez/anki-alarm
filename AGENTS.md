@@ -1,6 +1,6 @@
 # anki-alarm
 
-Working name. Read `docs/spec.md` first: it holds the product decisions. Vocabulary is in
+Read `docs/spec.md` first: it holds the product decisions. Vocabulary is in
 `GLOSSARY.md`.
 
 ## Issue tracker

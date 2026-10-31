@@ -8,9 +8,8 @@ const tag = process.env["RELEASE_TAG"];
 const release = tag ? releaseVersion(tag) : { version: "0.0.0", versionCode: 1 };
 const projectId = process.env["EXPO_PUBLIC_EAS_PROJECT_ID"];
 
-// The name is not decided (docs/spec.md); "anki-alarm" is the working one until the first release.
 const config: ExpoConfig = {
-  name: "Despertador",
+  name: "Anki Alarm",
   slug: "anki-alarm",
   scheme: "anki-alarm",
   version: release.version,
