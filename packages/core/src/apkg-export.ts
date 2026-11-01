@@ -343,7 +343,7 @@ function collectionRows({ collection, log, deckId, now }: ApkgExportInput) {
     decks.map((deck) => {
       const anki = deckAnki.get(deck.id)!;
       const presetId = presetAnki.get(deck.fields.presetId.value)!.id;
-      return [String(anki.id), deckEntry(deck, anki, presetId)];
+      return [String(anki.id), deckEntry(deck, anki, presetId, dayNumber)];
     }),
   );
   const dconf = Object.fromEntries(
@@ -359,8 +359,12 @@ function collectionRows({ collection, log, deckId, now }: ApkgExportInput) {
     for (const m of mediaReferences(type.fields.templates.value.flatMap((t) => [t.front, t.back])))
       media.add(m);
   const first = deckAnki.get(root.id)!.id;
+  // Anki keeps these rules for the whole collection, so the exported deck's preset speaks for it.
+  const rules = presets.find((p) => p.id === root.fields.presetId.value)?.fields;
   const conf = {
     ...CONF,
+    newCardsIgnoreReviewLimit: rules?.newIgnoreReviewLimit.value ?? false,
+    applyAllParentLimits: rules?.applyAllParentLimits.value ?? false,
     curDeck: first,
     activeDecks: [first],
     curModel: typeAnki.get(types[0]?.id ?? "")?.id ?? null,
@@ -545,7 +549,14 @@ function modelJson(type: NoteType, anki: { id: number; appId?: string }) {
   };
 }
 
-function deckEntry(deck: Deck, anki: { id: number; appId?: string }, presetId: number) {
+function deckEntry(
+  deck: Deck,
+  anki: { id: number; appId?: string },
+  presetId: number,
+  dayNumber: (ms: number) => number,
+) {
+  const today = (limit: { limit: number; day: number } | null | undefined) =>
+    limit ? { limit: limit.limit, today: dayNumber(limit.day) } : null;
   const override = deck.fields.desiredRetention.value;
   return {
     id: anki.id,
@@ -564,10 +575,10 @@ function deckEntry(deck: Deck, anki: { id: number; appId?: string }, presetId: n
     conf: presetId,
     extendNew: 0,
     extendRev: 0,
-    reviewLimit: null,
-    newLimit: null,
-    reviewLimitToday: null,
-    newLimitToday: null,
+    reviewLimit: deck.fields.reviewLimit?.value ?? null,
+    newLimit: deck.fields.newLimit?.value ?? null,
+    reviewLimitToday: today(deck.fields.reviewLimitToday?.value),
+    newLimitToday: today(deck.fields.newLimitToday?.value),
     // Schema 11 keeps the deck's override as a whole percent.
     desiredRetention: override == null ? null : Math.round(override * 100),
   };

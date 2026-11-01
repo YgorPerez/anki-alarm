@@ -391,6 +391,50 @@ test("media alone are read without the collection, in protobuf order for Latest"
   );
 });
 
+test("current Anki protobuf decks and config import limits and limit rules", async () => {
+  const base = host(fixture("latest.apkg"));
+  const created = new Date(2026, 0, 1, 4);
+  const { package: source } = await readApkg({
+    ...base,
+    openSqlite: async (bytes) => {
+      const db = await base.openSqlite(bytes);
+      return {
+        ...db,
+        all: async (query) => {
+          if (query.includes("crt FROM col")) return [{ crt: created.getTime() / 1000 }];
+          if (query.includes("FROM config WHERE key IN"))
+            return [
+              { key: "newCardsIgnoreReviewLimit", val: new Uint8Array(utf8("true")) },
+              { key: "applyAllParentLimits", val: new Uint8Array(utf8("false")) },
+            ];
+          const rows = await db.all(query);
+          if (!query.includes("FROM decks")) return rows;
+          return rows.map((row) => {
+            if (!(row.kind instanceof Uint8Array) || row.kind[0] !== 0x0a || row.kind[1]! > 100)
+              throw new Error("Expected a short normal deck");
+            // review_limit = 6, new_limit = 7, review_limit_today = 8, new_limit_today = 9.
+            const limits = [0x30, 50, 0x38, 5, 0x42, 4, 8, 20, 16, 3, 0x4a, 4, 8, 2, 16, 3];
+            const normal = [...row.kind.subarray(2), ...limits];
+            row.kind = new Uint8Array([0x0a, normal.length, ...normal]);
+            return row;
+          });
+        },
+      };
+    },
+  });
+  expect(source.decks.length).toBeGreaterThan(0);
+  const day = new Date(2026, 0, 4, 4).getTime();
+  for (const deck of source.decks)
+    expect(deck).toMatchObject({
+      newLimit: 5,
+      reviewLimit: 50,
+      newLimitToday: { limit: 2, day },
+      reviewLimitToday: { limit: 20, day },
+    });
+  for (const preset of source.presets)
+    expect(preset).toMatchObject({ newIgnoreReviewLimit: true, applyAllParentLimits: false });
+});
+
 test("current Anki protobuf presets import all three sibling burying options", async () => {
   const base = host(fixture("latest.apkg"));
   const { package: source } = await readApkg({

@@ -1,6 +1,7 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only freshly filtered/mapped arrays are sorted. */
 import { createEmptyCard, fsrs, State, type Card as MemoryState, type Grade } from "ts-fsrs";
 import type { Card, CollectionState, Deck, Preset } from "./collection.ts";
+import { dailyLimit } from "./daily-limits.ts";
 import { easyDayInterval, type EasyDays } from "./easy-days.ts";
 export type { MemoryState, Grade };
 /** FSRS card states: New, Learning, Review, Relearning. */
@@ -301,9 +302,17 @@ export function deckFamily(collection: CollectionState, deckId: string) {
       .map((d) => d.id),
   );
 }
+/** A deck and the decks above it, named `Parent::Child`. */
+function deckLineage(collection: CollectionState, deck: Deck) {
+  const name = deck.fields.name.value;
+  return collection.decks.filter(
+    (d) => d.id === deck.id || name.startsWith(`${d.fields.name.value}::`),
+  );
+}
 /**
  * The cards to study now in a deck and its subdecks, as Anki studies them. Each card schedules
- * with its own deck's preset; the daily limits are the studied deck's.
+ * with its own deck's preset. The daily limits are the studied deck's, or with
+ * `applyAllParentLimits`, those of every deck from the top parent down to the card's own.
  */
 function studyCandidates(
   collection: CollectionState,
@@ -316,17 +325,22 @@ function studyCandidates(
   const preset = deck && deckPreset(collection, deck);
   if (!deck || !preset) throw new Error("Deck preset missing");
   const family = deckFamily(collection, deckId);
+  const allParents = preset.fields.applyAllParentLimits.value;
+  const ignoreReviewLimit = preset.fields.newIgnoreReviewLimit.value;
+  // With parent limits, answers anywhere under the top parent count.
+  const top = deck.fields.name.value.split("::")[0]!;
+  const counted = allParents
+    ? collection.decks.filter(
+        (d) => d.fields.name.value === top || d.fields.name.value.startsWith(`${top}::`),
+      )
+    : collection.decks.filter((d) => family.has(d.id));
   const presets = new Map<string, Preset>();
-  for (const d of collection.decks) {
-    if (!family.has(d.id)) continue;
+  for (const d of counted) {
     const own = deckPreset(collection, d);
     if (!own) throw new Error("Deck preset missing");
     presets.set(d.id, own);
   }
   const presetOf = (card: Card) => presets.get(card.fields.deckId.value)!;
-  const cards = collection.cards.filter(
-    (c) => family.has(c.fields.deckId.value) && !c.fields.suspended?.value && !isBuried(c, now),
-  );
   const voided = new Set(log.filter((e) => e.kind === "void").map((e) => e.targetId));
   // Each card replays only its own entries.
   const entries = new Map<string, LogEntry[]>();
@@ -335,9 +349,10 @@ function studyCandidates(
     if (own) own.push(entry);
     else entries.set(entry.cardId, [entry]);
   }
-  let newCount = 0;
-  let reviewCount = 0;
-  for (const card of cards) {
+  // Answers count wherever the card is now, even if it was later buried or suspended.
+  const done = new Map<string, { new: number; review: number }>();
+  for (const card of collection.cards) {
+    if (!presets.has(card.fields.deckId.value)) continue;
     const own = entries.get(card.id) ?? [];
     const today = own
       .filter(
@@ -359,21 +374,63 @@ function studyCandidates(
         presetOf(card),
         now,
       );
-      if (before.state === State.New) newCount++;
-      else if (before.state === State.Review) reviewCount++;
+      const count = done.get(card.fields.deckId.value) ?? { new: 0, review: 0 };
+      if (before.state === State.New) count.new++;
+      else if (before.state === State.Review) count.review++;
+      done.set(card.fields.deckId.value, count);
     }
   }
-  const queue = cards
+  // What each limiting deck has left today, counting its subdecks' answers. By default new cards
+  // use up the review limit too. Fresh per call, so `spend` can reserve from it.
+  const budgets = new Map<string, { new: number; review: number }>();
+  const budget = (d: Deck) => {
+    const known = budgets.get(d.id);
+    if (known) return known;
+    let fresh = 0;
+    let reviews = 0;
+    for (const id of deckFamily(collection, d.id)) {
+      fresh += done.get(id)?.new ?? 0;
+      reviews += done.get(id)?.review ?? 0;
+    }
+    const own = presets.get(d.id)!;
+    const review =
+      dailyLimit(d, own, "review", dayStart) - reviews - (ignoreReviewLimit ? 0 : fresh);
+    const left = dailyLimit(d, own, "new", dayStart) - fresh;
+    const result = { new: ignoreReviewLimit ? left : Math.min(left, review), review };
+    budgets.set(d.id, result);
+    return result;
+  };
+  const budgetsOf = (card: Card) => {
+    if (!allParents) return [budget(deck)];
+    const own = collection.decks.find((d) => d.id === card.fields.deckId.value)!;
+    return deckLineage(collection, own).map(budget);
+  };
+  /** Reserves a slot for a card; false when one of its limits has none left. */
+  const spend = (card: Card, kind: "new" | "review") => {
+    const limits = budgetsOf(card);
+    if (limits.some((b) => b[kind] <= 0)) return false;
+    for (const b of limits) {
+      b[kind]--;
+      if (ignoreReviewLimit) continue;
+      if (kind === "new") b.review--;
+      b.new = Math.min(b.new, b.review);
+    }
+    return true;
+  };
+  const queue = collection.cards
+    .filter(
+      (c) => family.has(c.fields.deckId.value) && !c.fields.suspended?.value && !isBuried(c, now),
+    )
     .map((card) => ({
       card,
       memory: replayCard(card.id, entries.get(card.id) ?? [], presetOf(card), now),
       newPosition: insertionPosition(card, entries.get(card.id) ?? [], voided, presetOf(card)),
     }))
-    .filter(({ memory }) =>
+    .filter(({ card, memory }) =>
       memory.state === State.New
-        ? newCount < preset.fields.newPerDay.value
+        ? budgetsOf(card).every((b) => b.new > 0)
         : memory.due.getTime() <= now &&
-          (memory.state !== State.Review || reviewCount < preset.fields.reviewsPerDay.value),
+          (memory.state !== State.Review || budgetsOf(card).every((b) => b.review > 0)),
     )
     .sort(
       (a, b) =>
@@ -383,11 +440,7 @@ function studyCandidates(
           : a.memory.due.getTime() - b.memory.due.getTime()) ||
         a.card.id.localeCompare(b.card.id),
     );
-  return {
-    queue,
-    newRemaining: Math.max(0, preset.fields.newPerDay.value - newCount),
-    reviewRemaining: Math.max(0, preset.fields.reviewsPerDay.value - reviewCount),
-  };
+  return { queue, spend };
 }
 
 export function studyQueue(
@@ -400,25 +453,42 @@ export function studyQueue(
   return studyCandidates(collection, log, deckId, now, dayStart).queue;
 }
 
-/** Cards available now, including subdecks, capped by the studied deck's remaining daily limits. */
+/**
+ * Whether a card can be answered in normal study: it is in the queue of its deck or of a deck
+ * above it, whose limits may allow it when its own don't.
+ */
+export function canStudyCard(
+  collection: CollectionState,
+  log: readonly LogEntry[],
+  cardId: string,
+  now: number,
+) {
+  const card = collection.cards.find((c) => c.id === cardId);
+  const deck = collection.decks.find((d) => d.id === card?.fields.deckId.value);
+  return (
+    !!deck &&
+    deckLineage(collection, deck).some((d) =>
+      studyQueue(collection, log, d.id, now).some((c) => c.card.id === cardId),
+    )
+  );
+}
+
+/** Cards available now, including subdecks, within the remaining daily limits. */
 export function studyCounts(
   collection: CollectionState,
   log: readonly LogEntry[],
   deckId: string,
   now: number,
 ) {
-  const { queue, newRemaining, reviewRemaining } = studyCandidates(collection, log, deckId, now);
+  const { queue, spend } = studyCandidates(collection, log, deckId, now);
   const counts = { new: 0, learning: 0, review: 0 };
-  for (const { memory } of queue) {
-    if (memory.state === State.New) counts.new++;
-    else if (memory.state === State.Review) counts.review++;
+  // The queue holds new cards last, so reviews reserve their share of the limits first.
+  for (const { card, memory } of queue) {
+    if (memory.state === State.New) counts.new += spend(card, "new") ? 1 : 0;
+    else if (memory.state === State.Review) counts.review += spend(card, "review") ? 1 : 0;
     else counts.learning++;
   }
-  return {
-    ...counts,
-    new: Math.min(counts.new, newRemaining),
-    review: Math.min(counts.review, reviewRemaining),
-  };
+  return counts;
 }
 
 /**

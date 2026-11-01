@@ -126,8 +126,14 @@ function DeckEditor({
             onDirtyChange={setDirty}
             deckCount={sharing}
             locale={lang}
-            onSave={async (patch) => {
-              await change({ kind: "updatePreset", id: preset.id, patch });
+            deck={deck}
+            onSave={async (patch, limits) => {
+              await change({
+                kind: "updatePreset",
+                id: preset.id,
+                patch,
+                ...(limits ? { limits } : {}),
+              });
             }}
           />
         )}

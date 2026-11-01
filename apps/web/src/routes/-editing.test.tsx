@@ -236,6 +236,37 @@ test("deck options manage presets and return deleted presets' decks to Default",
   confirm.mockRestore();
 });
 
+test("daily limit scopes and rules save with deck options and survive reopening", async () => {
+  const { user } = await renderRoute("/");
+  await user.click(await screen.findByRole("link", { name: "Novo baralho" }));
+  await user.type(await screen.findByLabelText("Nome do baralho"), "Limits");
+  await user.click(screen.getByRole("button", { name: "Criar baralho" }));
+  await user.click(await screen.findByRole("button", { name: "Opções do baralho" }));
+  const sharedLimit = screen.getByLabelText<HTMLInputElement>("Cartões novos por dia").value;
+  const ownLimit = sharedLimit === "3" ? "4" : "3";
+  await user.selectOptions(screen.getByLabelText("Limite de novos vale para"), "deck");
+  await user.clear(screen.getByLabelText("Cartões novos por dia"));
+  await user.type(screen.getByLabelText("Cartões novos por dia"), ownLimit);
+  await user.selectOptions(screen.getByLabelText("Limite de revisões vale para"), "today");
+  await user.click(screen.getByLabelText("Novos ignoram o limite de revisões"));
+  await user.click(screen.getByLabelText("Limites começam no baralho pai"));
+  await user.click(screen.getByRole("button", { name: "Salvar" }));
+  await screen.findByText("Salvo.");
+  await user.click(screen.getByRole("link", { name: "‹ Voltar" }));
+  await user.click(await screen.findByRole("button", { name: "Opções do baralho" }));
+  expect(screen.getByLabelText("Limite de novos vale para")).toHaveProperty("value", "deck");
+  expect(screen.getByLabelText("Limite de revisões vale para")).toHaveProperty("value", "today");
+  expect(screen.getByLabelText("Cartões novos por dia")).toHaveProperty("value", ownLimit);
+  expect(screen.getByLabelText("Novos ignoram o limite de revisões")).toHaveProperty(
+    "checked",
+    true,
+  );
+  expect(screen.getByLabelText("Limites começam no baralho pai")).toHaveProperty("checked", true);
+  // Going back to the preset shows the preset's number, not this deck's.
+  await user.selectOptions(screen.getByLabelText("Limite de novos vale para"), "preset");
+  expect(screen.getByLabelText("Cartões novos por dia")).toHaveProperty("value", sharedLimit);
+});
+
 test("switching presets asks before discarding edited options", async () => {
   const id = (await webRequest("change", { kind: "createDeck", name: "Switch draft" }))!;
   const customId = await webRequest("change", {
