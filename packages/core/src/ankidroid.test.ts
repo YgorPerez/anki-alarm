@@ -518,3 +518,26 @@ test("a newer AnkiDroid pull preserves local flag and mark choices", () => {
   c.linkAnkiDroid(update, []);
   expect(c.snapshot().notes[0]!.fields.tags.value).toEqual(["updated"]);
 });
+
+test("answering a linked card sends its sibling bury through the usual sync back plan", () => {
+  const { c, fresh, reviewed } = linked();
+  c.updatePreset(c.snapshot().presets[0]!.id, { buryNew: true });
+  c.applySiblingBurying(
+    {
+      kind: "review",
+      id: "answer",
+      cardId: reviewed.id,
+      at: now,
+      grade: 3,
+      durationMs: 100,
+      origin: "phone",
+    },
+    [],
+  );
+  const buries = syncBackBuries(c.snapshot(), "phone-a", new Set(), now);
+  expect(buries.map((b) => b.cardId)).toEqual([fresh.id]);
+  expect(syncBackBuryPlan(buries, source().cards).send).toEqual(buries);
+  expect(syncBackBuries(c.snapshot(), "phone-a", new Set(buries.map((b) => b.key)), now)).toEqual(
+    [],
+  );
+});

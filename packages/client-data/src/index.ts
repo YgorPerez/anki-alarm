@@ -51,7 +51,6 @@ import {
 } from "./ankidroid.ts";
 import { openCollectionStore } from "./collection.ts";
 import {
-  core,
   inBatches,
   migrate,
   query,
@@ -279,27 +278,30 @@ const open = (driver: SQLiteConnection, media: MediaFiles) =>
       ) => LogEntry,
     ) =>
       local(
-        inCollection(
-          Effect.gen(function* () {
-            const state = yield* store.read;
-            const log = yield* readLog;
-            const at = driver.now();
-            const entry = yield* core(() => {
+        Effect.gen(function* () {
+          const log = yield* readLog;
+          const at = driver.now();
+          const { result } = yield* store.run(
+            (c) => {
+              const state = c.snapshot();
               const built = build(state, log, { id: uuid7(at, driver.random()), at });
               checkLogEntry(state, log, built);
-              return built;
-            });
-            yield* query(() =>
-              collectionDb.insert(reviewLog).values({ id: entry.id, body: entry }),
-            );
-            yield* query(() =>
-              collectionDb
-                .insert(outbox)
-                .values({ kind: "reviewLog", recordId: entry.id, body: entry }),
-            );
-            return entry;
-          }),
-        ),
+              return c.applySiblingBurying(built, log);
+            },
+            (entry) =>
+              Effect.gen(function* () {
+                yield* query(() =>
+                  collectionDb.insert(reviewLog).values({ id: entry.id, body: entry }),
+                );
+                yield* query(() =>
+                  collectionDb
+                    .insert(outbox)
+                    .values({ kind: "reviewLog", recordId: entry.id, body: entry }),
+                );
+              }),
+          );
+          return result;
+        }),
       );
     /** Appends the entries not yet in the log, with their outbox records; inside a transaction. */
     const appendNew = (log: readonly LogEntry[]) =>

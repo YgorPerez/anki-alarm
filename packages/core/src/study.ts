@@ -25,6 +25,8 @@ export type LogEntry = Entry &
         grade: Grade;
         /** Absent only on legacy entries, frozen by the upgrade migration. */
         options?: SchedulingOptions;
+        /** Previous sibling buries, for undo; the actual buries are synced card fields. */
+        siblingBuries?: { cardId: string; until: number | null }[];
         durationMs: number;
         origin: "phone" | "web" | "alarm" | "import";
         /**

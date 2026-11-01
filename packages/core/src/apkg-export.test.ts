@@ -429,3 +429,29 @@ test("an exported custom preset stays deletable and new decks use Default after 
     next.fields.presetId.value,
   );
 });
+
+test("sibling burying options survive apkg export and import", async () => {
+  const c = new Collection(environment());
+  const deck = c.createDeck("Bury siblings");
+  c.addBasicNote(deck.id, "front", "back");
+  c.updatePreset(c.snapshot().presets[0]!.id, {
+    buryNew: true,
+    buryReviews: false,
+    buryLearning: true,
+  });
+  const bytes = await writeApkg(writeHost, {
+    collection: c.snapshot(),
+    log: [],
+    deckId: deck.id,
+    now: NOW,
+  });
+  const imported = await readApkg(readHost(bytes));
+  const restored = new Collection(environment("other"));
+  restored.importAnki(imported.package);
+  const fields = restored.snapshot().presets[0]!.fields;
+  expect([fields.buryNew.value, fields.buryReviews.value, fields.buryLearning.value]).toEqual([
+    true,
+    false,
+    true,
+  ]);
+});

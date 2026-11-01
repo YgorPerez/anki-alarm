@@ -51,6 +51,9 @@ export interface AnkiPackage {
     newPerDay: number;
     reviewsPerDay: number;
     desiredRetention: number;
+    buryNew?: boolean;
+    buryReviews?: boolean;
+    buryLearning?: boolean;
     learningSteps: number[];
     /** FSRS-6 weights; absent or empty means the defaults. */
     fsrsParameters?: number[];
@@ -346,6 +349,9 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         newPerDay: int(record(c.new).perDay),
         reviewsPerDay: int(record(c.rev).perDay),
         desiredRetention: retention(c.desiredRetention, 0.9),
+        buryNew: record(c.new).bury === true,
+        buryReviews: record(c.rev).bury === true,
+        buryLearning: c.buryInterdayLearning === true,
         learningSteps: steps(record(c.new).delays),
         fsrsParameters: fsrs6(steps(c.fsrsParams6)),
         isDefault: typeof c.ankiAlarmDefault === "boolean" ? c.ankiAlarmDefault : undefined,
@@ -409,6 +415,9 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
         newPerDay: c.number(9) ?? 0,
         reviewsPerDay: c.number(10) ?? 0,
         desiredRetention: retention(c.float(37), 0.9),
+        buryNew: c.number(27) === 1,
+        buryReviews: c.number(28) === 1,
+        buryLearning: c.number(29) === 1,
         learningSteps: c.floats(1),
         fsrsParameters: fsrs6(c.floats(6)),
       };
