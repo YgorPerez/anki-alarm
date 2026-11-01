@@ -10,7 +10,7 @@ import {
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
 import { RetentionSlider } from "./RetentionSlider.tsx";
-import { Text, View } from "react-native";
+import { Switch, Text, View } from "react-native";
 import { Button, SaveButtons, TextField } from "./controls.tsx";
 import { editingCopy } from "./editing-copy.ts";
 import { regular } from "./fonts.ts";
@@ -95,6 +95,30 @@ export function DeckOptionsEditor({
           />
         )}
       </form.Field>
+      <View className="gap-3">
+        <Text style={regular} className="text-label font-bold text-foreground">
+          {t("burying")}
+        </Text>
+        {(["buryNew", "buryReviews", "buryLearning"] as const).map((key) => (
+          <form.Field key={key} name={key}>
+            {(field) => (
+              <View className="min-h-12 flex-row items-center justify-between gap-3">
+                <Text style={regular} className="flex-1 text-body text-foreground">
+                  {t(key)}
+                </Text>
+                <Switch
+                  accessible
+                  accessibilityRole="switch"
+                  accessibilityLabel={t(key)}
+                  value={field.state.value === "true"}
+                  onValueChange={(value) => field.handleChange(String(value))}
+                  disabled={busy}
+                />
+              </View>
+            )}
+          </form.Field>
+        ))}
+      </View>
       {fields.map((spec) => (
         <form.Field
           key={spec.key}

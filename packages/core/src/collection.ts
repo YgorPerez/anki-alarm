@@ -13,7 +13,15 @@ import {
 import { cardId, importId, uuid7 } from "./ids.ts";
 import { isLanguageTag } from "./locale.ts";
 import { editedNoteType, editedValues, noteTypeProblems, type NoteTypeEdit } from "./note-types.ts";
-import { deckPreset, schedulingOptions, dueInDays, studyDayStart, type LogEntry } from "./study.ts";
+import {
+  deckPreset,
+  schedulingOptions,
+  dueInDays,
+  studyDayStart,
+  cardMemory,
+  CardState,
+  type LogEntry,
+} from "./study.ts";
 
 /** FSRS-6's default weights, which every new preset starts from. */
 export const DEFAULT_FSRS_PARAMETERS: readonly number[] = default_w;
@@ -43,6 +51,9 @@ export type Deck = RecordFields<{
   AnkiIdentity;
 export type Preset = RecordFields<{
   name: string;
+  buryNew: boolean;
+  buryReviews: boolean;
+  buryLearning: boolean;
   newPerDay: number;
   reviewsPerDay: number;
   desiredRetention: number;
@@ -62,6 +73,9 @@ const presetKeys = [
   "desiredRetention",
   "learningSteps",
   "fsrsParameters",
+  "buryNew",
+  "buryReviews",
+  "buryLearning",
 ] as const satisfies readonly (keyof PresetOptions)[];
 /** The bounds of a preset's options, for the rules below and the copy that states them. */
 export const PRESET_LIMITS = {
@@ -75,6 +89,9 @@ export const PRESET_LIMITS = {
 } as const;
 /** The rule `updatePreset` applies to each option, for forms to check as the user types. */
 export const validOption: { [K in keyof PresetOptions]: (value: PresetOptions[K]) => boolean } = {
+  buryNew: (v) => typeof v === "boolean",
+  buryReviews: (v) => typeof v === "boolean",
+  buryLearning: (v) => typeof v === "boolean",
   name: (v) => typeof v === "string" && Boolean(v.trim()),
   newPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
   reviewsPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
@@ -208,11 +225,14 @@ export function parseCollection(stored: StoredCollection): CollectionState {
   const state = copy(stored) as unknown as CollectionState;
   for (const deck of state.decks)
     deck.fields.desiredRetention ??= { value: null, hlc: deck.fields.name.hlc };
-  for (const preset of state.presets)
+  for (const preset of state.presets) {
+    for (const key of ["buryNew", "buryReviews", "buryLearning"] as const)
+      preset.fields[key] ??= { value: false, hlc: preset.fields.name.hlc };
     preset.fields.fsrsParameters ??= {
       value: [...DEFAULT_FSRS_PARAMETERS],
       hlc: preset.fields.name.hlc,
     };
+  }
   for (const card of state.cards) {
     card.fields.suspended ??= { value: false, hlc: card.fields.ordinal.hlc };
     card.fields.buriedUntil ??= { value: null, hlc: card.fields.ordinal.hlc };
@@ -346,6 +366,9 @@ export class Collection {
     if (!preset) {
       preset = this.record({
         name: "Default",
+        buryNew: false,
+        buryReviews: false,
+        buryLearning: false,
         newPerDay: 20,
         reviewsPerDay: 200,
         desiredRetention: 0.9,
@@ -589,6 +612,51 @@ export class Collection {
    */
   buryCard(id: string) {
     this.setBuriedUntil(id, dueInDays(1, this.env.now()));
+  }
+  /** Applies normal-study sibling buries, or restores the buries of an undone answer. */
+  applySiblingBurying(entry: LogEntry, log: readonly LogEntry[]): LogEntry {
+    if (entry.kind === "void") {
+      const target = log.find((e) => e.id === entry.targetId);
+      if (target?.kind === "review")
+        for (const previous of target.siblingBuries ?? []) {
+          const card = this.state.cards.find((c) => c.id === previous.cardId);
+          if (card?.fields.buriedUntil.value === dueInDays(1, target.at))
+            this.setBuriedUntil(card.id, previous.until);
+        }
+      return entry;
+    }
+    if (
+      entry.kind !== "review" ||
+      entry.origin === "alarm" ||
+      entry.origin === "import" ||
+      entry.ringId !== undefined
+    )
+      return entry;
+    const card = this.state.cards.find((c) => c.id === entry.cardId);
+    const deck = this.state.decks.find((d) => d.id === card?.fields.deckId.value);
+    const preset = deck && deckPreset(this.state, deck);
+    if (!card || !preset) throw new Error("Deck preset missing");
+    const previous: { cardId: string; until: number | null }[] = [];
+    for (const sibling of this.cardsOf(card.fields.noteId.value)) {
+      if (
+        sibling.id === card.id ||
+        sibling.fields.suspended.value ||
+        (sibling.fields.buriedUntil.value ?? 0) > entry.at
+      )
+        continue;
+      const memory = cardMemory(this.state, log, sibling.id, entry.at);
+      if (!memory) continue;
+      const bury =
+        memory.state === CardState.New
+          ? preset.fields.buryNew.value
+          : memory.state === CardState.Review
+            ? preset.fields.buryReviews.value
+            : preset.fields.buryLearning.value;
+      if (!bury) continue;
+      previous.push({ cardId: sibling.id, until: sibling.fields.buriedUntil.value });
+      this.setBuriedUntil(sibling.id, dueInDays(1, entry.at));
+    }
+    return previous.length ? { ...entry, siblingBuries: previous } : entry;
   }
   /** Reverses `buryCard`: the card is back in study at once. */
   unburyCard(id: string) {
@@ -860,6 +928,9 @@ export class Collection {
         reviewsPerDay,
         desiredRetention,
         learningSteps,
+        buryNew: p.buryNew ?? false,
+        buryReviews: p.buryReviews ?? false,
+        buryLearning: p.buryLearning ?? false,
         fsrsParameters: [...weights],
       };
       if (merge("presets", this.state.presets, index.presets, { id, values, mtime, rest }))

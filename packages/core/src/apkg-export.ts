@@ -581,9 +581,15 @@ function presetJson(preset: Preset, anki: { id: number; appId?: string }) {
     mod: clockOf(preset),
     name: f.name.value,
     usn: -1,
-    new: { ...DCONF.new, delays: f.learningSteps.value, perDay: f.newPerDay.value },
-    rev: { ...DCONF.rev, perDay: f.reviewsPerDay.value },
+    new: {
+      ...DCONF.new,
+      bury: f.buryNew.value,
+      delays: f.learningSteps.value,
+      perDay: f.newPerDay.value,
+    },
+    rev: { ...DCONF.rev, bury: f.buryReviews.value, perDay: f.reviewsPerDay.value },
     lapse: { ...DCONF.lapse, delays: RELEARNING_STEPS },
+    buryInterdayLearning: f.buryLearning.value,
     fsrsParams6: f.fsrsParameters.value,
     desiredRetention: f.desiredRetention.value,
   };

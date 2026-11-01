@@ -15,7 +15,11 @@ const list = (text: string, separator: RegExp) => {
   const values = parts.map(Number);
   return parts.every((p) => p !== "") && values.every(Number.isFinite) ? values : undefined;
 };
+const boolean = (text: string) => (text === "true" ? true : text === "false" ? false : undefined);
 const read = {
+  buryNew: boolean,
+  buryReviews: boolean,
+  buryLearning: boolean,
   name: (text: string) => text.trim(),
   newPerDay: integer,
   reviewsPerDay: integer,
@@ -30,12 +34,18 @@ const KEYS = [
   "desiredRetention",
   "learningSteps",
   "fsrsParameters",
+  "buryNew",
+  "buryReviews",
+  "buryLearning",
 ] as const satisfies readonly (keyof PresetOptions)[];
 const ok = <T>(value: T | undefined, rule: (value: T) => boolean) =>
   value !== undefined && rule(value);
 
 /** Core's rule for each option (`validOption`), applied to what the user typed. */
 export const validPresetText: Record<keyof PresetOptions, (text: string) => boolean> = {
+  buryNew: (text) => ok(read.buryNew(text), validOption.buryNew),
+  buryReviews: (text) => ok(read.buryReviews(text), validOption.buryReviews),
+  buryLearning: (text) => ok(read.buryLearning(text), validOption.buryLearning),
   name: (text) => validOption.name(text),
   newPerDay: (text) => ok(read.newPerDay(text), validOption.newPerDay),
   reviewsPerDay: (text) => ok(read.reviewsPerDay(text), validOption.reviewsPerDay),
@@ -49,6 +59,9 @@ export function presetTexts(preset: Preset, locale: Locale): PresetTexts {
   const f = preset.fields;
   const decimalText = (n: number) => (locale === "pt-BR" ? String(n).replace(".", ",") : String(n));
   return {
+    buryNew: String(f.buryNew.value),
+    buryReviews: String(f.buryReviews.value),
+    buryLearning: String(f.buryLearning.value),
     name: f.name.value,
     newPerDay: String(f.newPerDay.value),
     reviewsPerDay: String(f.reviewsPerDay.value),
@@ -62,6 +75,9 @@ export function presetTexts(preset: Preset, locale: Locale): PresetTexts {
 export function readPresetTexts(texts: PresetTexts): PresetOptions | undefined {
   if (!KEYS.every((key) => validPresetText[key](texts[key]))) return undefined;
   return {
+    buryNew: read.buryNew(texts.buryNew)!,
+    buryReviews: read.buryReviews(texts.buryReviews)!,
+    buryLearning: read.buryLearning(texts.buryLearning)!,
     name: read.name(texts.name),
     newPerDay: read.newPerDay(texts.newPerDay)!,
     reviewsPerDay: read.reviewsPerDay(texts.reviewsPerDay)!,
