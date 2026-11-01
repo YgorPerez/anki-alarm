@@ -2,6 +2,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import type { SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import {
   ankiDroidSyncWaitMs,
+  linkOfferPlan,
   sentSuspensionKey,
   syncBackBuries,
   syncBackBuryPlan,
@@ -67,7 +68,13 @@ export type SyncBackFailure =
   | "failed"
   | "notRecorded";
 export interface SyncBackStatus {
-  pending: { entryId: string; deckId: string; held: boolean }[];
+  pending: {
+    entryId: string;
+    deckId: string;
+    held: boolean;
+    /** The deck whose link offer holds this answer until the user chooses; else null. */
+    offer: string | null;
+  }[];
   failure: SyncBackFailure | null;
 }
 export interface PullSummary extends SyncBackSummary {
@@ -105,7 +112,8 @@ interface Deps {
   notify: () => void;
 }
 
-const offerKey = (deckId: string) => `ankiDroidLinkOffer:${deckId}`;
+const OFFER_PREFIX = "ankiDroidLinkOffer:";
+const offerKey = (deckId: string) => `${OFFER_PREFIX}${deckId}`;
 const AUTO = "ankiDroidAutoSyncBack";
 const SYNC_REQUESTED_AT = "ankiDroidSyncRequestedAt";
 /** AnkiDroid finds a card by note id and ord. */
@@ -164,14 +172,20 @@ export function ankiDroidEngine(deps: Deps) {
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion
       const failure = (rows.find((r) => r.id === "ankiDroidSyncBackFailure")?.value ||
         null) as SyncBackFailure | null;
-      return {
-        pending: syncBackQueue(state, log, deps.deviceId, sent).map((a) => ({
-          entryId: a.entryId,
-          deckId: a.deckId,
-          held: held.has(a.entryId),
-        })),
-        failure,
-      };
+      const offeredBy = new Map(
+        rows
+          .filter((r) => r.id.startsWith(OFFER_PREFIX))
+          .flatMap((r) =>
+            r.value.split(",").map((id) => [id, r.id.slice(OFFER_PREFIX.length)] as const),
+          ),
+      );
+      const pending = syncBackQueue(state, log, deps.deviceId, sent).map((a) => ({
+        entryId: a.entryId,
+        deckId: a.deckId,
+        held: held.has(a.entryId),
+        offer: offeredBy.get(a.entryId) ?? null,
+      }));
+      return { pending, failure };
     }),
   );
 
@@ -213,21 +227,30 @@ export function ankiDroidEngine(deps: Deps) {
           const sent = yield* readSent;
           return yield* deps.runCollection(
             (c) => {
+              const before = c.snapshot();
               const linked = c.linkAnkiDroid(source, log, seen, sent);
-              const offered = syncBackQueue(c.snapshot(), log, deps.deviceId, sent)
-                .filter((a) => linked.claimed.includes(a.deckId))
-                .map((a) => a.entryId);
+              const { offered, delivered } = linkOfferPlan({
+                before,
+                after: c.snapshot(),
+                log,
+                deviceId: deps.deviceId,
+                sent,
+                claimed: linked.claimed,
+                source,
+                seen,
+              });
               const importedNotes = new Set(source.notes.map((n) => n.id));
               const baseline = syncBackSuspensions(c.snapshot(), deps.deviceId, new Set())
                 .filter((a) => importedNotes.has(a.noteId))
                 .map((a) => a.entryId);
-              return { ...linked, baseline, offered };
+              return { ...linked, baseline, offered, delivered };
             },
             (linked) =>
               Effect.gen(function* () {
                 yield* deps.appendNew(linked.snapshots);
                 yield* storeSeen(linked.seen);
                 yield* markSent(linked.baseline);
+                yield* markSent(linked.delivered);
                 if (linked.offered.length) {
                   yield* query(() =>
                     db

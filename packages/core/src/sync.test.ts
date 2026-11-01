@@ -125,6 +125,20 @@ const review: SyncChange = {
   },
 };
 
+const frozen = (desiredRetention: number): SyncChange => ({
+  kind: "reviewLog",
+  entry: {
+    kind: "review",
+    id: "review",
+    cardId: "card",
+    at: 10,
+    grade: 3,
+    durationMs: 900,
+    origin: "web",
+    options: { desiredRetention, learningSteps: [1, 10], fsrsParameters: [] },
+  },
+});
+
 describe("resolveChange", () => {
   test("stores a new record and reports nothing when an edit changes nothing", () => {
     expect(resolveChange(undefined, record("casa", 2))).toEqual(record("casa", 2));
@@ -142,6 +156,37 @@ describe("resolveChange", () => {
   test("reviews only append: a review already stored is never replaced", () => {
     expect(resolveChange(undefined, review)).toEqual(review);
     expect(resolveChange(review, review)).toBeUndefined();
+  });
+
+  describe("two copies of one review with different frozen options (ADR 0008)", () => {
+    test("both sides keep the same copy, whichever arrives second", () => {
+      const [low, high] = [frozen(0.85), frozen(0.9)];
+      expect(resolveChange(high, low)).toEqual(low);
+      expect(resolveChange(low, high)).toBeUndefined();
+    });
+
+    test("options beat no options, never the reverse", () => {
+      expect(resolveChange(review, frozen(0.9))).toEqual(frozen(0.9));
+      expect(resolveChange(frozen(0.9), review)).toBeUndefined();
+    });
+
+    test("the same options in another key order are the same copy", () => {
+      const reordered: SyncChange = {
+        kind: "reviewLog",
+        entry: {
+          kind: "review",
+          id: "review",
+          cardId: "card",
+          at: 10,
+          grade: 3,
+          durationMs: 900,
+          origin: "web",
+          options: { fsrsParameters: [], learningSteps: [1, 10], desiredRetention: 0.9 },
+        },
+      };
+      expect(resolveChange(frozen(0.9), reordered)).toBeUndefined();
+      expect(resolveChange(reordered, frozen(0.9))).toBeUndefined();
+    });
   });
 
   test("alarm journal events only append, in their own slot by event id", () => {

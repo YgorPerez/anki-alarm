@@ -37,6 +37,10 @@ import {
   studyDayStart,
   cardMemory,
   CardState,
+  DEFAULT_LEECH_THRESHOLD,
+  DEFAULT_MAXIMUM_INTERVAL,
+  DEFAULT_RELEARNING_STEPS,
+  leechThresholdMet,
   type LogEntry,
 } from "./study.ts";
 
@@ -330,11 +334,20 @@ export function parseCollection(stored: StoredCollection): CollectionState {
   for (const preset of state.presets) {
     for (const key of ["buryNew", "buryReviews", "buryLearning"] as const)
       preset.fields[key] ??= { value: false, hlc: preset.fields.name.hlc };
-    preset.fields.relearningSteps ??= { value: [10], hlc: preset.fields.name.hlc };
+    preset.fields.relearningSteps ??= {
+      value: [...DEFAULT_RELEARNING_STEPS],
+      hlc: preset.fields.name.hlc,
+    };
     preset.fields.insertionOrder ??= { value: "sequential", hlc: preset.fields.name.hlc };
-    preset.fields.leechThreshold ??= { value: 8, hlc: preset.fields.name.hlc };
+    preset.fields.leechThreshold ??= {
+      value: DEFAULT_LEECH_THRESHOLD,
+      hlc: preset.fields.name.hlc,
+    };
     preset.fields.leechAction ??= { value: "tagOnly", hlc: preset.fields.name.hlc };
-    preset.fields.maximumInterval ??= { value: 36500, hlc: preset.fields.name.hlc };
+    preset.fields.maximumInterval ??= {
+      value: DEFAULT_MAXIMUM_INTERVAL,
+      hlc: preset.fields.name.hlc,
+    };
     preset.fields.fsrsParameters ??= {
       value: [...DEFAULT_FSRS_PARAMETERS],
       hlc: preset.fields.name.hlc,
@@ -509,11 +522,11 @@ export class Collection {
         reviewsPerDay: 200,
         desiredRetention: 0.9,
         learningSteps: [1, 10],
-        relearningSteps: [10],
+        relearningSteps: [...DEFAULT_RELEARNING_STEPS],
         insertionOrder: "sequential" as const,
-        leechThreshold: 8,
+        leechThreshold: DEFAULT_LEECH_THRESHOLD,
         leechAction: "tagOnly" as const,
-        maximumInterval: 36500,
+        maximumInterval: DEFAULT_MAXIMUM_INTERVAL,
         fsrsParameters: [...DEFAULT_FSRS_PARAMETERS],
         easyDays: [...NORMAL_WEEK],
         ...DEFAULT_DISPLAY_ORDER,
@@ -522,21 +535,45 @@ export class Collection {
     }
     return preset;
   }
-  /** Applies the leech action after any answer, in the same transaction as its log entry. */
-  applyReviewEffects(log: readonly LogEntry[], entry: LogEntry) {
-    if (entry.kind !== "review") return;
+  /**
+   * Applies the leech action of an answer that lapses, as Anki does: at the threshold and every half
+   * threshold after. Runs in the same transaction as the log entry and returns the entry to store,
+   * which records what changed so a void of it can take that back.
+   */
+  applyReviewEffects(log: readonly LogEntry[], entry: LogEntry): LogEntry {
+    if (entry.kind === "void") {
+      const target = log.find((e) => e.id === entry.targetId);
+      if (target?.kind === "review" && target.leech) this.undoLeech(target.cardId, target.leech);
+      return entry;
+    }
+    if (entry.kind !== "review") return entry;
     const card = this.state.cards.find((c) => c.id === entry.cardId);
     const deck = this.state.decks.find((d) => d.id === card?.fields.deckId.value);
     const preset = deck && deckPreset(this.state, deck);
     if (!card || !preset) throw new Error("Card missing");
     const options = entry.options ?? schedulingOptions(preset, entry.at);
-    const threshold = options.leechThreshold ?? 8;
-    const memory = cardMemory(this.state, [...log, entry], card.id, entry.at)!;
-    if (threshold === 0 || memory.lapses < threshold) return;
+    const before = cardMemory(this.state, log, card.id, entry.at)!;
+    const after = cardMemory(this.state, [...log, entry], card.id, entry.at)!;
+    const threshold = options.leechThreshold ?? DEFAULT_LEECH_THRESHOLD;
+    if (after.lapses <= before.lapses || !leechThresholdMet(after.lapses, threshold)) return entry;
     const note = this.state.notes.find((n) => n.id === card.fields.noteId.value)!;
-    if (!note.fields.tags.value.includes("leech"))
+    const tagged = !note.fields.tags.value.includes("leech");
+    if (tagged)
       note.fields.tags = { value: [...note.fields.tags.value, "leech"], hlc: this.tick() };
-    if (options.leechAction === "suspend") this.setCardsSuspended([card.id], true);
+    const suspended = options.leechAction === "suspend" && !card.fields.suspended.value;
+    if (suspended) this.setCardsSuspended([card.id], true);
+    return tagged || suspended ? { ...entry, leech: { tagged, suspended } } : entry;
+  }
+  private undoLeech(id: string, leech: { tagged: boolean; suspended: boolean }) {
+    const card = this.state.cards.find((c) => c.id === id);
+    if (!card) return;
+    if (leech.suspended) this.setCardsSuspended([id], false);
+    const note = this.state.notes.find((n) => n.id === card.fields.noteId.value);
+    if (leech.tagged && note?.fields.tags.value.includes("leech"))
+      note.fields.tags = {
+        value: note.fields.tags.value.filter((tag) => tag !== "leech"),
+        hlc: this.tick(),
+      };
   }
   createDeck(name: string): Deck {
     if (!name.trim()) throw new Error("Deck name is required");
@@ -749,11 +786,13 @@ export class Collection {
         : source.fields.applyAllParentLimits.value,
       desiredRetention: factory ? 0.9 : source.fields.desiredRetention.value,
       learningSteps: factory ? [1, 10] : copy(source.fields.learningSteps.value),
-      relearningSteps: factory ? [10] : copy(source.fields.relearningSteps.value),
+      relearningSteps: factory
+        ? [...DEFAULT_RELEARNING_STEPS]
+        : copy(source.fields.relearningSteps.value),
       insertionOrder: factory ? ("sequential" as const) : source.fields.insertionOrder.value,
-      leechThreshold: factory ? 8 : source.fields.leechThreshold.value,
+      leechThreshold: factory ? DEFAULT_LEECH_THRESHOLD : source.fields.leechThreshold.value,
       leechAction: factory ? ("tagOnly" as const) : source.fields.leechAction.value,
-      maximumInterval: factory ? 36500 : source.fields.maximumInterval.value,
+      maximumInterval: factory ? DEFAULT_MAXIMUM_INTERVAL : source.fields.maximumInterval.value,
       fsrsParameters: factory
         ? [...DEFAULT_FSRS_PARAMETERS]
         : copy(source.fields.fsrsParameters.value),
@@ -1212,11 +1251,11 @@ export class Collection {
         buryNew: p.buryNew ?? false,
         buryReviews: p.buryReviews ?? false,
         buryLearning: p.buryLearning ?? false,
-        relearningSteps: p.relearningSteps ?? [10],
+        relearningSteps: p.relearningSteps ?? [...DEFAULT_RELEARNING_STEPS],
         insertionOrder: p.insertionOrder ?? ("sequential" as const),
-        leechThreshold: p.leechThreshold ?? 8,
+        leechThreshold: p.leechThreshold ?? DEFAULT_LEECH_THRESHOLD,
         leechAction: p.leechAction ?? ("tagOnly" as const),
-        maximumInterval: p.maximumInterval ?? 36500,
+        maximumInterval: p.maximumInterval ?? DEFAULT_MAXIMUM_INTERVAL,
         fsrsParameters: [...weights],
         easyDays: p.easyDays ?? [...NORMAL_WEEK],
         ...(p.appId && p.isDefault !== undefined ? { isDefault: p.isDefault } : {}),

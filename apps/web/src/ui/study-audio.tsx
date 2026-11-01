@@ -1,5 +1,5 @@
 /* oxlint-disable eslint/no-await-in-loop -- Card audio plays in order. */
-import { studyAudio, type Preset, type ReadAloudInput } from "@app/core";
+import { studyAudio, type Locale, type Preset, type ReadAloudInput } from "@app/core";
 import { useEffect, useRef, useState } from "react";
 import { editingCopy } from "#/editing-copy.ts";
 import { Button } from "#/ui/shadcn/button.tsx";
@@ -15,7 +15,7 @@ export function StudyAudio({
   input: Omit<ReadAloudInput, "language">;
   side: "front" | "back";
   preset: Preset;
-  locale: "pt-BR" | "en";
+  locale: Locale;
   /** A replay started. */
   onPlaying?: () => void;
   /** The side's audio ended, or it had none. */

@@ -1,10 +1,8 @@
 import {
-  ANSWER_ACTIONS,
   DEFAULT_FSRS_PARAMETERS,
   deckLimitTexts,
   LIMIT_SCOPES,
   PRESET_LIMITS,
-  QUESTION_ACTIONS,
   presetTexts,
   readPresetTexts,
   scopedLimit,
@@ -16,7 +14,7 @@ import {
   type Preset,
   type PresetOptions,
 } from "@app/core";
-import { displayOrderFields } from "@app/editing-ui";
+import { autoAdvanceActionFields, displayOrderFields } from "@app/editing-ui";
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
 
@@ -26,14 +24,31 @@ import { Field, Select, TextField } from "#/ui/form.tsx";
 import { SaveStatus } from "#/ui/note-editor.tsx";
 import { Button } from "#/ui/shadcn/button.tsx";
 
-const ACTION_LABELS = {
-  showAnswer: "actionShowAnswer",
-  showReminder: "actionShowReminder",
-  bury: "actionBury",
-  again: "actionAgain",
-  good: "actionGood",
-  hard: "actionHard",
-} as const;
+/** A yes-or-no option: the form keeps it as the text "true" or "false". */
+function OptionCheckbox({
+  label,
+  field,
+}: {
+  label: string;
+  field: {
+    state: { value: string };
+    handleBlur: () => void;
+    handleChange: (value: string) => void;
+  };
+}) {
+  return (
+    <label className="flex min-h-12 items-center gap-3 text-body">
+      <input
+        type="checkbox"
+        checked={field.state.value === "true"}
+        onBlur={field.handleBlur}
+        onChange={(event) => field.handleChange(String(event.target.checked))}
+        className="size-5 accent-primary"
+      />
+      {label}
+    </label>
+  );
+}
 
 type OptionKey = keyof PresetOptions;
 /** Each option's label, error and hint copy, and the control it takes. */
@@ -158,18 +173,7 @@ export function DeckOptionsEditor({
         <legend className="text-label font-bold">{t("burying")}</legend>
         {(["buryNew", "buryReviews", "buryLearning"] as const).map((key) => (
           <form.Field key={key} name={key}>
-            {(field) => (
-              <label className="flex min-h-12 items-center gap-3 text-body">
-                <input
-                  type="checkbox"
-                  checked={field.state.value === "true"}
-                  onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(String(event.target.checked))}
-                  className="size-5 accent-primary"
-                />
-                {t(key)}
-              </label>
-            )}
+            {(field) => <OptionCheckbox label={t(key)} field={field} />}
           </form.Field>
         ))}
       </fieldset>
@@ -183,16 +187,7 @@ export function DeckOptionsEditor({
         ] as const
       ).map((key) => (
         <form.Field key={key} name={key}>
-          {(field) => (
-            <label className="flex min-h-12 items-center gap-3 text-body">
-              <input
-                type="checkbox"
-                checked={field.state.value === "true"}
-                onChange={(event) => field.handleChange(String(event.target.checked))}
-              />
-              {t(key)}
-            </label>
-          )}
+          {(field) => <OptionCheckbox label={t(key)} field={field} />}
         </form.Field>
       ))}
       {deck && (
@@ -233,74 +228,36 @@ export function DeckOptionsEditor({
       )}
       {(["newIgnoreReviewLimit", "applyAllParentLimits"] as const).map((key) => (
         <form.Field key={key} name={key}>
-          {(field) => (
-            <label className="flex min-h-12 items-center gap-3 text-body">
-              <input
-                type="checkbox"
-                checked={field.state.value === "true"}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(String(event.target.checked))}
-                className="size-5 accent-primary"
-              />
-              {t(key)}
-            </label>
-          )}
+          {(field) => <OptionCheckbox label={t(key)} field={field} />}
         </form.Field>
       ))}
       <p className="text-body text-muted-foreground">{t("applyAllParentLimitsHint")}</p>
       <fieldset className="flex flex-col gap-3">
         <legend className="text-label font-bold">{t("autoAdvance")}</legend>
         <form.Field name="waitForAudio">
-          {(field) => (
-            <label className="flex min-h-12 items-center gap-3 text-body">
-              <input
-                type="checkbox"
-                checked={field.state.value === "true"}
-                onChange={(event) => field.handleChange(String(event.target.checked))}
-                className="size-5 accent-primary"
-              />
-              {t("waitForAudio")}
-            </label>
-          )}
+          {(field) => <OptionCheckbox label={t("waitForAudio")} field={field} />}
         </form.Field>
-        <form.Field name="questionAction">
-          {(field) => (
-            <Field label={t("questionAction")}>
-              {(props) => (
-                <Select
-                  {...props}
-                  value={field.state.value}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                >
-                  {QUESTION_ACTIONS.map((action) => (
-                    <option key={action} value={action}>
-                      {t(ACTION_LABELS[action])}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-          )}
-        </form.Field>
-        <form.Field name="answerAction">
-          {(field) => (
-            <Field label={t("answerAction")}>
-              {(props) => (
-                <Select
-                  {...props}
-                  value={field.state.value}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                >
-                  {ANSWER_ACTIONS.map((action) => (
-                    <option key={action} value={action}>
-                      {t(ACTION_LABELS[action])}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-          )}
-        </form.Field>
+        {autoAdvanceActionFields(locale).map(({ key, label, choices }) => (
+          <form.Field key={key} name={key}>
+            {(field) => (
+              <Field label={label}>
+                {(props) => (
+                  <Select
+                    {...props}
+                    value={field.state.value}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                  >
+                    {choices.map((choice) => (
+                      <option key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+            )}
+          </form.Field>
+        ))}
       </fieldset>
       <div className="grid gap-5 sm:grid-cols-2">
         {(["insertionOrder", "leechAction"] as const).map((key) => (
@@ -308,9 +265,8 @@ export function DeckOptionsEditor({
             {(field) => (
               <Field label={t(key)}>
                 {(props) => (
-                  <select
+                  <Select
                     {...props}
-                    className="min-h-12 rounded-md border border-input bg-background px-3"
                     value={field.state.value}
                     onChange={(event) => field.handleChange(event.target.value)}
                   >
@@ -322,7 +278,7 @@ export function DeckOptionsEditor({
                         {t(value)}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 )}
               </Field>
             )}

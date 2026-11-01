@@ -92,15 +92,40 @@ const appendOnly = (
   change: SyncChange,
 ): change is Extract<SyncChange, { kind: "reviewLog" | "alarmEvent" }> =>
   change.kind === "reviewLog" || change.kind === "alarmEvent";
+/** JSON with sorted keys: the same options read the same however they were stored. */
+const canonical = (value: unknown): string =>
+  JSON.stringify(value, (_, v: unknown) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(
+          // oxlint-disable-next-line unicorn/no-array-sort -- ES2022/Hermes target; sorts a fresh copy.
+          Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1)),
+        )
+      : v,
+  );
+/**
+ * One review's copies differ only when the upgrade froze its options apart (ADR 0008): the first
+ * canonical form wins everywhere, and having options beats having none. A review answered since
+ * records its options once, so its copies are equal.
+ */
+const withWinningOptions = (stored: LogEntry, incoming: LogEntry): LogEntry | undefined => {
+  if (stored.kind !== "review" || incoming.kind !== "review" || !incoming.options) return undefined;
+  if (stored.options && canonical(incoming.options) >= canonical(stored.options)) return undefined;
+  return { ...stored, options: incoming.options };
+};
 /**
  * What a slot holds after `incoming` arrives, or undefined when it keeps `stored`. Deletes beat
- * every edit and are final; review log entries and alarm journal events only append.
+ * every edit and are final; review log entries and alarm journal events only append, except for a
+ * review's frozen options, which converge.
  */
 export function resolveChange(
   stored: SyncChange | undefined,
   incoming: SyncChange,
 ): SyncChange | undefined {
   if (!stored) return incoming;
+  if (stored.kind === "reviewLog" && incoming.kind === "reviewLog") {
+    const entry = withWinningOptions(stored.entry, incoming.entry);
+    return entry && { kind: "reviewLog", entry };
+  }
   if (stored.kind === "tombstone" || appendOnly(stored)) return undefined;
   if (incoming.kind === "tombstone") return incoming;
   if (appendOnly(incoming)) return undefined;

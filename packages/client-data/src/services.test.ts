@@ -262,6 +262,11 @@ test("study answers survive reopen and outbox failure rolls back the review", as
       Effect.runPromise(reopened.answerCard("deleted", 3, 900, "ring-1")),
     ).rejects.toThrow(/not available/);
     expect((await Effect.runPromise(reopened.reviewLog)).at(-1)).toEqual(alarm);
+    // Undoing the lapse that made it a leech takes back the tag and the suspension.
+    await Effect.runPromise(reopened.undo(alarm.id));
+    const undone = await Effect.runPromise(reopened.collection);
+    expect(undone.cards[0]!.fields.suspended.value).toBe(false);
+    expect(undone.notes[0]!.fields.tags.value).not.toContain("leech");
   } finally {
     for (const db of databases.values()) db.close();
   }

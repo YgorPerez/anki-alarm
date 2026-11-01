@@ -108,7 +108,7 @@ test.each([true, false])(
     await show(anki);
     await fireEvent.press(await screen.findByRole("button", { name: "Japonês" }));
     expect(
-      await screen.findByText("Revisões ainda não enviadas ao AnkiDroid: 1. Deseja enviá-las?"),
+      await screen.findByText(/^Revisões ainda não enviadas ao AnkiDroid: 1\. Deseja enviá-las\?/),
     ).toBeDefined();
     expect(anki.answers).toHaveLength(0);
     await fireEvent.press(

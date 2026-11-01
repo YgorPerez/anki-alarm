@@ -122,12 +122,20 @@ test("the preset's auto advance doesn't pass the check", async () => {
     ),
   );
   const deckId = state.decks.find((d) => d.fields.name.value === "Manhã automática")!.id;
-  const { native, check } = await shownCheck("ring-auto", deckId);
-  const passed = await show(check, native.layer);
-  await screen.findByLabelText("Frente");
-  await act(() => new Promise<void>((resolve) => setTimeout(resolve, 150)));
-  screen.getByLabelText("Frente");
-  expect(passed()).toBe(0);
+  vi.useFakeTimers({
+    shouldAdvanceTime: true,
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+  });
+  try {
+    const { native, check } = await shownCheck("ring-auto", deckId);
+    const passed = await show(check, native.layer);
+    await screen.findByLabelText("Frente");
+    await act(() => vi.advanceTimersByTimeAsync(150));
+    screen.getByLabelText("Frente");
+    expect(passed()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("burying the check's card shows another and doesn't pass the check", async () => {

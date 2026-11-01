@@ -1,6 +1,6 @@
 import { changeAppState } from "../test/native/react-native.ts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
-import { expect, test } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Effect } from "effect";
 import type { PresetOptions } from "@app/core";
@@ -9,7 +9,17 @@ import { StudyScreen } from "./StudyScreen.tsx";
 
 const SOON = 0.01;
 const DONE = "No cards available now. Daily limits apply.";
-const longerThanSoon = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 150)));
+const elapse = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+// Waits that expect nothing to happen pass at once; real time still runs what the tests wait for.
+beforeEach(() => {
+  vi.useFakeTimers({
+    shouldAdvanceTime: true,
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+  });
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 const reviews = async (cardId: string) => {
   const log = await Effect.runPromise(localData((data) => data.reviewLog));
   return log.filter((e) => e.kind === "review" && e.cardId === cardId);
@@ -42,7 +52,7 @@ async function study(name: string, options: Partial<PresetOptions>, front = "fro
 test("without seconds the card waits for the user", async () => {
   const { view } = await study("Off", {});
   await screen.findByLabelText("Front");
-  await longerThanSoon();
+  await elapse(150);
   expect(screen.getByLabelText("Front")).toBeTruthy();
   await view.unmount();
 });
@@ -110,7 +120,7 @@ test("waiting for audio starts the seconds when the side's audio ends", async ()
     "[sound:q.mp3]",
   );
   await screen.findByLabelText("Front");
-  await longerThanSoon();
+  await elapse(150);
   screen.getByLabelText("Front");
   await fireEvent(screen.getByTestId("study-audio"), "message", {
     nativeEvent: { data: "audio-finished" },
@@ -133,7 +143,7 @@ test("leaving study stops it", async () => {
     answerAction: "good",
   });
   await view.unmount();
-  await new Promise((resolve) => setTimeout(resolve, 800));
+  await elapse(800);
   expect(await reviews(cardId)).toEqual([]);
 });
 
@@ -145,10 +155,10 @@ test("the card menu and the note editor hold it", async () => {
   });
   await fireEvent.press(await screen.findByRole("button", { name: "Show answer" }));
   await fireEvent.press(screen.getByRole("button", { name: "Card actions" }));
-  await act(() => new Promise<void>((resolve) => setTimeout(resolve, 1200)));
+  await elapse(1200);
   expect(await reviews(cardId)).toEqual([]);
   await fireEvent.press(screen.getByRole("button", { name: "Edit note" }));
-  await act(() => new Promise<void>((resolve) => setTimeout(resolve, 1200)));
+  await elapse(1200);
   expect(await reviews(cardId)).toEqual([]);
   await view.unmount();
 });
@@ -160,7 +170,7 @@ test("putting the app in the background holds it until the app returns", async (
   });
   await screen.findByLabelText("Front");
   await act(async () => changeAppState("background"));
-  await act(() => new Promise<void>((resolve) => setTimeout(resolve, 1200)));
+  await elapse(1200);
   screen.getByLabelText("Front");
   await act(async () => changeAppState("active"));
   expect(await screen.findByLabelText("Back", {}, { timeout: 3000 })).toBeTruthy();

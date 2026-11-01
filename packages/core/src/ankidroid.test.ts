@@ -1,6 +1,7 @@
-import { expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vite-plus/test";
 import {
   Collection,
+  linkOfferPlan,
   DEFAULT_FSRS_PARAMETERS,
   browseCards,
   ankiDroidAccess,
@@ -529,6 +530,129 @@ test("linking reports the decks this phone took over, so earlier reviews can be 
   const other = new Collection(environment("phone-b"), state);
   expect(other.linkAnkiDroid(source()).claimed).toEqual(state.decks.map((d) => d.id));
   expect(new Collection(environment(), state).linkAnkiDroid(source()).claimed).toEqual([]);
+});
+
+describe("what a takeover offers (#113: no double counting)", () => {
+  const DAY = 86_400_000;
+  /** Phone A linked at `reps`, then these answers exist; phone B links AnkiDroid as `there`. */
+  function takeover(
+    answers: readonly number[],
+    there: { reps: number; lastReviewSecs: number | null },
+    atLink: { reps: number; at: number } = { reps: 2, at: now - 10 * DAY },
+  ) {
+    const first = source();
+    first.cards[0] = card({
+      reps: atLink.reps,
+      type: 2,
+      queue: 2,
+      interval: 4,
+      lastReviewSecs: atLink.at / 1000,
+    });
+    const a = new Collection(environment());
+    const { snapshots } = a.linkAnkiDroid(first);
+    const before = a.snapshot();
+    const id = cardId(before.notes[0]!.id, 0);
+    const log: LogEntry[] = [
+      ...snapshots,
+      ...answers.map((at, i): LogEntry => ({
+        kind: "review",
+        id: `r${i}`,
+        cardId: id,
+        at,
+        grade: 3,
+        durationMs: 1,
+        origin: "phone",
+      })),
+    ];
+    const later = source();
+    later.cards[0] = card({ type: 2, queue: 2, interval: 4, ...there });
+    const b = new Collection(environment("phone-b"), before);
+    const { claimed } = b.linkAnkiDroid(later, log);
+    return linkOfferPlan({
+      before,
+      after: b.snapshot(),
+      log,
+      deviceId: "phone-b",
+      sent: new Set(),
+      claimed,
+      source: later,
+      seen: new Map(),
+    });
+  }
+  const [t1, t2, t3] = [now - 3 * DAY, now - 2 * DAY, now - DAY];
+
+  test("answers the earlier phone delivered aren't offered", () => {
+    expect(takeover([t1, t2], { reps: 4, lastReviewSecs: t3 / 1000 })).toEqual({
+      offered: [],
+      delivered: ["r0", "r1"],
+    });
+  });
+
+  test("when AnkiDroid's reps didn't rise, nothing was delivered", () => {
+    expect(takeover([t1, t2], { reps: 2, lastReviewSecs: (now - 10 * DAY) / 1000 })).toEqual({
+      offered: ["r0", "r1"],
+      delivered: [],
+    });
+  });
+
+  test("a partial delivery offers only the rest, in answer order", () => {
+    expect(takeover([t1, t2], { reps: 3, lastReviewSecs: t3 / 1000 })).toEqual({
+      offered: ["r1"],
+      delivered: ["r0"],
+    });
+  });
+
+  test("an answer newer than AnkiDroid's last review can't have arrived", () => {
+    expect(takeover([t1, t3], { reps: 4, lastReviewSecs: t2 / 1000 })).toEqual({
+      offered: ["r1"],
+      delivered: ["r0"],
+    });
+  });
+
+  test("an answer delivered in the same second as it was given still counts", () => {
+    expect(takeover([t1 + 500], { reps: 3, lastReviewSecs: t1 / 1000 })).toEqual({
+      offered: [],
+      delivered: ["r0"],
+    });
+  });
+
+  test("an answer before the last snapshot is already in AnkiDroid's state", () => {
+    expect(
+      takeover([now - 20 * DAY], { reps: 2, lastReviewSecs: (now - 10 * DAY) / 1000 }),
+    ).toEqual({ offered: [], delivered: ["r0"] });
+  });
+
+  test("a deck no phone linked before offers every answer", () => {
+    const fresh = new Collection(environment("phone-b"));
+    const before = fresh.snapshot();
+    const { claimed } = fresh.linkAnkiDroid(source());
+    const after = fresh.snapshot();
+    const log: LogEntry[] = [
+      {
+        kind: "review",
+        id: "r0",
+        cardId: cardId(after.notes[0]!.id, 0),
+        at: t1,
+        grade: 3,
+        durationMs: 1,
+        origin: "phone",
+      },
+    ];
+    const later = source();
+    later.cards[0] = card({ reps: 9, type: 2, queue: 2, lastReviewSecs: t3 / 1000 });
+    expect(
+      linkOfferPlan({
+        before,
+        after,
+        log,
+        deviceId: "phone-b",
+        sent: new Set(),
+        claimed,
+        source: later,
+        seen: new Map(),
+      }),
+    ).toEqual({ offered: ["r0"], delivered: [] });
+  });
 });
 
 test("a newer AnkiDroid pull preserves local flag and mark choices", () => {

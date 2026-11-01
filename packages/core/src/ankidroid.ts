@@ -4,7 +4,13 @@ import { validOption, type Card, type CollectionState, type PresetOptions } from
 import { displayOrderFromAnki } from "./display-order.ts";
 import { easyDaysFromAnki } from "./easy-days.ts";
 import { importId } from "./ids.ts";
-import { isBuried, type LogEntry } from "./study.ts";
+import {
+  DEFAULT_LEECH_THRESHOLD,
+  DEFAULT_MAXIMUM_INTERVAL,
+  DEFAULT_RELEARNING_STEPS,
+  isBuried,
+  type LogEntry,
+} from "./study.ts";
 
 /**
  * What `modules/ankidroid` reads from AnkiDroid's ContentProvider (`FlashCardsContract`), close to
@@ -165,10 +171,10 @@ export function presetFromOptions(json: string): ImportedPreset {
     applyAllParentLimits: raw["applyAllParentLimits"] === true,
     learningSteps: listOption("learningSteps", fresh["delays"], [1, 10]),
     insertionOrder: fresh["order"] === 0 ? "random" : "sequential",
-    relearningSteps: listOption("relearningSteps", lapse["delays"], [10]),
-    leechThreshold: numberOption("leechThreshold", lapse["leechFails"], 8),
+    relearningSteps: listOption("relearningSteps", lapse["delays"], [...DEFAULT_RELEARNING_STEPS]),
+    leechThreshold: numberOption("leechThreshold", lapse["leechFails"], DEFAULT_LEECH_THRESHOLD),
     leechAction: lapse["leechAction"] === 0 ? "suspend" : "tagOnly",
-    maximumInterval: numberOption("maximumInterval", rev["maxIvl"], 36500),
+    maximumInterval: numberOption("maximumInterval", rev["maxIvl"], DEFAULT_MAXIMUM_INTERVAL),
     ...displayOrderFromAnki(raw),
     desiredRetention: numberOption("desiredRetention", raw["desiredRetention"], 0.9),
     fsrsParameters: listOption("fsrsParameters", raw["fsrsParams6"], [...default_w]),
@@ -293,6 +299,66 @@ export function syncBackQueue(
         timeTakenMs: Math.round(entry.durationMs),
       }))
   );
+}
+
+/**
+ * Splits the reviews this phone can send, right after linking `source`, into what to ask about and
+ * what AnkiDroid seems to have already. A deck no phone linked before has had nothing sent, so every
+ * review is offered. On a takeover the earlier phone may have sent some, and the sent list stayed on
+ * it. AnkiDroid has no review history to check, so this is a best guess that prefers not resending:
+ * a review at or before the card's last snapshot counts as delivered, and so do the oldest reviews,
+ * up to how far `reps` rose since that snapshot, that aren't newer than AnkiDroid's last review. A
+ * review AnkiDroid's own study made can stand in for one that never arrived, and that one isn't
+ * offered.
+ */
+export function linkOfferPlan(input: {
+  /** The collection before this link: who had linked each deck. */
+  before: CollectionState;
+  after: CollectionState;
+  log: readonly LogEntry[];
+  deviceId: string;
+  sent: ReadonlySet<string>;
+  /** The decks this link took over. */
+  claimed: readonly string[];
+  source: AnkiDroidSource;
+  seen: ReadonlyMap<string, number>;
+}): { offered: string[]; delivered: string[] } {
+  const { before, after, log, deviceId, sent, claimed, source, seen } = input;
+  const plan = { offered: [] as string[], delivered: [] as string[] };
+  const there = new Map(source.cards.map((c) => [`${c.noteId}:${c.ord}`, c]));
+  const linkedBefore = new Set(before.decks.filter((d) => d.fields.linkedBy).map((d) => d.id));
+  const voided = voidedIn(log);
+  const at = new Map(log.map((e) => [e.id, e.at]));
+  const room = new Map<string, number>();
+  for (const answer of syncBackQueue(after, log, deviceId, sent)) {
+    if (!claimed.includes(answer.deckId)) continue;
+    const ad = there.get(`${answer.noteId}:${answer.ord}`);
+    if (!linkedBefore.has(answer.deckId) || !ad) {
+      plan.offered.push(answer.entryId);
+      continue;
+    }
+    const answeredAt = at.get(answer.entryId) ?? 0;
+    const snapshotAt = Math.max(
+      0,
+      ...log.flatMap((e) =>
+        e.kind === "snapshot" && e.cardId === answer.cardId && !voided.has(e.id) ? [e.at] : [],
+      ),
+    );
+    // AnkiDroid stamps an answer when it arrives, in whole seconds: never before it was given.
+    const newest =
+      ad.lastReviewSecs === null ? Number.POSITIVE_INFINITY : (ad.lastReviewSecs + 1) * 1000;
+    const left =
+      room.get(answer.cardId) ?? Math.max(0, ad.reps - seenReps(log, answer.cardId, seen));
+    if (answeredAt <= snapshotAt) plan.delivered.push(answer.entryId);
+    else if (left > 0 && answeredAt < newest) {
+      plan.delivered.push(answer.entryId);
+      room.set(answer.cardId, left - 1);
+    } else {
+      plan.offered.push(answer.entryId);
+      room.set(answer.cardId, left);
+    }
+  }
+  return plan;
 }
 
 /**
@@ -450,7 +516,11 @@ export function syncBackBuryPlan(
   return plan;
 }
 
-/** The provider hides the collection-wide FSRS switch; memory on reviewed cards is a signal only. */
+/**
+ * A best guess at AnkiDroid's scheduler. The provider hides the collection-wide FSRS switch, so this
+ * reads memory state on reviewed cards: "sm2" can be wrong after a recent switch, and "fsrs" can be
+ * wrong when FSRS was on earlier.
+ */
 export function ankiDroidScheduler(source: AnkiDroidSource): "fsrs" | "sm2" | "unknown" {
   const ids = new Set(linkedAnkiDroidDecks(source).map((d) => d.id));
   const reviewed = source.cards.filter((c) => ids.has(c.originalDeckId || c.deckId) && c.reps > 0);

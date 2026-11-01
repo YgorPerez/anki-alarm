@@ -22,8 +22,6 @@ async function revealAndGrade(grade: string) {
   await fireEvent(screen.getByLabelText("Frente"), "accessibilityAction", {
     nativeEvent: { actionName: "activate" },
   });
-  // The grades wait a moment after the reveal.
-  expect(screen.queryByRole("button", { name: grade })).toBeNull();
   const button = await screen.findByRole("button", { name: grade });
   expect(button.props.accessibilityHint).toMatch(/\d/);
   await fireEvent.press(button);
@@ -95,6 +93,24 @@ async function ringing(
     rerender: () => view.rerender(show(native.ring()!)),
   };
 }
+
+test("the grades wait a moment after the reveal", async () => {
+  await ringing("Espera", ["casa"], { need: 1 });
+  await fireEvent.press(screen.getByRole("button", { name: "Começar" }));
+  await screen.findByLabelText("Frente");
+  // The delay can't pass on its own here, however slow the machine is.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    await fireEvent(screen.getByLabelText("Frente"), "accessibilityAction", {
+      nativeEvent: { actionName: "activate" },
+    });
+    expect(screen.queryByRole("button", { name: "Bom" })).toBeNull();
+    await act(() => vi.advanceTimersByTimeAsync(50));
+    expect(screen.getByRole("button", { name: "Bom" })).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 test("Start silences the ring, cards count toward N and N right dismisses it", async () => {
   const api = await fakeSyncApi({});
@@ -510,6 +526,10 @@ test("read aloud speaks the front when the card's audio can't play", async () =>
 });
 
 test("an alarm without read aloud reads nothing", async () => {
+  vi.useFakeTimers({
+    shouldAdvanceTime: true,
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+  });
   const { native, view, start } = await ringWithFronts(["boi [sound:muu.mp3]", "vaca"], {
     readAloud: false,
   });
@@ -518,15 +538,16 @@ test("an alarm without read aloud reads nothing", async () => {
     await screen.findByLabelText("Frente");
     expect(screen.queryByLabelText("Tempo de resposta")).toBeNull();
     // The preset's auto advance would have shown the answer by now.
-    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 150)));
+    await act(() => vi.advanceTimersByTimeAsync(150));
     screen.getByLabelText("Frente");
     expect(screen.queryByText("Hora de responder")).toBeNull();
     await revealAndGrade("Bom");
     // And would have graded the next card's answer: the count only moves with the user's grade.
-    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 150)));
+    await act(() => vi.advanceTimersByTimeAsync(150));
     await screen.findByText("1 de 2 certos · faltam 1");
   } finally {
     await view.unmount();
+    vi.useRealTimers();
   }
   expect(reading(native.signals())).toEqual([]);
 });

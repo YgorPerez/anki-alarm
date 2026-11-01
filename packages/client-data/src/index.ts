@@ -287,9 +287,7 @@ const open = (driver: SQLiteConnection, media: MediaFiles) =>
               const state = c.snapshot();
               const built = build(state, log, { id: uuid7(at, driver.random()), at });
               checkLogEntry(state, log, built);
-              const entry = c.applySiblingBurying(built, log);
-              c.applyReviewEffects(log, entry);
-              return entry;
+              return c.applyReviewEffects(log, c.applySiblingBurying(built, log));
             },
             (entry) =>
               Effect.gen(function* () {

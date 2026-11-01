@@ -1,4 +1,4 @@
-import { expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vite-plus/test";
 import {
   cardMemory,
   schedulingOptions,
@@ -559,53 +559,110 @@ test("random insertion order is stable across queue reads and differs from creat
   expect(new Set(random)).toEqual(new Set(sequential));
 });
 
-test.each(["suspend", "tagOnly"] as const)(
-  "leech action %s runs on a Good alarm answer too",
-  (action) => {
+describe("leeches", () => {
+  const DAY = 86_400_000;
+  /** A review card that has lapsed `lapses` times, on a preset with `threshold`. */
+  function lapsed(lapses: number, threshold: number, action: "suspend" | "tagOnly" = "suspend") {
     const { state, cardId, preset } = fixture();
     const c = new Collection(
       { deviceId: "a", now: () => now, random: () => new Uint8Array(16) },
       state,
     );
-    c.updatePreset(preset.id, { leechThreshold: 1, leechAction: action });
-    const log: LogEntry[] = [
-      {
-        kind: "review",
-        id: "easy",
-        cardId,
-        at: now - 10 * 86400_000,
-        grade: 4,
-        durationMs: 1,
-        origin: "phone",
-      },
-      {
-        kind: "review",
-        id: "lapse",
-        cardId,
-        at: now - 86400_000,
-        grade: 1,
-        durationMs: 1,
-        origin: "alarm",
-      },
-    ];
-    const answer: LogEntry = {
+    c.updatePreset(preset.id, { leechThreshold: threshold, leechAction: action });
+    const review = (id: string, at: number, grade: 1 | 3 | 4): LogEntry => ({
       kind: "review",
-      id: "good",
+      id,
       cardId,
-      at: now,
-      grade: 3,
+      at,
+      grade,
       durationMs: 1,
       origin: "alarm",
-      options: schedulingOptions(c.snapshot().presets[0]!, now),
+      options: schedulingOptions(c.snapshot().presets[0]!, at),
+    });
+    const history: LogEntry[] = [review("first", now - 400 * DAY, 4)];
+    for (let i = 0; i < lapses; i++)
+      history.push(
+        review(`lapse-${i}`, now - (300 - 2 * i) * DAY, 1),
+        review(`back-${i}`, now - (299 - 2 * i) * DAY, 4),
+      );
+    const tags = () => {
+      const after = c.snapshot();
+      return after.notes.find((n) => n.id === after.cards[0]!.fields.noteId.value)!.fields.tags
+        .value;
     };
-    c.applyReviewEffects(log, answer);
-    const after = c.snapshot();
-    expect(
-      after.notes.find((n) => n.id === after.cards[0]!.fields.noteId.value)!.fields.tags.value,
-    ).toContain("leech");
-    expect(after.cards[0]!.fields.suspended.value).toBe(action === "suspend");
-  },
-);
+    const suspended = () => c.snapshot().cards[0]!.fields.suspended.value;
+    const undo = (before: readonly LogEntry[], target: LogEntry) =>
+      c.applyReviewEffects(before, {
+        kind: "void",
+        id: `undo-${target.id}`,
+        cardId,
+        targetId: target.id,
+        at: now + 1,
+      });
+    return { c, cardId, log: history, review, tags, suspended, undo };
+  }
+
+  test.each(["suspend", "tagOnly"] as const)(
+    "action %s fires on the lapse that reaches the threshold",
+    (action) => {
+      const { c, log, review, tags, suspended } = lapsed(1, 2, action);
+      c.applyReviewEffects(log, review("lapse", now, 1));
+      expect(tags()).toContain("leech");
+      expect(suspended()).toBe(action === "suspend");
+    },
+  );
+
+  test("a Good past the threshold leaves an unsuspended card alone", () => {
+    const { c, log, review, tags, suspended } = lapsed(1, 1);
+    c.applyReviewEffects(log, review("good", now, 3));
+    expect(tags()).not.toContain("leech");
+    expect(suspended()).toBe(false);
+  });
+
+  // Anki's own table: rslib/src/scheduler/states/review.rs, leech_threshold_met.
+  test.each([
+    [7, 8, false],
+    [8, 8, true],
+    [9, 8, false],
+    [11, 8, false],
+    [12, 8, true],
+    [13, 8, false],
+    [3, 3, true],
+    [4, 3, false],
+    [5, 3, true],
+    [1, 1, true],
+    [2, 1, true],
+    [5, 0, false],
+  ])("lapse number %i with threshold %i fires: %s", (lapses, threshold, fires) => {
+    const { c, log, review, suspended } = lapsed(lapses - 1, threshold);
+    c.applyReviewEffects(log, review("lapse", now, 1));
+    expect(suspended()).toBe(fires);
+  });
+
+  test("undoing the answer that reached the threshold takes back its tag and suspension", () => {
+    const { c, log, review, tags, suspended, undo } = lapsed(1, 2);
+    const answered = c.applyReviewEffects(log, review("lapse", now, 1));
+    undo([...log, answered], answered);
+    expect(tags()).not.toContain("leech");
+    expect(suspended()).toBe(false);
+  });
+
+  test("undo keeps the tag and the suspension the answer found", () => {
+    const { c, cardId, log, review, tags, suspended, undo } = lapsed(0, 1);
+    const first = c.applyReviewEffects(log, review("lapse-a", now - 2 * DAY, 1));
+    c.setCardsSuspended([cardId], false);
+    const back = review("back", now - DAY, 4);
+    const second = c.applyReviewEffects([...log, first, back], review("lapse-b", now, 1));
+    undo([...log, first, back, second], second);
+    // The tag came from the first lapse; only the second's suspension goes.
+    expect(tags()).toContain("leech");
+    expect(suspended()).toBe(false);
+    c.setCardsSuspended([cardId], true);
+    const third = c.applyReviewEffects([...log, first, back], review("lapse-c", now, 1));
+    undo([...log, first, back, third], third);
+    expect(suspended()).toBe(true);
+  });
+});
 
 test("reset cards go behind untouched cards even with random insertion", () => {
   const { state, deckId, cardId, preset } = fixture();

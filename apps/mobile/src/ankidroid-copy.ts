@@ -17,7 +17,9 @@ const messages = {
     retry: "Tentar novamente",
     choose:
       "Escolha um baralho. Ele vem com os subbaralhos, as notas e o estado de cada cartão, e fica vinculado a este celular.",
-    offer: "Revisões ainda não enviadas ao AnkiDroid: {count}. Deseja enviá-las?",
+    offer:
+      "Revisões ainda não enviadas ao AnkiDroid: {count}. Deseja enviá-las? Deixamos de fora as que ele parece já ter. O AnkiDroid não mostra o histórico, então é uma estimativa, e alguma revisão pode ficar de fora.",
+    sendOffer: "Enviar essas revisões",
     declineOffer: "Não enviar essas revisões",
     offerError: "Não foi possível salvar sua escolha. Tente novamente.",
     none: "Nenhum baralho no AnkiDroid.",
@@ -77,7 +79,9 @@ const messages = {
     retry: "Try again",
     choose:
       "Choose a deck. It comes with its subdecks, notes and each card's state, and is linked to this phone.",
-    offer: "Reviews not yet sent to AnkiDroid: {count}. Would you like to send them?",
+    offer:
+      "Reviews not yet sent to AnkiDroid: {count}. Would you like to send them? We left out the ones it seems to have already. AnkiDroid doesn't show its history, so this is an estimate and a review may be left out.",
+    sendOffer: "Send these reviews",
     declineOffer: "Don't send these reviews",
     offerError: "Couldn't save your choice. Try again.",
     none: "No decks in AnkiDroid.",

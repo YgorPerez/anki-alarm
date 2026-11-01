@@ -13,6 +13,13 @@ answers, as Anki does when it doesn't reschedule. Decided in the 2026-11-01 deck
 - Reviews logged before this change have no options of their own. They replay under the options
   their deck's preset had when the change arrived, so the update itself moves no due dates.
 - Only answers read a preset's current options. There is no "reschedule existing cards" action.
+- The Worker and each device freeze legacy reviews on their own, so an unsynced preset edit can
+  leave two copies of one review with different options. Review entries still only append, with one
+  exception for these copies: the merge keeps the copy whose options sort first as canonical JSON,
+  and any options beat none. A device that froze something sends and reads its whole collection
+  once after upgrading, so every side meets every copy and ends with the same one. That device's
+  due dates can move once, if its copy lost. New reviews record their options once, so their
+  copies never differ.
 
 ## Considered
 

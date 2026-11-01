@@ -495,7 +495,8 @@ test("the preset timer freezes on reveal and its elapsed time is logged", async 
     await fireEvent.press(screen.getByRole("button", { name: "Good" }));
     await screen.findByText("No cards available now. Daily limits apply.");
     const log = await Effect.runPromise(localData((data) => data.reviewLog));
-    expect(log.at(-1)).toMatchObject({ kind: "review", durationMs: 6000 });
+    // Stop on answer stops the display only: logged time runs to the grade, up to the maximum.
+    expect(log.at(-1)).toMatchObject({ kind: "review", durationMs: 12000 });
   } finally {
     now.mockRestore();
   }

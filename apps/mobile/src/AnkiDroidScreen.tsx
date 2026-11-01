@@ -98,7 +98,7 @@ function Body({
           {t("syncBackNote")}
         </Text>
         {session.offerError && (
-          <Text accessibilityRole="alert" className="text-body text-foreground">
+          <Text accessibilityRole="alert" style={regular} className="text-body text-foreground">
             {t("offerError")}
           </Text>
         )}
@@ -119,7 +119,7 @@ function Body({
     return (
       <>
         {session.sendError && (
-          <Text accessibilityRole="alert" className="text-body text-foreground">
+          <Text accessibilityRole="alert" style={regular} className="text-body text-foreground">
             {t("syncBackError")}
           </Text>
         )}

@@ -1,7 +1,7 @@
 import { autoAdvanceStep, deckPreset } from "@app/core";
 import { StudyAudio } from "#/ui/study-audio.tsx";
 import { useAutoAdvance } from "#/ui/use-auto-advance.ts";
-import { useStudyTimer } from "#/ui/use-study-timer.ts";
+import { useStudyTimer } from "@app/editing-ui/use-study-timer";
 import { editingCopy } from "#/editing-copy.ts";
 import { nextStudyCard, type Grade, type LogEntry } from "@app/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
