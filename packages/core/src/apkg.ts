@@ -55,6 +55,11 @@ export interface AnkiPackage {
     buryReviews?: boolean;
     buryLearning?: boolean;
     learningSteps: number[];
+    relearningSteps?: number[];
+    insertionOrder?: "sequential" | "random";
+    leechThreshold?: number;
+    leechAction?: "suspend" | "tagOnly";
+    maximumInterval?: number;
     /** FSRS-6 weights; absent or empty means the defaults. */
     fsrsParameters?: number[];
     dontPlayAutomatically?: boolean;
@@ -358,6 +363,12 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         buryReviews: record(c.rev).bury === true,
         buryLearning: c.buryInterdayLearning === true,
         learningSteps: steps(record(c.new).delays),
+        relearningSteps: record(c.lapse).delays == null ? [10] : steps(record(c.lapse).delays),
+        insertionOrder: record(c.new).order === 0 ? ("random" as const) : ("sequential" as const),
+        leechThreshold: record(c.lapse).leechFails == null ? 8 : int(record(c.lapse).leechFails),
+        leechAction:
+          record(c.lapse).leechAction === 0 ? ("suspend" as const) : ("tagOnly" as const),
+        maximumInterval: int(record(c.rev).maxIvl) || 36500,
         fsrsParameters: fsrs6(steps(c.fsrsParams6)),
         isDefault: typeof c.ankiAlarmDefault === "boolean" ? c.ankiAlarmDefault : undefined,
         dontPlayAutomatically: c.autoplay === false,
@@ -429,6 +440,11 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
         buryReviews: c.number(28) === 1,
         buryLearning: c.number(29) === 1,
         learningSteps: c.floats(1),
+        relearningSteps: c.floats(2),
+        insertionOrder: c.number(20) === 1 ? ("random" as const) : ("sequential" as const),
+        leechThreshold: c.number(22) ?? 0,
+        leechAction: c.number(21) === 1 ? ("tagOnly" as const) : ("suspend" as const),
+        maximumInterval: c.number(16) || 36500,
         fsrsParameters: fsrs6(c.floats(6)),
         dontPlayAutomatically: c.number(23) === 1,
         skipQuestionWhenReplayingAnswer: c.number(26) === 1,

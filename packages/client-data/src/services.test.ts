@@ -205,11 +205,11 @@ test("study answers survive reopen and outbox failure rolls back the review", as
     await expect(Effect.runPromise(data.answerCard(cardId, 3, 1400))).rejects.toThrow(/outbox/);
     expect(await Effect.runPromise(data.reviewLog)).toEqual([]);
     fail = false;
-    const review = await Effect.runPromise(data.answerCard(cardId, 3, 1400));
+    const review = await Effect.runPromise(data.answerCard(cardId, 4, 1400));
     expect(review).toMatchObject({
       kind: "review",
       cardId,
-      grade: 3,
+      grade: 4,
       durationMs: 1000,
       origin: "phone",
       at: 1700000000000,
@@ -231,7 +231,26 @@ test("study answers survive reopen and outbox failure rolls back the review", as
     await expect(Effect.runPromise(reopened.answerCard(cardId, 3, 900))).rejects.toThrow(
       /not available/,
     );
+    await Effect.runPromise(
+      reopened.changeCollection((c) =>
+        c.updatePreset(state.presets[0]!.id, {
+          leechThreshold: 1,
+          leechAction: "suspend",
+        }),
+      ),
+    );
+    const beforeLeech = await Effect.runPromise(reopened.collection);
+    fail = true;
+    await expect(Effect.runPromise(reopened.answerCard(cardId, 1, 9000, "ring-1"))).rejects.toThrow(
+      /outbox/,
+    );
+    fail = false;
+    expect(await Effect.runPromise(reopened.collection)).toEqual(beforeLeech);
+    expect(await Effect.runPromise(reopened.reviewLog)).toEqual([review]);
     const alarm = await Effect.runPromise(reopened.answerCard(cardId, 1, 9000, "ring-1"));
+    const afterLeech = await Effect.runPromise((await open()).collection);
+    expect(afterLeech.cards[0]!.fields.suspended.value).toBe(true);
+    expect(afterLeech.notes[0]!.fields.tags.value).toContain("leech");
     expect(alarm).toMatchObject({
       kind: "review",
       origin: "alarm",

@@ -474,3 +474,23 @@ test("apkg round trip carries audio and timer options", async () => {
   expect(preset?.fields.showTimer.value).toBe(true);
   expect(preset?.fields.stopTimerOnAnswer.value).toBe(true);
 });
+
+test("apkg round trip preserves new card, lapse and maximum interval options", async () => {
+  const { collection, log, english } = await studied();
+  const preset = collection.snapshot().presets.find((p) => p.id === english.fields.presetId.value)!;
+  collection.updatePreset(preset.id, {
+    relearningSteps: [2, 20],
+    insertionOrder: "random",
+    leechThreshold: 4,
+    leechAction: "suspend",
+    maximumInterval: 90,
+  });
+  const result = await exported(collection.snapshot(), log, "Inglês");
+  expect(result.package.presets.find((p) => p.name === preset.fields.name.value)).toMatchObject({
+    relearningSteps: [2, 20],
+    insertionOrder: "random",
+    leechThreshold: 4,
+    leechAction: "suspend",
+    maximumInterval: 90,
+  });
+});

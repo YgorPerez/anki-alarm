@@ -30,6 +30,11 @@ const read = {
   reviewsPerDay: integer,
   desiredRetention: decimal,
   learningSteps: (text: string) => list(text, /\s+/),
+  relearningSteps: (text: string) => list(text, /\s+/),
+  insertionOrder: (text: string) => (text === "sequential" || text === "random" ? text : undefined),
+  leechThreshold: integer,
+  leechAction: (text: string) => (text === "suspend" || text === "tagOnly" ? text : undefined),
+  maximumInterval: integer,
   fsrsParameters: (text: string) => list(text, /[\s,;]+/),
 } satisfies { [K in keyof PresetOptions]: (text: string) => PresetOptions[K] | undefined };
 const KEYS = [
@@ -44,6 +49,11 @@ const KEYS = [
   "reviewsPerDay",
   "desiredRetention",
   "learningSteps",
+  "relearningSteps",
+  "insertionOrder",
+  "leechThreshold",
+  "leechAction",
+  "maximumInterval",
   "fsrsParameters",
   "buryNew",
   "buryReviews",
@@ -70,6 +80,11 @@ export const validPresetText: Record<keyof PresetOptions, (text: string) => bool
   reviewsPerDay: (text) => ok(read.reviewsPerDay(text), validOption.reviewsPerDay),
   desiredRetention: (text) => ok(read.desiredRetention(text), validOption.desiredRetention),
   learningSteps: (text) => ok(read.learningSteps(text), validOption.learningSteps),
+  relearningSteps: (text) => ok(read.relearningSteps(text), validOption.relearningSteps),
+  insertionOrder: (text) => ok(read.insertionOrder(text), validOption.insertionOrder),
+  leechThreshold: (text) => ok(read.leechThreshold(text), validOption.leechThreshold),
+  leechAction: (text) => ok(read.leechAction(text), validOption.leechAction),
+  maximumInterval: (text) => ok(read.maximumInterval(text), validOption.maximumInterval),
   fsrsParameters: (text) => ok(read.fsrsParameters(text), validOption.fsrsParameters),
 };
 
@@ -91,6 +106,11 @@ export function presetTexts(preset: Preset, locale: Locale): PresetTexts {
     reviewsPerDay: String(f.reviewsPerDay.value),
     desiredRetention: decimalText(f.desiredRetention.value),
     learningSteps: f.learningSteps.value.join(" "),
+    relearningSteps: f.relearningSteps.value.join(" "),
+    insertionOrder: f.insertionOrder.value,
+    leechThreshold: String(f.leechThreshold.value),
+    leechAction: f.leechAction.value,
+    maximumInterval: String(f.maximumInterval.value),
     fsrsParameters: f.fsrsParameters.value.join(", "),
   };
 }
@@ -114,6 +134,11 @@ export function readPresetTexts(texts: PresetTexts): PresetOptions | undefined {
     reviewsPerDay: read.reviewsPerDay(texts.reviewsPerDay)!,
     desiredRetention: read.desiredRetention(texts.desiredRetention)!,
     learningSteps: read.learningSteps(texts.learningSteps)!,
+    relearningSteps: read.relearningSteps(texts.relearningSteps)!,
+    insertionOrder: read.insertionOrder(texts.insertionOrder)!,
+    leechThreshold: read.leechThreshold(texts.leechThreshold)!,
+    leechAction: read.leechAction(texts.leechAction)!,
+    maximumInterval: read.maximumInterval(texts.maximumInterval)!,
     fsrsParameters: read.fsrsParameters(texts.fsrsParameters)!,
   };
 }

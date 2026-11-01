@@ -140,6 +140,11 @@ test("deck options save limits, retention and learning steps, and refuse what FS
   );
   await fireEvent.changeText(screen.getByLabelText("Cartões novos por dia"), "5");
   await fireEvent.changeText(screen.getByLabelText("Etapas de aprendizado (minutos)"), "2 15");
+  await fireEvent.changeText(screen.getByLabelText("Etapas de reaprendizado (minutos)"), "3 20");
+  await fireEvent.changeText(screen.getByLabelText("Limite de lapsos (0 desativa)"), "4");
+  await fireEvent.changeText(screen.getByLabelText("Intervalo máximo (dias)"), "90");
+  await press("radio", "Aleatória");
+  await press("radio", "Suspender");
   await press("button", "Salvar");
   await screen.findByRole("button", { name: "Opções do baralho" });
 
@@ -147,6 +152,11 @@ test("deck options save limits, retention and learning steps, and refuse what FS
   expect(preset.fields.desiredRetention.value).toBe(0.89);
   expect(preset.fields.newPerDay.value).toBe(5);
   expect(preset.fields.learningSteps.value).toEqual([2, 15]);
+  expect(preset.fields.relearningSteps.value).toEqual([3, 20]);
+  expect(preset.fields.leechThreshold.value).toBe(4);
+  expect(preset.fields.maximumInterval.value).toBe(90);
+  expect(preset.fields.insertionOrder.value).toBe("random");
+  expect(preset.fields.leechAction.value).toBe("suspend");
   expect(preset.fields.fsrsParameters.value).toHaveLength(21);
   expect([
     preset.fields.buryNew.value,

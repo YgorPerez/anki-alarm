@@ -508,3 +508,112 @@ test("preset edits leave answered cards alone and only change later answers", ()
     later.at + 30 * 60_000,
   );
 });
+
+test("relearning steps and maximum interval apply only to later alarm answers", () => {
+  const { state, cardId, preset } = fixture();
+  const old: LogEntry = {
+    kind: "review",
+    id: "old",
+    cardId,
+    at: now,
+    grade: 4,
+    durationMs: 1,
+    origin: "alarm",
+    options: schedulingOptions(preset),
+  };
+  const before = cardMemory(state, [old], cardId, now);
+  const c = new Collection(
+    { deviceId: "a", now: () => now, random: () => new Uint8Array(16) },
+    state,
+  );
+  c.updatePreset(preset.id, { relearningSteps: [3, 15], maximumInterval: 2 });
+  const updated = c.snapshot();
+  expect(cardMemory(updated, [old], cardId, now)).toEqual(before);
+  const at = now + 10 * 86400_000;
+  const answer: LogEntry = {
+    ...old,
+    id: "later",
+    at,
+    grade: 1,
+    options: schedulingOptions(updated.presets[0]!),
+  };
+  expect(cardMemory(updated, [old, answer], cardId, at)!.due.getTime()).toBe(at + 180_000);
+  expect(nextIntervals(updated, [old], cardId, at)![4]).toBe(2 * 86400);
+});
+
+test("random insertion order is stable across queue reads and differs from creation order", () => {
+  let n = 0;
+  const c = new Collection({
+    deviceId: "a",
+    now: () => now + n,
+    random: () => new Uint8Array(16).fill(n++),
+  });
+  const deck = c.createDeck("Words");
+  for (let i = 0; i < 12; i++) c.addBasicNote(deck.id, String(i), "back");
+  const ids = () => studyQueue(c.snapshot(), [], deck.id, now + 100).map((x) => x.card.id);
+  const sequential = ids();
+  c.updatePreset(deck.fields.presetId.value, { insertionOrder: "random" });
+  const random = ids();
+  expect(random).not.toEqual(sequential);
+  expect(ids()).toEqual(random);
+  expect(new Set(random)).toEqual(new Set(sequential));
+});
+
+test.each(["suspend", "tagOnly"] as const)(
+  "leech action %s runs on a Good alarm answer too",
+  (action) => {
+    const { state, cardId, preset } = fixture();
+    const c = new Collection(
+      { deviceId: "a", now: () => now, random: () => new Uint8Array(16) },
+      state,
+    );
+    c.updatePreset(preset.id, { leechThreshold: 1, leechAction: action });
+    const log: LogEntry[] = [
+      {
+        kind: "review",
+        id: "easy",
+        cardId,
+        at: now - 10 * 86400_000,
+        grade: 4,
+        durationMs: 1,
+        origin: "phone",
+      },
+      {
+        kind: "review",
+        id: "lapse",
+        cardId,
+        at: now - 86400_000,
+        grade: 1,
+        durationMs: 1,
+        origin: "alarm",
+      },
+    ];
+    const answer: LogEntry = {
+      kind: "review",
+      id: "good",
+      cardId,
+      at: now,
+      grade: 3,
+      durationMs: 1,
+      origin: "alarm",
+      options: schedulingOptions(c.snapshot().presets[0]!),
+    };
+    c.applyReviewEffects(log, answer);
+    const after = c.snapshot();
+    expect(
+      after.notes.find((n) => n.id === after.cards[0]!.fields.noteId.value)!.fields.tags.value,
+    ).toContain("leech");
+    expect(after.cards[0]!.fields.suspended.value).toBe(action === "suspend");
+  },
+);
+
+test("reset cards go behind untouched cards even with random insertion", () => {
+  const { state, deckId, cardId, preset } = fixture();
+  const c = new Collection(
+    { deviceId: "a", now: () => now, random: () => new Uint8Array(16) },
+    state,
+  );
+  c.updatePreset(preset.id, { insertionOrder: "random" });
+  const log: LogEntry[] = [{ kind: "reset", id: "reset", cardId, at: now + 1 }];
+  expect(studyQueue(c.snapshot(), log, deckId, now + 2).at(-1)!.card.id).toBe(cardId);
+});

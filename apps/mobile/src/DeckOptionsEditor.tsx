@@ -11,7 +11,7 @@ import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
 import { RetentionSlider } from "./RetentionSlider.tsx";
 import { Switch, Text, View } from "react-native";
-import { Button, SaveButtons, TextField } from "./controls.tsx";
+import { Button, Choice, SaveButtons, TextField } from "./controls.tsx";
 import { editingCopy } from "./editing-copy.ts";
 import { regular } from "./fonts.ts";
 
@@ -63,6 +63,13 @@ export function DeckOptionsEditor({
       hint: t("learningStepsHint"),
       numeric: true,
     },
+    {
+      key: "relearningSteps",
+      label: t("relearningSteps"),
+      error: t("invalidSteps"),
+      hint: t("relearningStepsHint"),
+    },
+    { key: "leechThreshold", label: t("leechThreshold"), error: t("invalidLimit"), numeric: true },
     {
       key: "fsrsParameters",
       label: t("fsrsParameters"),
@@ -148,6 +155,22 @@ export function DeckOptionsEditor({
           )}
         </form.Field>
       ))}
+
+      {(["insertionOrder", "leechAction"] as const).map((key) => (
+        <form.Field key={key} name={key}>
+          {(field) => (
+            <Choice
+              label={t(key)}
+              value={field.state.value}
+              options={(key === "insertionOrder"
+                ? (["sequential", "random"] as const)
+                : (["suspend", "tagOnly"] as const)
+              ).map((value) => ({ value, label: t(value) }))}
+              onChange={field.handleChange}
+            />
+          )}
+        </form.Field>
+      ))}
       {fields.map((spec) => (
         <form.Field
           key={spec.key}
@@ -174,6 +197,24 @@ export function DeckOptionsEditor({
                 <Button label={t("advanced")} onPress={() => setAdvanced(!advanced)} />
                 {advanced && (
                   <>
+                    <form.Field
+                      name="maximumInterval"
+                      validators={{
+                        onChange: ({ value }) =>
+                          validPresetText.maximumInterval(value) ? undefined : t("invalidInterval"),
+                      }}
+                    >
+                      {(intervalField) => (
+                        <TextField
+                          label={t("maximumInterval")}
+                          numeric
+                          value={intervalField.state.value}
+                          onChange={intervalField.handleChange}
+                          onBlur={intervalField.handleBlur}
+                          error={intervalField.state.meta.errors[0]}
+                        />
+                      )}
+                    </form.Field>
                     {control}
                     <Button
                       label={t("defaultParameters")}
