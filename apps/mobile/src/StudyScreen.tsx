@@ -1,4 +1,4 @@
-import { autoAdvanceStep, deckPreset } from "@app/core";
+import { autoAdvanceStep, cardPreset } from "@app/core";
 import { StudyAudio } from "./StudyAudio.tsx";
 import { useAutoAdvance } from "./use-auto-advance.ts";
 import { useStudyTimer } from "@app/editing-ui/use-study-timer";
@@ -146,64 +146,78 @@ function StudyReview({
   deckName: string | undefined;
 }) {
   const t = copy(locale);
-  const { query, card, note, type, busy, revealed, reveal, answer } = study;
+  const { query, card, note, type, busy, revealed, reveal } = study;
+  if (!card || !note || !type)
+    return (
+      <Text className="text-body text-attention">
+        {t(query.isPending ? "loading" : "studyDone")}
+      </Text>
+    );
+  const side = revealed ? "back" : "front";
+  const ordinal = card.fields.ordinal.value;
   return (
     <>
-      {card && note && type ? (
-        <>
-          <CardSide
-            key={`${card.id}-${revealed}-${dark}`}
-            label={t(revealed ? "answer" : "front")}
-            dark={dark}
-            revealHint={!revealed && !busy ? t("revealHint") : undefined}
-            onReveal={reveal}
-            scripts
-            input={{
-              note,
-              type,
-              ordinal: card.fields.ordinal.value,
-              side: revealed ? "back" : "front",
-              dark,
-              ...(deckName === undefined ? {} : { deckName }),
-            }}
-          />
-          {study.timer.show && (
-            <Text
-              accessibilityLabel={editingCopy(locale)("answerTimer")}
-              className="text-label text-muted-foreground"
-            >
-              {study.timer.seconds}s
-            </Text>
-          )}
-          {study.preset && (
-            <StudyAudio
-              key={`${card.id}-${revealed}`}
-              input={{ note, type, ordinal: card.fields.ordinal.value }}
-              side={revealed ? "back" : "front"}
-              preset={study.preset}
-              locale={locale}
-              onPlaying={study.audioPlaying}
-              onFinished={study.audioFinished}
-            />
-          )}
-          {study.reminder && (
-            <Text accessibilityLiveRegion="polite" className="text-label text-attention">
-              {editingCopy(locale)(revealed ? "answerReminder" : "questionReminder")}
-            </Text>
-          )}
-          <AnswerControls
-            intervals={study.intervals}
-            onReveal={reveal}
-            gradeHeight={56}
-            revealed={revealed}
-            busy={busy}
-            locale={locale}
-            onAnswer={answer}
-          />
-        </>
-      ) : (
-        <Text className="text-body text-attention">
-          {t(query.isPending ? "loading" : "studyDone")}
+      <CardSide
+        key={`${card.id}-${revealed}-${dark}`}
+        label={t(revealed ? "answer" : "front")}
+        dark={dark}
+        revealHint={!revealed && !busy ? t("revealHint") : undefined}
+        onReveal={reveal}
+        scripts
+        input={{
+          note,
+          type,
+          ordinal,
+          side,
+          dark,
+          ...(deckName === undefined ? {} : { deckName }),
+        }}
+      />
+      <StudyCardExtras study={study} locale={locale} />
+      <AnswerControls
+        intervals={study.intervals}
+        onReveal={reveal}
+        gradeHeight={56}
+        revealed={revealed}
+        busy={busy}
+        locale={locale}
+        onAnswer={study.answer}
+      />
+    </>
+  );
+}
+
+/** What the preset adds under the card: the timer, the audio and the reminder. */
+function StudyCardExtras({
+  study,
+  locale,
+}: {
+  study: ReturnType<typeof useStudySession>;
+  locale: Locale;
+}) {
+  const { card, note, type, revealed, preset } = study;
+  const t = editingCopy(locale);
+  return (
+    <>
+      {study.timer.show && (
+        <Text accessibilityLabel={t("answerTimer")} className="text-label text-muted-foreground">
+          {study.timer.seconds}s
+        </Text>
+      )}
+      {preset && card && note && type && (
+        <StudyAudio
+          key={`${card.id}-${revealed}`}
+          input={{ note, type, ordinal: card.fields.ordinal.value }}
+          side={revealed ? "back" : "front"}
+          preset={preset}
+          locale={locale}
+          onPlaying={study.audioPlaying}
+          onFinished={study.audioFinished}
+        />
+      )}
+      {study.reminder && (
+        <Text accessibilityLiveRegion="polite" className="text-label text-attention">
+          {t(revealed ? "answerReminder" : "questionReminder")}
         </Text>
       )}
     </>
@@ -483,8 +497,7 @@ function useStudySession(deckId: string, onExit: () => void, held: boolean) {
   const card = next?.card;
   const cardId = card?.id;
   const revealed = Boolean(cardId && revealedId === cardId);
-  const ownDeck = query.data?.collection.decks.find((d) => d.id === card?.fields.deckId.value);
-  const preset = ownDeck && query.data ? deckPreset(query.data.collection, ownDeck) : undefined;
+  const preset = query.data && cardId ? cardPreset(query.data.collection, cardId) : undefined;
   const timer = useStudyTimer(query.data?.started, preset);
   const screenActive = useContext(ScreenActivity);
   useEffect(() => {

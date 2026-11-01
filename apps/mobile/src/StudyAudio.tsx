@@ -1,5 +1,5 @@
-import { studyAudio, type Preset, type ReadAloudInput, type Locale } from "@app/core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useStudyAudio, type StudyAudioProps } from "@app/editing-ui/use-study-audio";
+import { useEffect, useMemo } from "react";
 import { View } from "react-native";
 import { WebView } from "react-native-webview";
 import { Button } from "./controls.tsx";
@@ -8,46 +8,20 @@ import { mediaBaseUrl, mediaUrl } from "./media.ts";
 
 const FINISHED = "audio-finished";
 
-export function StudyAudio({
-  input,
-  side,
-  preset,
-  locale,
-  onPlaying,
-  onFinished,
-}: {
-  input: Omit<ReadAloudInput, "language">;
-  side: "front" | "back";
-  preset: Preset;
-  locale: Locale;
-  /** A replay started. */
-  onPlaying?: () => void;
-  /** The side's audio ended, or it had none. */
-  onFinished?: () => void;
-}) {
-  const [replay, setReplay] = useState(0);
-  const urls = studyAudio(input, side, preset, replay > 0).map(mediaUrl);
+export function StudyAudio(props: StudyAudioProps) {
+  const { clips, replay, finished, startReplay } = useStudyAudio(props);
+  const urls = clips.map(mediaUrl);
   const html = `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; media-src file: data:; script-src 'unsafe-inline'"><script>const urls=${JSON.stringify(urls).replace(/</g, "\\u003c")};let i=0;function next(){if(i>=urls.length){window.ReactNativeWebView.postMessage(${JSON.stringify(FINISHED)});return}const a=new Audio(urls[i++]);a.onended=next;a.onerror=next;a.play().catch(next)}next()</script>`;
   const baseUrl = mediaBaseUrl();
   const source = useMemo(() => ({ html, baseUrl }), [html, baseUrl]);
-  const finished = useRef(onFinished);
-  useEffect(() => {
-    finished.current = onFinished;
-  });
   // Which run had nothing to play: a replay of a silent side finishes again.
   const silentRun = urls.length === 0 ? replay : undefined;
   useEffect(() => {
     if (silentRun !== undefined) finished.current?.();
-  }, [silentRun]);
+  }, [silentRun, finished]);
   return (
     <>
-      <Button
-        label={editingCopy(locale)("replayAudio")}
-        onPress={() => {
-          onPlaying?.();
-          setReplay((n) => n + 1);
-        }}
-      />
+      <Button label={editingCopy(props.locale)("replayAudio")} onPress={startReplay} />
       <View style={{ height: 0, overflow: "hidden" }} accessible={false}>
         <WebView
           testID="study-audio"
@@ -59,7 +33,7 @@ export function StudyAudio({
           originWhitelist={["about:*", "file://*"]}
           onShouldStartLoadWithRequest={(r) => r.url === "about:blank" || r.url === mediaBaseUrl()}
           onMessage={({ nativeEvent }) => {
-            if (nativeEvent.data === FINISHED) onFinished?.();
+            if (nativeEvent.data === FINISHED) props.onFinished?.();
           }}
         />
       </View>

@@ -74,61 +74,13 @@ function useCollectionData() {
   return { query, log };
 }
 
-export function CollectionScreen({
-  locale,
-  onExit,
-  onTheme,
-  ankiDroid,
-  onStudy,
-}: {
-  locale: Locale;
-  onStudy?: (deckId: string) => void;
-  onExit?: () => void;
-  onTheme: () => void;
-
-  ankiDroid: AnkiDroidApi;
-}) {
-  const [linking, setLinking] = useState(false);
+/** The screen's writes and imports, one at a time, and how the last one went. */
+function useCollectionWrites(t: Translate) {
   const queryClient = useQueryClient();
-  const { query, log } = useCollectionData();
-  const state = query.data;
-  const [studying, setStudying] = useState(false);
-  const [deckId, setDeckId] = useState<string>();
-  const [form, setForm] = useState<Form>();
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
-  const optionsDirty = useRef(false);
   const [error, setError] = useState(false);
   const [notice, setNotice] = useState("");
-  const t = copy(locale);
-  const goBack = useCallback(() => {
-    if (studying || linking) return false;
-    if (locked.current) return true;
-    if (form?.kind === "options" && !optionsDirty.current) {
-      setForm(undefined);
-      setError(false);
-      return true;
-    }
-    if (form) {
-      confirmDiscard(t, () => {
-        setForm(undefined);
-        setError(false);
-      });
-      return true;
-    }
-    if (deckId) {
-      setDeckId(undefined);
-      setError(false);
-      return true;
-    }
-    return false;
-  }, [form, deckId, t, studying, linking]);
-  const screenActive = useContext(ScreenActivity);
-  useEffect(() => {
-    if (!screenActive) return undefined;
-    const handler = BackHandler.addEventListener("hardwareBackPress", goBack);
-    return () => handler.remove();
-  }, [goBack, screenActive]);
   /** Runs one write at a time; the previous data stays on screen when it fails. */
   async function write(
     task: (data: ClientData["Service"]) => Effect.Effect<unknown, Error>,
@@ -178,6 +130,61 @@ export function CollectionScreen({
     locked.current = false;
     setBusy(false);
   }
+  return { busy, locked, error, setError, notice, setNotice, write, change, importPackage };
+}
+
+export function CollectionScreen({
+  locale,
+  onExit,
+  onTheme,
+  ankiDroid,
+  onStudy,
+}: {
+  locale: Locale;
+  onStudy?: (deckId: string) => void;
+  onExit?: () => void;
+  onTheme: () => void;
+
+  ankiDroid: AnkiDroidApi;
+}) {
+  const [linking, setLinking] = useState(false);
+  const { query, log } = useCollectionData();
+  const state = query.data;
+  const [studying, setStudying] = useState(false);
+  const [deckId, setDeckId] = useState<string>();
+  const [form, setForm] = useState<Form>();
+  const optionsDirty = useRef(false);
+  const t = copy(locale);
+  const { busy, locked, error, setError, notice, setNotice, write, change, importPackage } =
+    useCollectionWrites(t);
+  const goBack = useCallback(() => {
+    if (studying || linking) return false;
+    if (locked.current) return true;
+    if (form?.kind === "options" && !optionsDirty.current) {
+      setForm(undefined);
+      setError(false);
+      return true;
+    }
+    if (form) {
+      confirmDiscard(t, () => {
+        setForm(undefined);
+        setError(false);
+      });
+      return true;
+    }
+    if (deckId) {
+      setDeckId(undefined);
+      setError(false);
+      return true;
+    }
+    return false;
+  }, [form, deckId, t, studying, linking, locked, setError]);
+  const screenActive = useContext(ScreenActivity);
+  useEffect(() => {
+    if (!screenActive) return undefined;
+    const handler = BackHandler.addEventListener("hardwareBackPress", goBack);
+    return () => handler.remove();
+  }, [goBack, screenActive]);
   const deck = state?.decks.find((d) => d.id === deckId);
   const cancel = () => {
     setError(false);

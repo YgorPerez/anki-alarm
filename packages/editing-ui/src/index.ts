@@ -7,10 +7,24 @@ import {
   MAX_DUE_DAYS,
   PRESET_LIMITS,
   QUESTION_ACTIONS,
+  validPresetText,
   type DisplayOrder,
   type Locale,
   type Messages,
+  type PresetOptions,
 } from "@app/core";
+
+/** What each app's easy days control takes. `value` is one day per weekday, Monday first. */
+export interface EasyDaysFieldProps {
+  value: string;
+  locale: Locale;
+  onChange: (value: string) => void;
+}
+
+/** A preset option's form validators: `error` while its text breaks Core's rule. */
+export const presetTextValidators = (key: keyof PresetOptions, error: string) => ({
+  onChange: ({ value }: { value: string }) => (validPresetText[key](value) ? undefined : error),
+});
 
 const { maxPerDay, minRetention, maxRetention, fsrsParameters } = PRESET_LIMITS;
 /** A retention as each locale writes it: 0,70 in pt-BR, 0.70 in English. */

@@ -2,6 +2,14 @@ import { create } from "zustand";
 
 const CHECK_INTERVAL = 6 * 60 * 60 * 1000;
 
+/**
+ * The card stays off screens where a tap or a restart costs something (ADR 0002): study, the alarm
+ * editor's draft, an AnkiDroid import. Settings' own screen has the button instead.
+ */
+export function showsUpdateCard(pathname: string) {
+  return !/^\/(study|alarm|ankidroid)(\/|$)|^\/settings\/?$/.test(pathname);
+}
+
 export interface Apk {
   version: string;
   url: string;

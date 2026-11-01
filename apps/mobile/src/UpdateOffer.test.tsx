@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react-native/pure";
 import { expect, test } from "vite-plus/test";
-import { showsUpdateCard, UpdateCard, UpdateOfferButton } from "./UpdateOffer.tsx";
+import { UpdateCard, UpdateOfferButton } from "./UpdateOffer.tsx";
+import { showsUpdateCard } from "./update-store.ts";
 import type { ApkDownload } from "./update-store.ts";
 
 const apkOffer = (download: ApkDownload) =>

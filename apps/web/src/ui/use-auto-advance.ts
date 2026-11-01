@@ -1,50 +1,18 @@
-import type { AutoAdvanceStep } from "@app/core";
-import { useEffect, useRef, useState } from "react";
+import { useAutoAdvanceClock, type AutoAdvanceOptions } from "@app/editing-ui/use-auto-advance";
+import { useSyncExternalStore } from "react";
 
-type Action = Exclude<AutoAdvanceStep["action"], "showReminder">;
+function subscribeToVisibility(onChange: () => void) {
+  document.addEventListener("visibilitychange", onChange);
+  return () => document.removeEventListener("visibilitychange", onChange);
+}
+const tabHidden = () => document.visibilityState === "hidden";
+const visibleOnServer = () => false;
 
 /**
  * Runs a side's auto advance while nothing holds it: leaving the page, a hold or a hidden tab
  * clears the clock.
  */
-export function useAutoAdvance({
-  side,
-  step,
-  held,
-  audioFinished,
-  run,
-}: {
-  /** Which card and side is showing. */
-  side: string | undefined;
-  step: AutoAdvanceStep | undefined;
-  held: boolean;
-  audioFinished: boolean;
-  run: (action: Action) => void;
-}) {
-  const [hidden, setHidden] = useState(() => document.visibilityState === "hidden");
-  const [reminded, setReminded] = useState<string>();
-  const latest = useRef(run);
-  useEffect(() => {
-    latest.current = run;
-  });
-  useEffect(() => {
-    const change = () => setHidden(document.visibilityState === "hidden");
-    document.addEventListener("visibilitychange", change);
-    return () => document.removeEventListener("visibilitychange", change);
-  }, []);
-  const armed = step && !held && !hidden && (!step.waitForAudio || audioFinished);
-  const delayMs = armed ? step.delayMs : undefined;
-  const action = step?.action;
-  useEffect(() => {
-    if (delayMs === undefined || !action) return undefined;
-    const clock = setTimeout(() => {
-      if (action === "showReminder") setReminded(side);
-      else latest.current(action);
-    }, delayMs);
-    return () => {
-      clearTimeout(clock);
-      setReminded(undefined);
-    };
-  }, [action, delayMs, side]);
-  return { reminder: Boolean(side && reminded === side) };
+export function useAutoAdvance(options: AutoAdvanceOptions) {
+  const hidden = useSyncExternalStore(subscribeToVisibility, tabHidden, visibleOnServer);
+  return useAutoAdvanceClock({ ...options, held: options.held || hidden });
 }

@@ -1,9 +1,9 @@
-import { autoAdvanceStep, deckPreset } from "@app/core";
+import { autoAdvanceStep, cardPreset } from "@app/core";
 import { StudyAudio } from "#/ui/study-audio.tsx";
 import { useAutoAdvance } from "#/ui/use-auto-advance.ts";
 import { useStudyTimer } from "@app/editing-ui/use-study-timer";
 import { editingCopy } from "#/editing-copy.ts";
-import { nextStudyCard, type Grade, type LogEntry } from "@app/core";
+import { nextStudyCard, type Grade, type Locale, type LogEntry } from "@app/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
@@ -26,7 +26,7 @@ function Study() {
   const { deck: deckId = "", lang = "pt-BR" } = Route.useSearch();
   const t = copy(lang);
   const session = useStudySession(deckId);
-  const { query, card, note, type, busy, error, revealed } = session;
+  const { query, busy, error } = session;
   const deckName = query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value;
   useStudyKeys(session);
   return (
@@ -51,47 +51,67 @@ function Study() {
           {t("answerError")}
         </p>
       )}
-      {card && note && type ? (
-        <>
-          <CardFrame
-            key={`${card.id}-${revealed}`}
-            title={t(revealed ? "answer" : "front")}
-            note={note}
-            type={type}
-            ordinal={card.fields.ordinal.value}
-            side={revealed ? "back" : "front"}
-            {...(deckName === undefined ? {} : { deckName })}
-            className="min-h-80 flex-1"
-          />
-          {session.timer.show && (
-            <p role="timer" aria-label={editingCopy(lang)("answerTimer")}>
-              {session.timer.seconds}s
-            </p>
-          )}
-          {session.preset && (
-            <StudyAudio
-              key={`${card.id}-${revealed}`}
-              input={{ note, type, ordinal: card.fields.ordinal.value }}
-              side={revealed ? "back" : "front"}
-              preset={session.preset}
-              locale={lang}
-              onPlaying={session.audioPlaying}
-              onFinished={session.audioFinished}
-            />
-          )}
-          {session.reminder && (
-            <p role="status" className="text-label text-attention">
-              {editingCopy(lang)(revealed ? "answerReminder" : "questionReminder")}
-            </p>
-          )}
-          <AnswerControls t={t} session={session} />
-        </>
-      ) : (
-        <p role="status" className="text-body text-attention">
-          {t(query.isPending ? "studyLoading" : "studyDone")}
+      <StudyCard t={t} lang={lang} session={session} deckName={deckName} />
+    </main>
+  );
+}
+
+/** The card with its answer controls, or why there is none. */
+function StudyCard({
+  t,
+  lang,
+  session,
+  deckName,
+}: {
+  t: T;
+  lang: Locale;
+  session: StudySession;
+  deckName: string | undefined;
+}) {
+  const { query, card, note, type, revealed } = session;
+  if (!card || !note || !type)
+    return (
+      <p role="status" className="text-body text-attention">
+        {t(query.isPending ? "studyLoading" : "studyDone")}
+      </p>
+    );
+  const side = revealed ? "back" : "front";
+  const ordinal = card.fields.ordinal.value;
+  return (
+    <>
+      <CardFrame
+        key={`${card.id}-${revealed}`}
+        title={t(revealed ? "answer" : "front")}
+        note={note}
+        type={type}
+        ordinal={ordinal}
+        side={side}
+        {...(deckName === undefined ? {} : { deckName })}
+        className="min-h-80 flex-1"
+      />
+      {session.timer.show && (
+        <p role="timer" aria-label={editingCopy(lang)("answerTimer")}>
+          {session.timer.seconds}s
         </p>
       )}
-    </main>
+      {session.preset && (
+        <StudyAudio
+          key={`${card.id}-${revealed}`}
+          input={{ note, type, ordinal }}
+          side={side}
+          preset={session.preset}
+          locale={lang}
+          onPlaying={session.audioPlaying}
+          onFinished={session.audioFinished}
+        />
+      )}
+      {session.reminder && (
+        <p role="status" className="text-label text-attention">
+          {editingCopy(lang)(revealed ? "answerReminder" : "questionReminder")}
+        </p>
+      )}
+      <AnswerControls t={t} session={session} />
+    </>
   );
 }
 
@@ -180,8 +200,7 @@ function useStudySession(deckId: string) {
     nextStudyCard(query.data.collection, query.data.log, deckId, query.data.now, state.undone);
   const cardId = next?.card.id;
   const revealed = Boolean(cardId && state.revealedId === cardId);
-  const ownDeck = query.data?.collection.decks.find((d) => d.id === next?.card.fields.deckId.value);
-  const preset = ownDeck && query.data ? deckPreset(query.data.collection, ownDeck) : undefined;
+  const preset = query.data && cardId ? cardPreset(query.data.collection, cardId) : undefined;
   const timer = useStudyTimer(query.data?.started, preset);
   /** One write at a time; then the card's front, and the session read again. */
   const write = async (operation: () => Promise<Partial<SessionState>>) => {

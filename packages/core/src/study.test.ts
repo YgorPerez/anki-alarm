@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
 import {
   cardMemory,
+  cardPreset,
   schedulingOptions,
   nextIntervals,
   Collection,
@@ -26,6 +27,11 @@ function fixture() {
   const state = c.snapshot();
   return { state, deckId: deck.id, cardId: state.cards[0]!.id, preset: state.presets[0]! };
 }
+test("a card schedules with its deck's preset, and an unknown card has none", () => {
+  const { state, cardId, preset } = fixture();
+  expect(cardPreset(state, cardId)).toEqual(preset);
+  expect(cardPreset(state, "missing")).toBeUndefined();
+});
 test("replays FSRS reviews in answer order and void restores the earlier state", () => {
   const { cardId, preset } = fixture();
   const review: LogEntry = {

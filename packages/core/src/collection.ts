@@ -24,6 +24,7 @@ import { isLanguageTag } from "./locale.ts";
 import { NORMAL_WEEK, type EasyDay } from "./easy-days.ts";
 import { editedNoteType, editedValues, noteTypeProblems, type NoteTypeEdit } from "./note-types.ts";
 import {
+  cardPreset,
   deckPreset,
   schedulingOptions,
   dueInDays,
@@ -478,6 +479,12 @@ export class Collection {
     }
     return preset;
   }
+  private cardWithPreset(id: string, missing: string) {
+    const card = this.state.cards.find((c) => c.id === id);
+    const preset = cardPreset(this.state, id);
+    if (!card || !preset) throw new Error(missing);
+    return { card, preset };
+  }
   /**
    * Applies the leech action of an answer that lapses, as Anki does: at the threshold and every half
    * threshold after. Runs in the same transaction as the log entry and returns the entry to store,
@@ -490,10 +497,7 @@ export class Collection {
       return entry;
     }
     if (entry.kind !== "review") return entry;
-    const card = this.state.cards.find((c) => c.id === entry.cardId);
-    const deck = this.state.decks.find((d) => d.id === card?.fields.deckId.value);
-    const preset = deck && deckPreset(this.state, deck);
-    if (!card || !preset) throw new Error("Card missing");
+    const { card, preset } = this.cardWithPreset(entry.cardId, "Card missing");
     const options = entry.options ?? schedulingOptions(preset, entry.at);
     const before = cardMemory(this.state, log, card.id, entry.at)!;
     const after = cardMemory(this.state, [...log, entry], card.id, entry.at)!;
@@ -880,10 +884,7 @@ export class Collection {
       entry.ringId !== undefined
     )
       return entry;
-    const card = this.state.cards.find((c) => c.id === entry.cardId);
-    const deck = this.state.decks.find((d) => d.id === card?.fields.deckId.value);
-    const preset = deck && deckPreset(this.state, deck);
-    if (!card || !preset) throw new Error("Deck preset missing");
+    const { card, preset } = this.cardWithPreset(entry.cardId, "Deck preset missing");
     const previous: { cardId: string; until: number | null }[] = [];
     for (const sibling of this.cardsOf(card.fields.noteId.value)) {
       if (

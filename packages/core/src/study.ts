@@ -300,6 +300,16 @@ export function studyDayStart(now: number, hour = 4): number {
   date.setHours(hour, 0, 0, 0);
   return date.getTime();
 }
+/** A card and the deck holding it, as far as they exist. */
+function cardAndDeck(collection: CollectionState, cardId: string) {
+  const card = collection.cards.find((c) => c.id === cardId);
+  return { card, deck: collection.decks.find((d) => d.id === card?.fields.deckId.value) };
+}
+/** The preset a card schedules with: its deck's. */
+export function cardPreset(collection: CollectionState, cardId: string): Preset | undefined {
+  const { deck } = cardAndDeck(collection, cardId);
+  return deck && deckPreset(collection, deck);
+}
 /** The preset a deck schedules with: its own, with the deck's desired retention when set. */
 export function deckPreset(collection: CollectionState, deck: Deck): Preset | undefined {
   const base = collection.presets.find((p) => p.id === deck.fields.presetId.value);
@@ -626,8 +636,7 @@ export function canStudyCard(
   cardId: string,
   now: number,
 ) {
-  const card = collection.cards.find((c) => c.id === cardId);
-  const deck = collection.decks.find((d) => d.id === card?.fields.deckId.value);
+  const { deck } = cardAndDeck(collection, cardId);
   return (
     !!deck &&
     deckLineage(collection, deck).some((d) =>

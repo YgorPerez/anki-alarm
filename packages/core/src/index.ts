@@ -124,6 +124,7 @@ export type {
 export { deckLimitTexts, LIMIT_SCOPES, scopedLimit } from "./daily-limits.ts";
 export type { LimitKind, LimitScope } from "./daily-limits.ts";
 export {
+  cardPreset,
   deckPreset,
   schedulingOptions,
   replayCard,

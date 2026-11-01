@@ -8,14 +8,6 @@ import { bold, regular } from "./fonts.ts";
 import { ThemedIcon } from "./icons.tsx";
 import type { UpdateOffer } from "./update-store.ts";
 
-/**
- * The card stays off screens where a tap or a restart costs something (ADR 0002): study, the alarm
- * editor's draft, an AnkiDroid import. Settings' own screen has the button instead.
- */
-export function showsUpdateCard(pathname: string) {
-  return !/^\/(study|alarm|ankidroid)(\/|$)|^\/settings\/?$/.test(pathname);
-}
-
 function offerText(offer: UpdateOffer, locale: Locale) {
   const t = copy(locale);
   if (offer.kind === "ota")

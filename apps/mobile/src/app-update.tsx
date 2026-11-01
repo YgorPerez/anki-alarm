@@ -2,8 +2,8 @@ import { usePathname } from "expo-router";
 import * as Updates from "expo-updates";
 
 import { appUpdate } from "./app-update-store.ts";
-import { showsUpdateCard, UpdateCard, UpdateOfferButton } from "./UpdateOffer.tsx";
-import { updateOffer } from "./update-store.ts";
+import { UpdateCard, UpdateOfferButton } from "./UpdateOffer.tsx";
+import { showsUpdateCard, updateOffer } from "./update-store.ts";
 import { useUI } from "./ui.ts";
 
 function useOffer() {

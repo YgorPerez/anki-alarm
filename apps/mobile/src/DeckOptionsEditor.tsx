@@ -8,20 +8,19 @@ import {
   readPresetTexts,
   scopedLimit,
   studyDayStart,
-  validPresetText,
   type Deck,
   type LimitScope,
   type Locale,
   type Preset,
   type PresetOptions,
 } from "@app/core";
-import { autoAdvanceActionFields, displayOrderFields } from "@app/editing-ui";
+import { autoAdvanceActionFields, displayOrderFields, presetTextValidators } from "@app/editing-ui";
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
 import { RetentionSlider } from "./RetentionSlider.tsx";
 import { Pressable, Switch, Text, View } from "react-native";
 import { Button, Choice, SaveButtons, TextField } from "./controls.tsx";
-import { editingCopy } from "./editing-copy.ts";
+import { editingCopy, type EditingTranslate } from "./editing-copy.ts";
 import { EasyDaysField } from "./EasyDaysField.tsx";
 import { bold, regular } from "./fonts.ts";
 
@@ -48,6 +47,106 @@ function OptionSwitch({
         onValueChange={(value) => field.handleChange(String(value))}
         disabled={busy}
       />
+    </View>
+  );
+}
+
+/** Each option typed as text: its copy and its control. */
+const textOptions = (t: EditingTranslate) =>
+  [
+    {
+      key: "maximumAnswerSeconds",
+      label: t("maximumAnswerSeconds"),
+      error: t("invalidLimit"),
+      numeric: true,
+    },
+    {
+      key: "secondsToShowQuestion",
+      label: t("secondsToShowQuestion"),
+      error: t("invalidLimit"),
+      numeric: true,
+    },
+    {
+      key: "secondsToShowAnswer",
+      label: t("secondsToShowAnswer"),
+      error: t("invalidLimit"),
+      numeric: true,
+    },
+    { key: "name", label: t("presetName"), error: t("invalidName") },
+    { key: "newPerDay", label: t("newPerDay"), error: t("invalidLimit"), numeric: true },
+    { key: "reviewsPerDay", label: t("reviewsPerDay"), error: t("invalidLimit"), numeric: true },
+    {
+      key: "learningSteps",
+      label: t("learningSteps"),
+      error: t("invalidSteps"),
+      hint: t("learningStepsHint"),
+      numeric: true,
+    },
+    {
+      key: "relearningSteps",
+      label: t("relearningSteps"),
+      error: t("invalidSteps"),
+      hint: t("relearningStepsHint"),
+    },
+    { key: "leechThreshold", label: t("leechThreshold"), error: t("invalidLimit"), numeric: true },
+    {
+      key: "fsrsParameters",
+      label: t("fsrsParameters"),
+      error: t("invalidParameters"),
+      hint: t("fsrsParametersHint"),
+      multiline: true,
+    },
+  ] as const;
+
+/** Where a deck's daily limit applies. */
+function LimitScopeChoice({
+  label,
+  t,
+  busy,
+  value,
+  onChoose,
+}: {
+  label: string;
+  t: EditingTranslate;
+  busy: boolean;
+  value: LimitScope;
+  onChoose: (scope: LimitScope) => void;
+}) {
+  return (
+    <View className="gap-2" accessibilityRole="radiogroup" accessibilityLabel={label}>
+      <Text style={regular} className="text-body text-foreground">
+        {label}
+      </Text>
+      <View className="flex-row flex-wrap gap-2">
+        {(
+          [
+            ["preset", "limitPreset"],
+            ["deck", "limitDeck"],
+            ["today", "limitToday"],
+          ] as const
+        ).map(([scope, scopeLabel]) => (
+          <Pressable
+            key={scope}
+            accessibilityRole="radio"
+            accessibilityLabel={t(scopeLabel)}
+            accessibilityState={{ checked: value === scope, disabled: busy }}
+            disabled={busy}
+            className={`min-h-12 justify-center rounded-pill px-5 py-3 ${
+              value === scope ? "bg-primary" : "bg-surface"
+            }`}
+            onPress={() => onChoose(scope)}
+          >
+            <Text
+              style={regular}
+              className={
+                value === scope ? "text-body text-primary-foreground" : "text-body text-foreground"
+              }
+            >
+              {t(scopeLabel)}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 }
@@ -98,50 +197,7 @@ export function DeckOptionsEditor({
       else onSave(options);
     },
   });
-  const fields = [
-    {
-      key: "maximumAnswerSeconds",
-      label: t("maximumAnswerSeconds"),
-      error: t("invalidLimit"),
-      numeric: true,
-    },
-    {
-      key: "secondsToShowQuestion",
-      label: t("secondsToShowQuestion"),
-      error: t("invalidLimit"),
-      numeric: true,
-    },
-    {
-      key: "secondsToShowAnswer",
-      label: t("secondsToShowAnswer"),
-      error: t("invalidLimit"),
-      numeric: true,
-    },
-    { key: "name", label: t("presetName"), error: t("invalidName") },
-    { key: "newPerDay", label: t("newPerDay"), error: t("invalidLimit"), numeric: true },
-    { key: "reviewsPerDay", label: t("reviewsPerDay"), error: t("invalidLimit"), numeric: true },
-    {
-      key: "learningSteps",
-      label: t("learningSteps"),
-      error: t("invalidSteps"),
-      hint: t("learningStepsHint"),
-      numeric: true,
-    },
-    {
-      key: "relearningSteps",
-      label: t("relearningSteps"),
-      error: t("invalidSteps"),
-      hint: t("relearningStepsHint"),
-    },
-    { key: "leechThreshold", label: t("leechThreshold"), error: t("invalidLimit"), numeric: true },
-    {
-      key: "fsrsParameters",
-      label: t("fsrsParameters"),
-      error: t("invalidParameters"),
-      hint: t("fsrsParametersHint"),
-      multiline: true,
-    },
-  ] as const;
+  const fields = textOptions(t);
   return (
     <View className="gap-6" pointerEvents={busy ? "none" : "auto"}>
       <form.Subscribe selector={(state) => state.canSubmit}>
@@ -224,49 +280,16 @@ export function DeckOptionsEditor({
         ).map(([name, limit, kind, label]) => (
           <form.Field key={name} name={name}>
             {(field) => (
-              <View className="gap-2" accessibilityRole="radiogroup" accessibilityLabel={t(label)}>
-                <Text style={regular} className="text-body text-foreground">
-                  {t(label)}
-                </Text>
-                <View className="flex-row flex-wrap gap-2">
-                  {(
-                    [
-                      ["preset", "limitPreset"],
-                      ["deck", "limitDeck"],
-                      ["today", "limitToday"],
-                    ] as const
-                  ).map(([scope, scopeLabel]) => (
-                    <Pressable
-                      key={scope}
-                      accessibilityRole="radio"
-                      accessibilityLabel={t(scopeLabel)}
-                      accessibilityState={{ checked: field.state.value === scope, disabled: busy }}
-                      disabled={busy}
-                      className={`min-h-12 justify-center rounded-pill px-5 py-3 ${
-                        field.state.value === scope ? "bg-primary" : "bg-surface"
-                      }`}
-                      onPress={() => {
-                        form.setFieldValue(
-                          limit,
-                          String(scopedLimit(deck, preset, kind, scope, today)),
-                        );
-                        field.handleChange(scope);
-                      }}
-                    >
-                      <Text
-                        style={regular}
-                        className={
-                          field.state.value === scope
-                            ? "text-body text-primary-foreground"
-                            : "text-body text-foreground"
-                        }
-                      >
-                        {t(scopeLabel)}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
+              <LimitScopeChoice
+                label={t(label)}
+                t={t}
+                busy={busy}
+                value={field.state.value}
+                onChoose={(scope) => {
+                  form.setFieldValue(limit, String(scopedLimit(deck, preset, kind, scope, today)));
+                  field.handleChange(scope);
+                }}
+              />
             )}
           </form.Field>
         ))}
@@ -324,9 +347,7 @@ export function DeckOptionsEditor({
         <form.Field
           key={spec.key}
           name={spec.key}
-          validators={{
-            onChange: ({ value }) => (validPresetText[spec.key](value) ? undefined : spec.error),
-          }}
+          validators={presetTextValidators(spec.key, spec.error)}
         >
           {(field) => {
             const control = (
@@ -348,10 +369,7 @@ export function DeckOptionsEditor({
                   <>
                     <form.Field
                       name="maximumInterval"
-                      validators={{
-                        onChange: ({ value }) =>
-                          validPresetText.maximumInterval(value) ? undefined : t("invalidInterval"),
-                      }}
+                      validators={presetTextValidators("maximumInterval", t("invalidInterval"))}
                     >
                       {(intervalField) => (
                         <TextField

@@ -6,6 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./use-auto-advance": "./src/use-auto-advance.ts",
+    "./use-study-audio": "./src/use-study-audio.ts",
     "./use-study-timer": "./src/use-study-timer.ts"
   },
   "scripts": {

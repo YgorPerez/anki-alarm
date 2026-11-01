@@ -1,32 +1,12 @@
 /* oxlint-disable eslint/no-await-in-loop -- Card audio plays in order. */
-import { studyAudio, type Locale, type Preset, type ReadAloudInput } from "@app/core";
-import { useEffect, useRef, useState } from "react";
+import { useStudyAudio, type StudyAudioProps } from "@app/editing-ui/use-study-audio";
+import { useEffect } from "react";
 import { editingCopy } from "#/editing-copy.ts";
 import { Button } from "#/ui/shadcn/button.tsx";
 
-export function StudyAudio({
-  input,
-  side,
-  preset,
-  locale,
-  onPlaying,
-  onFinished,
-}: {
-  input: Omit<ReadAloudInput, "language">;
-  side: "front" | "back";
-  preset: Preset;
-  locale: Locale;
-  /** A replay started. */
-  onPlaying?: () => void;
-  /** The side's audio ended, or it had none. */
-  onFinished?: () => void;
-}) {
-  const [replay, setReplay] = useState(0);
-  const playback = JSON.stringify({ clips: studyAudio(input, side, preset, replay > 0), replay });
-  const finished = useRef(onFinished);
-  useEffect(() => {
-    finished.current = onFinished;
-  });
+export function StudyAudio(props: StudyAudioProps) {
+  const { clips, replay, finished, startReplay } = useStudyAudio(props);
+  const playback = JSON.stringify({ clips, replay });
   useEffect(() => {
     let cancelled = false;
     let current: HTMLAudioElement | undefined;
@@ -36,6 +16,7 @@ export function StudyAudio({
         if (cancelled) return;
         const audio = new Audio(`/media/${encodeURIComponent(name)}`);
         current = audio;
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- A card's clips play one after another, each starting when the last ends.
         await new Promise<void>((resolve) => {
           audio.addEventListener("ended", () => resolve(), { once: true });
           audio.addEventListener("error", () => resolve(), { once: true });
@@ -49,16 +30,10 @@ export function StudyAudio({
       cancelled = true;
       current?.pause();
     };
-  }, [playback]);
+  }, [playback, finished]);
   return (
-    <Button
-      variant="ghost"
-      onClick={() => {
-        onPlaying?.();
-        setReplay((n) => n + 1);
-      }}
-    >
-      {editingCopy(locale)("replayAudio")}
+    <Button variant="ghost" onClick={startReplay}>
+      {editingCopy(props.locale)("replayAudio")}
     </Button>
   );
 }

@@ -22,23 +22,8 @@ const errorCopy = {
 const reasonCopy = (error: unknown, fallback: (typeof errorCopy)[keyof typeof errorCopy]) =>
   error instanceof AnkiDroidError && error.reason !== "failed" ? error.reason : fallback;
 
-/**
- * On a linked deck: that it is linked, and on the phone that linked it, pull, sync back and Sync
- * AnkiDroid on demand plus the auto sync back after alarm sessions. Elsewhere it is a normal deck
- * (ADR 0001).
- */
-export function LinkedDeckPanel({
-  ankiDroid,
-  deck,
-  locale,
-  disabled,
-}: {
-  ankiDroid: AnkiDroidApi;
-  deck: Deck;
-  locale: Locale;
-  disabled: boolean;
-}) {
-  const t = ankiDroidCopy(locale);
+/** The deck's link: who owns it, what waits to go back, and the actions on it. */
+function useLinkedDeck(ankiDroid: AnkiDroidApi, deck: Deck, t: Translate) {
   const client = useQueryClient();
   const phone = useQuery({
     queryKey: ["deviceId"],
@@ -116,89 +101,135 @@ export function LinkedDeckPanel({
     await client.invalidateQueries({ queryKey: ["autoSyncBack"] });
   }
 
-  const working = disabled || status?.tone === "busy";
+  return {
+    owned,
+    otherPhone: phone.data !== undefined && !owned,
+    auto: auto.data,
+    pendingCount: pending.length,
+    held,
+    offered,
+    failure: syncStatus.data?.failure,
+    status,
+    run,
+    decide,
+    setAuto,
+  };
+}
+
+/**
+ * On a linked deck: that it is linked, and on the phone that linked it, pull, sync back and Sync
+ * AnkiDroid on demand plus the auto sync back after alarm sessions. Elsewhere it is a normal deck
+ * (ADR 0001).
+ */
+export function LinkedDeckPanel({
+  ankiDroid,
+  deck,
+  locale,
+  disabled,
+}: {
+  ankiDroid: AnkiDroidApi;
+  deck: Deck;
+  locale: Locale;
+  disabled: boolean;
+}) {
+  const t = ankiDroidCopy(locale);
+  const link = useLinkedDeck(ankiDroid, deck, t);
   return (
     <View className="gap-4">
       <Text style={regular} className="text-label text-muted-foreground">
         {t("linkedLabel")}
       </Text>
-      {phone.data !== undefined && !owned && (
+      {link.otherPhone && (
         <Text style={regular} className="text-body text-muted-foreground">
           {t("otherPhone")}
         </Text>
       )}
-      {owned && (
+      {link.owned && <OwnedLinkControls t={t} link={link} disabled={disabled} />}
+    </View>
+  );
+}
+
+function OwnedLinkControls({
+  t,
+  link,
+  disabled,
+}: {
+  t: Translate;
+  link: ReturnType<typeof useLinkedDeck>;
+  disabled: boolean;
+}) {
+  const { auto, held, offered, pendingCount, run, decide, setAuto, status } = link;
+  const working = disabled || status?.tone === "busy";
+  return (
+    <>
+      {offered > 0 && (
         <>
-          {offered > 0 && (
-            <>
-              <Text style={regular} className="text-body text-foreground">
-                {t("offer", { count: String(offered) })}
-              </Text>
-              <Button
-                label={t("sendOffer")}
-                primary
-                disabled={working}
-                onPress={() => void decide(true)}
-              />
-              <Button
-                label={t("declineOffer")}
-                disabled={working}
-                onPress={() => void decide(false)}
-              />
-            </>
-          )}
           <Text style={regular} className="text-body text-foreground">
-            {t("pending", { count: String(pending.length) })}
+            {t("offer", { count: String(offered) })}
           </Text>
-          {held > 0 && (
-            <Text style={regular} className="text-body text-attention">
-              {t("held", { held: String(held) })}
-            </Text>
-          )}
-          {pending.length > held && (
-            <Text style={regular} className="text-body text-muted-foreground">
-              {t(syncStatus.data?.failure === "notRecorded" ? "notRecorded" : "waiting")}
-            </Text>
-          )}
-          <Button label={t("pull")} disabled={working} onPress={() => void run("pull")} />
-          <Button label={t("syncBack")} disabled={working} onPress={() => void run("syncBack")} />
-          <Button label={t("ankiSync")} disabled={working} onPress={() => void run("ankiSync")} />
-          {status && (
-            <Text
-              accessibilityRole={status.tone === "error" ? "alert" : undefined}
-              accessibilityLiveRegion="polite"
-              style={regular}
-              className={
-                status.tone === "error"
-                  ? "text-body text-destructive"
-                  : status.tone === "busy"
-                    ? "text-body text-attention"
-                    : "text-body text-foreground"
-              }
-            >
-              {status.text}
-            </Text>
-          )}
-          <Text style={regular} className="text-label text-muted-foreground">
-            {t("syncBackNote")}
-          </Text>
-          <Text style={regular} className="text-label text-muted-foreground">
-            {t("autoDetails")}
-          </Text>
-          <View className="min-h-12 flex-row items-center justify-between gap-4">
-            <Text style={regular} className="flex-1 text-body text-foreground">
-              {t("auto")}
-            </Text>
-            <Switch
-              accessibilityLabel={t("auto")}
-              value={auto.data ?? true}
-              disabled={auto.data === undefined}
-              onValueChange={(on) => void setAuto(on)}
-            />
-          </View>
+          <Button
+            label={t("sendOffer")}
+            primary
+            disabled={working}
+            onPress={() => void decide(true)}
+          />
+          <Button label={t("declineOffer")} disabled={working} onPress={() => void decide(false)} />
         </>
       )}
-    </View>
+      <Text style={regular} className="text-body text-foreground">
+        {t("pending", { count: String(pendingCount) })}
+      </Text>
+      {held > 0 && (
+        <Text style={regular} className="text-body text-attention">
+          {t("held", { held: String(held) })}
+        </Text>
+      )}
+      {pendingCount > held && (
+        <Text style={regular} className="text-body text-muted-foreground">
+          {t(link.failure === "notRecorded" ? "notRecorded" : "waiting")}
+        </Text>
+      )}
+      <Button label={t("pull")} disabled={working} onPress={() => void run("pull")} />
+      <Button label={t("syncBack")} disabled={working} onPress={() => void run("syncBack")} />
+      <Button label={t("ankiSync")} disabled={working} onPress={() => void run("ankiSync")} />
+      {status && <LinkStatus status={status} />}
+      <Text style={regular} className="text-label text-muted-foreground">
+        {t("syncBackNote")}
+      </Text>
+      <Text style={regular} className="text-label text-muted-foreground">
+        {t("autoDetails")}
+      </Text>
+      <View className="min-h-12 flex-row items-center justify-between gap-4">
+        <Text style={regular} className="flex-1 text-body text-foreground">
+          {t("auto")}
+        </Text>
+        <Switch
+          accessibilityLabel={t("auto")}
+          value={auto ?? true}
+          disabled={auto === undefined}
+          onValueChange={(on) => void setAuto(on)}
+        />
+      </View>
+    </>
+  );
+}
+
+function LinkStatus({ status }: { status: Status }) {
+  return (
+    <Text
+      accessibilityRole={status.tone === "error" ? "alert" : undefined}
+      accessibilityLiveRegion="polite"
+      style={regular}
+      className={
+        status.tone === "error"
+          ? "text-body text-destructive"
+          : status.tone === "busy"
+            ? "text-body text-attention"
+            : "text-body text-foreground"
+      }
+    >
+      {status.text}
+    </Text>
   );
 }
 
