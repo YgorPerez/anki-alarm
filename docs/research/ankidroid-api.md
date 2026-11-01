@@ -277,6 +277,25 @@ Consequences:
 - `schedule` queries temporarily change AnkiDroid's selected deck and then restore it (L378-435).
   We don't need queries on this URI. Sync back only uses `update`.
 
+### Asking AnkiDroid to sync: `DO_SYNC`
+
+Read for ticket #114 at `v2.24.0`, `v2.25.3` and `main` at
+[`210a8a2`](https://github.com/ankidroid/Anki-Android/tree/210a8a2e30be1dc9b21dabb63ae39dc5c1b37963).
+Not tried on a phone.
+
+- `com.ichi2.anki.DO_SYNC` is an intent filter (category `DEFAULT`) on the exported, translucent
+  activity `IntentHandler`, in all three. It takes `startActivity`, no broadcast, and no permission
+  ([manifest L294-297](https://github.com/ankidroid/Anki-Android/blob/210a8a2e30be1dc9b21dabb63ae39dc5c1b37963/AnkiDroid/src/main/AndroidManifest.xml#L294-L297)).
+  The wiki agrees that the target must be an Activity.
+- The limit in code is 2 minutes, not the wiki's 5. Inside it AnkiDroid shows a `sync_error`
+  notification. It also shows one, with the offline text, when logged out or offline
+  ([IntentHandler L461-L512](https://github.com/ankidroid/Anki-Android/blob/210a8a2e30be1dc9b21dabb63ae39dc5c1b37963/AnkiDroid/src/main/java/com/ichi2/anki/IntentHandler.kt#L461-L512)).
+- The handler opens `DeckPicker`, which starts the sync and finishes itself. On `main` the sync runs
+  in `SyncWorker` so it outlives `DeckPicker`. `v2.25.3` calls `deckPicker.sync()` and then
+  `deckPicker.finish()`, so whether that sync survives needs a device.
+- Nothing comes back to the caller, and `main` also skips the request without a notification when
+  a sync is already running or metered sync is blocked.
+
 ### What pull and sync back can't do
 
 - They can't read the review log or any review other than the latest one's time.
@@ -301,6 +320,7 @@ Consequences:
   collection operation running.
 - How AnkiDroid's FSRS treats the type-3 revlog rows that early sync-back answers create, both for
   its memory state and its optimizer.
+- Whether `DO_SYNC` from our activity finishes a sync on `v2.25.3`, and where the user lands after.
 - Whether reading files from the legacy public `AnkiDroid/collection.media` folder works from our
   app on Android 11+ with the full (non-Play) AnkiDroid build. This isn't proposed; it only
   confirms the dead end.

@@ -10,6 +10,7 @@ import { change } from "#/data/write.ts";
 import { download } from "#/download.ts";
 import { editingCopy, type EditingT } from "#/editing-copy.ts";
 import { Confirm } from "#/ui/confirm.tsx";
+import { PresetPicker } from "#/ui/preset-picker.tsx";
 import { DeckOptionsEditor } from "#/ui/deck-options-editor.tsx";
 import { Notice, TextField } from "#/ui/form.tsx";
 import { langSearch } from "#/lang.ts";
@@ -106,8 +107,21 @@ function DeckEditor({
         <h1 className="text-title font-bold">{t("deckOptions")}</h1>
         <p className="text-body text-muted-foreground">{name}</p>
         {preset && (
+          <PresetPicker
+            state={collection}
+            preset={preset}
+            deckId={deck.id}
+            locale={lang}
+            onChange={async (command) => {
+              if (dirty && !window.confirm(t("discardOptions"))) return;
+              await change(command);
+              setDirty(false);
+            }}
+          />
+        )}
+        {preset && (
           <DeckOptionsEditor
-            key={preset.id}
+            key={`${preset.id}-${preset.fields.name.value}`}
             preset={preset}
             onDirtyChange={setDirty}
             deckCount={sharing}

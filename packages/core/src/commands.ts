@@ -9,6 +9,10 @@ export type CollectionCommand =
   | { kind: "createDeck"; name: string }
   | { kind: "renameDeck"; id: string; name: string }
   | { kind: "deleteDeck"; id: string }
+  | { kind: "createPreset"; name: string; deckId: string }
+  | { kind: "duplicatePreset"; id: string; name: string; deckId: string }
+  | { kind: "setDeckPreset"; deckId: string; presetId: string }
+  | { kind: "deletePreset"; id: string }
   | { kind: "updatePreset"; id: string; patch: Partial<PresetOptions> }
   /** An empty `noteTypeId` is Basic, made on first use. */
   | { kind: "addNote"; deckId: string; noteTypeId: string; values: string[] }
@@ -42,6 +46,23 @@ export function runCommand(collection: Collection, command: CollectionCommand): 
       break;
     case "deleteDeck":
       collection.deleteDeck(command.id);
+      break;
+    case "createPreset":
+    case "duplicatePreset": {
+      if (!collection.snapshot().decks.some((d) => d.id === command.deckId))
+        throw new Error("Invalid deck");
+      const preset =
+        command.kind === "createPreset"
+          ? collection.createPreset(command.name)
+          : collection.duplicatePreset(command.id, command.name);
+      collection.setDeckPreset(command.deckId, preset.id);
+      return preset.id;
+    }
+    case "setDeckPreset":
+      collection.setDeckPreset(command.deckId, command.presetId);
+      break;
+    case "deletePreset":
+      collection.deletePreset(command.id);
       break;
     case "updatePreset":
       collection.updatePreset(command.id, command.patch);

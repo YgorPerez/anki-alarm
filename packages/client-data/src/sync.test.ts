@@ -649,12 +649,85 @@ test("phone and web converge after offline answers under different scheduling op
   expect(here?.due.getTime()).toBe(3000 + 60_000);
 });
 
+test("preset creation, assignment, rename and deletion sync between phone and web", async () => {
+  const server = memorySyncServer();
+  const api = await connect(server);
+  const phone = await device("phone");
+  const web = await device("web");
+  const initial = await phone.run(
+    phone.data.changeCollection((c) => {
+      const deck = c.createDeck("Words");
+      const preset = c.createPreset("Intensive");
+      c.updatePreset(preset.id, { newPerDay: 5, learningSteps: [2, 15] });
+      c.setDeckPreset(deck.id, preset.id);
+    }),
+  );
+  const deckId = initial.decks[0]!.id;
+  const presetId = initial.decks[0]!.fields.presetId.value;
+  await phone.run(phone.data.adoptAccount("user-1"));
+  await phone.run(phone.data.sync(api.client));
+  await web.run(web.data.adoptAccount("user-1"));
+  await web.run(web.data.sync(api.client));
+  expect(await web.run(web.data.collection)).toEqual(initial);
+  await web.run(web.data.changeCollection((c) => c.updatePreset(presetId, { name: "Renamed" })));
+  await web.run(web.data.sync(api.client));
+  await phone.run(phone.data.sync(api.client));
+  expect(
+    (await phone.run(phone.data.collection)).presets.find((p) => p.id === presetId)!.fields.name
+      .value,
+  ).toBe("Renamed");
+  await phone.run(phone.data.changeCollection((c) => c.deletePreset(presetId)));
+  await phone.run(phone.data.sync(api.client));
+  await web.run(web.data.sync(api.client));
+  const final = await web.run(web.data.collection);
+  expect(final.presets.some((p) => p.id === presetId)).toBe(false);
+  const fallback = final.presets.find((p) => p.fields.name.value === "Default")!;
+  expect(final.decks.find((d) => d.id === deckId)!.fields.presetId.value).toBe(fallback.id);
+  await web.run(
+    web.data.changeCollection((c) => {
+      c.createDeck("Later");
+    }),
+  );
+  expect(
+    (await web.run(web.data.collection)).decks.find((d) => d.fields.name.value === "Later")!.fields
+      .presetId.value,
+  ).toBe(fallback.id);
+});
+
+test("deleting a preset wins over an offline deck assignment to it", async () => {
+  const api = await connect(memorySyncServer());
+  const phone = await device("phone");
+  const web = await device("web");
+  const state = await phone.run(
+    phone.data.changeCollection((c) => {
+      c.createDeck("Words");
+      c.createPreset("Temporary");
+    }),
+  );
+  const presetId = state.presets.find((p) => p.fields.name.value === "Temporary")!.id;
+  const deckId = state.decks[0]!.id;
+  await phone.run(phone.data.adoptAccount("user-1"));
+  await phone.run(phone.data.sync(api.client));
+  await web.run(web.data.adoptAccount("user-1"));
+  await web.run(web.data.sync(api.client));
+  await phone.run(phone.data.changeCollection((c) => c.deletePreset(presetId)));
+  await web.run(web.data.changeCollection((c) => c.setDeckPreset(deckId, presetId)));
+  await phone.run(phone.data.sync(api.client));
+  await web.run(web.data.sync(api.client));
+  await phone.run(phone.data.sync(api.client));
+  for (const side of [phone, web]) {
+    const merged = await side.run(side.data.collection);
+    expect(merged.decks[0]!.fields.presetId.value).toBe(state.decks[0]!.fields.presetId.value);
+    expect(merged.presets.some((p) => p.id === presetId)).toBe(false);
+  }
+});
+
 test("easy days replay the same on phone and web, whatever either edits later", async () => {
   const server = memorySyncServer();
   const api = await connect(server);
   const phone = await device("phone");
   const web = await device("web");
-  const state = await run(
+  const state = await phone.run(
     phone.data.changeCollection((c) => {
       const deck = c.createDeck("Words");
       c.addBasicNote(deck.id, "one", "um");
@@ -662,29 +735,31 @@ test("easy days replay the same on phone and web, whatever either edits later", 
   );
   const cardId = state.cards[0]!.id;
   const presetId = state.presets[0]!.id;
-  await run(phone.data.adoptAccount("user-1"));
-  await run(web.data.adoptAccount("user-1"));
+  await phone.run(phone.data.adoptAccount("user-1"));
+  await web.run(web.data.adoptAccount("user-1"));
   phone.clock.now = 2000;
   const exact = nextIntervals(state, [], cardId, 2000)![4] / 86_400;
   // Monday first, so this is the weekday Easy lands on.
   const landing = (new Date(studyDayStart(2000)).getDay() + 6 + exact) % 7;
   const week = NORMAL_DAYS.map((day, weekday) => (weekday === landing ? "minimum" : day));
-  await run(phone.data.changeCollection((c) => c.updatePreset(presetId, { easyDays: week })));
-  await run(phone.data.answerCard(cardId, 4, 100));
-  await run(phone.data.sync(api.client));
-  await run(web.data.sync(api.client));
-  await run(web.data.changeCollection((c) => c.updatePreset(presetId, { easyDays: NORMAL_DAYS })));
-  await run(web.data.sync(api.client));
-  await run(phone.data.sync(api.client));
+  await phone.run(phone.data.changeCollection((c) => c.updatePreset(presetId, { easyDays: week })));
+  await phone.run(phone.data.answerCard(cardId, 4, 100));
+  await phone.run(phone.data.sync(api.client));
+  await web.run(web.data.sync(api.client));
+  await web.run(
+    web.data.changeCollection((c) => c.updatePreset(presetId, { easyDays: NORMAL_DAYS })),
+  );
+  await web.run(web.data.sync(api.client));
+  await phone.run(phone.data.sync(api.client));
   const here = cardMemory(
-    await run(phone.data.collection),
-    await run(phone.data.reviewLog),
+    await phone.run(phone.data.collection),
+    await phone.run(phone.data.reviewLog),
     cardId,
     3000,
   );
   const there = cardMemory(
-    await run(web.data.collection),
-    await run(web.data.reviewLog),
+    await web.run(web.data.collection),
+    await web.run(web.data.reviewLog),
     cardId,
     3000,
   );

@@ -49,14 +49,20 @@ export type Preset = RecordFields<{
   desiredRetention: number;
   /** Minutes. */
   learningSteps: number[];
+  /** Absent on legacy app presets, which were all defaults. */
+  isDefault?: boolean;
   /** FSRS-6's 21 weights. */
   fsrsParameters: number[];
   /** Each weekday, Monday first. */
   easyDays: EasyDay[];
 }> &
   AnkiIdentity;
+/** Legacy app presets and explicitly marked defaults cannot be deleted. */
+export const isDefaultPreset = (preset: Preset): boolean =>
+  !preset.anki && preset.fields.isDefault?.value !== false;
+
 export type PresetOptions = {
-  [K in keyof Preset["fields"]]: Preset["fields"][K]["value"];
+  [K in Exclude<keyof Preset["fields"], "isDefault">]: Preset["fields"][K]["value"];
 };
 const presetKeys = [
   "name",
@@ -220,6 +226,17 @@ export function parseCollection(stored: StoredCollection): CollectionState {
     };
     preset.fields.easyDays ??= { value: [...NORMAL_WEEK], hlc: preset.fields.name.hlc };
   }
+  // A preset deletion also beats assignments made offline after the deleting device last synced.
+  // Keep the redirect derived from the tombstone, so a late deck field cannot resurrect its use.
+  const deletedPresets = new Set(
+    state.tombstones.filter((t) => t.kind === "presets").map((t) => t.id),
+  );
+  const fallback = state.presets
+    .filter((p) => isDefaultPreset(p) && !deletedPresets.has(p.id))
+    .sort((a, b) => a.id.localeCompare(b.id))[0];
+  if (fallback)
+    for (const deck of state.decks)
+      if (deletedPresets.has(deck.fields.presetId.value)) deck.fields.presetId.value = fallback.id;
   for (const card of state.cards) {
     card.fields.suspended ??= { value: false, hlc: card.fields.ordinal.hlc };
     card.fields.buriedUntil ??= { value: null, hlc: card.fields.ordinal.hlc };
@@ -349,9 +366,12 @@ export class Collection {
   }
   /** The app's own preset, made on first use. */
   private defaultPreset(): Preset {
-    let preset = this.state.presets.find((p) => !p.anki);
+    let preset = this.state.presets
+      .filter(isDefaultPreset)
+      .sort((a, b) => a.id.localeCompare(b.id))[0];
     if (!preset) {
       preset = this.record({
+        isDefault: true,
         name: "Default",
         newPerDay: 20,
         reviewsPerDay: 200,
@@ -544,6 +564,46 @@ export class Collection {
       for (const card of this.cardsOf(id)) this.remove("cards", card.id);
       this.remove("notes", id);
     }
+  }
+  createPreset(name: string): Preset {
+    if (!validOption.name(name)) throw new Error("Invalid preset name");
+    return this.copyPreset(this.defaultPreset().id, name, true);
+  }
+  duplicatePreset(id: string, name: string): Preset {
+    return this.copyPreset(id, name, false);
+  }
+  private copyPreset(id: string, name: string, factory: boolean): Preset {
+    const source = this.state.presets.find((p) => p.id === id);
+    if (!source || !validOption.name(name)) throw new Error("Invalid preset");
+    const preset = this.record({
+      name: name.trim(),
+      newPerDay: factory ? 20 : source.fields.newPerDay.value,
+      reviewsPerDay: factory ? 200 : source.fields.reviewsPerDay.value,
+      desiredRetention: factory ? 0.9 : source.fields.desiredRetention.value,
+      learningSteps: factory ? [1, 10] : copy(source.fields.learningSteps.value),
+      fsrsParameters: factory
+        ? [...DEFAULT_FSRS_PARAMETERS]
+        : copy(source.fields.fsrsParameters.value),
+      easyDays: factory ? [...NORMAL_WEEK] : copy(source.fields.easyDays.value),
+      isDefault: false,
+    });
+    this.state.presets.push(preset);
+    return copy(preset);
+  }
+  setDeckPreset(deckId: string, presetId: string) {
+    const deck = this.state.decks.find((d) => d.id === deckId);
+    if (!deck || !this.state.presets.some((p) => p.id === presetId))
+      throw new Error("Invalid preset");
+    if (deck.fields.presetId.value !== presetId)
+      deck.fields.presetId = { value: presetId, hlc: this.tick() };
+  }
+  deletePreset(id: string) {
+    const preset = this.state.presets.find((p) => p.id === id);
+    if (!preset || isDefaultPreset(preset)) throw new Error("Cannot delete preset");
+    const fallback = this.defaultPreset();
+    for (const deck of this.state.decks)
+      if (deck.fields.presetId.value === id) this.setDeckPreset(deck.id, fallback.id);
+    this.remove("presets", id);
   }
   /** Changes a preset, which every deck using it shares. Stamps only the changed options. */
   updatePreset(id: string, patch: Partial<PresetOptions>) {
@@ -877,6 +937,7 @@ export class Collection {
         learningSteps,
         fsrsParameters: [...weights],
         easyDays: p.easyDays ?? [...NORMAL_WEEK],
+        ...(p.appId && p.isDefault !== undefined ? { isDefault: p.isDefault } : {}),
       };
       if (merge("presets", this.state.presets, index.presets, { id, values, mtime, rest }))
         presets.set(p.id, id);

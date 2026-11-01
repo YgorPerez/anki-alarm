@@ -44,6 +44,7 @@ export interface AnkiPackage {
     desiredRetention: number | null;
   }[];
   presets: {
+    isDefault?: boolean | undefined;
     id: number;
     appId?: string | undefined;
     name: string;
@@ -351,6 +352,7 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         learningSteps: steps(record(c.new).delays),
         fsrsParameters: fsrs6(steps(c.fsrsParams6)),
         easyDays: easyDaysFromAnki(steps(c.easyDaysPercentages)),
+        isDefault: typeof c.ankiAlarmDefault === "boolean" ? c.ankiAlarmDefault : undefined,
       })),
   };
 }

@@ -23,6 +23,7 @@ export {
 } from "./collection.ts";
 export {
   ankiDroidAccess,
+  ankiDroidSyncWaitMs,
   cardsStayInApp,
   linkableAnkiDroidDecks,
   sentSuspensionKey,
@@ -230,3 +231,5 @@ export type { QuickAlarmOptions } from "./quick-alarm.ts";
 export type { SchedulingOptions } from "./study.ts";
 export { EASY_DAYS } from "./easy-days.ts";
 export type { EasyDay } from "./easy-days.ts";
+
+export { isDefaultPreset } from "./collection.ts";

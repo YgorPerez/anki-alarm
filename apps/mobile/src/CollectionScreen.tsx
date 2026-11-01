@@ -1,3 +1,4 @@
+import { PresetPicker } from "./PresetPicker.tsx";
 import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import { useNow } from "./clock.tsx";
 import { StudyCounts } from "./StudyCounts.tsx";
@@ -5,6 +6,8 @@ import { useContext } from "react";
 import { ScreenActivity } from "./screen-activity.ts";
 import {
   cardMemory,
+  runCommand,
+  type CollectionCommand,
   studyCounts,
   cardsStayInApp,
   type Collection,
@@ -291,6 +294,20 @@ export function CollectionScreen({
             optionsDirty.current = dirty;
           }}
           onCancel={goBack}
+          onPresetChange={(command, onSaved) => {
+            const apply = () =>
+              void change(
+                (c) => {
+                  runCommand(c, command);
+                },
+                () => {
+                  optionsDirty.current = false;
+                  onSaved();
+                },
+              );
+            if (optionsDirty.current) confirmDiscard(t, apply);
+            else apply();
+          }}
           onSave={(options) =>
             void change(
               (c) => c.updatePreset(preset.id, options),
@@ -378,6 +395,7 @@ function confirmDiscard(t: Translate, onDiscard: () => void) {
 
 /** Options and export share a screen, separate from the deck's notes. */
 function DeckOptionsScreen({
+  onPresetChange,
   preset,
   state,
   deck,
@@ -387,6 +405,7 @@ function DeckOptionsScreen({
   onCancel,
   onSave,
 }: {
+  onPresetChange: (command: CollectionCommand, onSaved: () => void) => void;
   preset: Preset;
   state: CollectionState;
   deck: Deck | undefined;
@@ -398,7 +417,18 @@ function DeckOptionsScreen({
 }) {
   return (
     <>
+      {deck && (
+        <PresetPicker
+          state={state}
+          preset={preset}
+          deckId={deck.id}
+          locale={locale}
+          busy={busy}
+          onChange={onPresetChange}
+        />
+      )}
       <DeckOptionsEditor
+        key={`${preset.id}-${preset.fields.name.value}`}
         preset={preset}
         deckCount={state.decks.filter((d) => d.fields.presetId.value === preset.id).length}
         locale={locale}

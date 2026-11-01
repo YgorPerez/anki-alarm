@@ -225,3 +225,42 @@ test("deck options leave cleanly, but Back and Cancel protect unsaved edits", as
   await press("button", "Opções do baralho");
   expect(screen.getByLabelText("Cartões novos por dia").props.value).not.toBe("7");
 });
+
+test("deck options create, copy, rename, switch and delete presets", async () => {
+  await change((c) => {
+    c.createDeck("Predefinições");
+  });
+  await open();
+  await press("button", /Predefinições/);
+  await press("button", "Opções do baralho");
+  expect(await screen.findByText(/Usada por \d+ baralhos/)).toBeDefined();
+  await fireEvent.changeText(screen.getByLabelText("Nome para a predefinição"), "Intensivo");
+  await press("button", "Criar predefinição");
+  await waitFor(() =>
+    expect(screen.getByRole("radio", { name: "Intensivo" }).props.accessibilityState.checked).toBe(
+      true,
+    ),
+  );
+  await fireEvent.changeText(screen.getByLabelText("Nome para a predefinição"), "Cópia");
+  await press("button", "Duplicar predefinição");
+  await waitFor(() =>
+    expect(screen.getByRole("radio", { name: "Cópia" }).props.accessibilityState.checked).toBe(
+      true,
+    ),
+  );
+  await fireEvent.changeText(screen.getByLabelText("Nome para a predefinição"), "Renomeada");
+  await press("button", "Renomear predefinição");
+  await screen.findByRole("radio", { name: "Renomeada" });
+  await press("radio", "Intensivo");
+  await waitFor(() =>
+    expect(screen.getByRole("radio", { name: "Intensivo" }).props.accessibilityState.checked).toBe(
+      true,
+    ),
+  );
+  await press("button", "Excluir predefinição");
+  answerAlert("Excluir predefinição");
+  await waitFor(() => expect(screen.queryByRole("radio", { name: "Intensivo" })).toBeNull());
+  expect(
+    screen.getByRole("button", { name: "Excluir predefinição" }).props.accessibilityState.disabled,
+  ).toBe(true);
+});

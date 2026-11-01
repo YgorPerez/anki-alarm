@@ -212,3 +212,18 @@ test("presets save a valid week and refuse any other", () => {
     "Invalid deck options",
   );
 });
+
+test("a new preset starts all normal and a duplicate keeps its source's week", () => {
+  let n = 0;
+  const c = new Collection({
+    deviceId: "a",
+    now: () => monday,
+    random: () => new Uint8Array(16).fill(n++),
+  });
+  c.createDeck("Words");
+  const source = c.snapshot().presets[0]!;
+  const edited = week({ [SUN]: "minimum" });
+  c.updatePreset(source.id, { easyDays: edited });
+  expect(c.createPreset("Fresh").fields.easyDays.value).toEqual(week({}));
+  expect(c.duplicatePreset(source.id, "Copy").fields.easyDays.value).toEqual(edited);
+});

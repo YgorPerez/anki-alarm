@@ -585,6 +585,7 @@ function presetJson(preset: Preset, anki: { id: number; appId?: string }) {
     new: { ...DCONF.new, delays: f.learningSteps.value, perDay: f.newPerDay.value },
     rev: { ...DCONF.rev, perDay: f.reviewsPerDay.value },
     lapse: { ...DCONF.lapse, delays: RELEARNING_STEPS },
+    ...(f.isDefault ? { ankiAlarmDefault: f.isDefault.value } : {}),
     fsrsParams6: f.fsrsParameters.value,
     desiredRetention: f.desiredRetention.value,
     easyDaysPercentages: easyDaysToAnki(f.easyDays.value),
