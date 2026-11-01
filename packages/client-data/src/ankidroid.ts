@@ -98,6 +98,7 @@ interface Deps {
   notify: () => void;
 }
 
+const offerKey = (deckId: string) => `ankiDroidLinkOffer:${deckId}`;
 const AUTO = "ankiDroidAutoSyncBack";
 /** AnkiDroid finds a card by note id and ord. */
 const key = (c: { noteId: number; ord: number }) => `${c.noteId}:${c.ord}`;
@@ -166,7 +167,34 @@ export function ankiDroidEngine(deps: Deps) {
     }),
   );
 
-  /** Links or pulls one AnkiDroid deck, with snapshots, seen reps and the take-over baseline. */
+  const readOffers = query(() =>
+    db
+      .select()
+      .from(metadata)
+      .where(sql`${metadata.id} like 'ankiDroidLinkOffer:%'`),
+  );
+  const offer = (deckId: string) =>
+    deps.read(
+      Effect.map(
+        readOffers,
+        (rows) =>
+          (rows.find((r) => r.id === offerKey(deckId))?.value ?? "").split(",").filter(Boolean)
+            .length,
+      ),
+    );
+  const resolveOffer = (deckId: string, send: boolean) =>
+    deps.write(
+      Effect.gen(function* () {
+        const rows = yield* readOffers;
+        const ids = (rows.find((r) => r.id === offerKey(deckId))?.value ?? "")
+          .split(",")
+          .filter(Boolean);
+        if (!send) yield* markSent(ids);
+        yield* query(() => db.delete(metadata).where(eq(metadata.id, offerKey(deckId))));
+      }),
+    );
+
+  /** Links or pulls, keeping earlier reviews behind a persisted choice before sync back. */
   const link = (source: AnkiDroidSource) =>
     deps
       .read(
@@ -178,23 +206,33 @@ export function ankiDroidEngine(deps: Deps) {
           return yield* deps.runCollection(
             (c) => {
               const linked = c.linkAnkiDroid(source, log, seen, sent);
-              // Reviews of a deck this phone just took over were another phone's to send.
-              const baseline = syncBackQueue(c.snapshot(), log, deps.deviceId, new Set())
+              const offered = syncBackQueue(c.snapshot(), log, deps.deviceId, sent)
                 .filter((a) => linked.claimed.includes(a.deckId))
                 .map((a) => a.entryId);
               const importedNotes = new Set(source.notes.map((n) => n.id));
-              baseline.push(
-                ...syncBackSuspensions(c.snapshot(), deps.deviceId, new Set())
-                  .filter((a) => importedNotes.has(a.noteId))
-                  .map((a) => a.entryId),
-              );
-              return { ...linked, baseline };
+              const baseline = syncBackSuspensions(c.snapshot(), deps.deviceId, new Set())
+                .filter((a) => importedNotes.has(a.noteId))
+                .map((a) => a.entryId);
+              return { ...linked, baseline, offered };
             },
             (linked) =>
               Effect.gen(function* () {
                 yield* deps.appendNew(linked.snapshots);
                 yield* storeSeen(linked.seen);
                 yield* markSent(linked.baseline);
+                if (linked.offered.length) {
+                  yield* query(() =>
+                    db
+                      .insert(metadata)
+                      .values({ id: offerKey(linked.deckId), value: linked.offered.join(",") })
+                      .onConflictDoUpdate({
+                        target: metadata.id,
+                        set: {
+                          value: sql`${metadata.value} || ',' || excluded.value`,
+                        },
+                      }),
+                  );
+                }
                 yield* forgetSent(linked.released);
               }),
           );
@@ -207,15 +245,19 @@ export function ankiDroidEngine(deps: Deps) {
 
   const syncBackOnce = (provider: AnkiDroidProvider) =>
     Effect.gen(function* () {
-      const { state, log, seen, sent } = yield* deps.read(
+      const { state, log, seen, sent, offers } = yield* deps.read(
         Effect.all({
           state: deps.readCollection,
           log: deps.readLog,
           seen: readSeen,
           sent: readSent,
+          offers: readOffers,
         }),
       );
-      const queue = syncBackQueue(state, log, deps.deviceId, sent);
+      const blocked = new Set(offers.flatMap((r) => r.value.split(",")));
+      const queue = syncBackQueue(state, log, deps.deviceId, sent).filter(
+        (a) => !blocked.has(a.entryId),
+      );
       const summary: SyncBackSummary = { sent: 0, held: 0, gone: 0, snapshots: 0, buried: 0 };
       const suspensions = syncBackSuspensions(state, deps.deviceId, sent);
       const buries = syncBackBuries(state, deps.deviceId, sent, deps.now());
@@ -339,5 +381,15 @@ export function ankiDroidEngine(deps: Deps) {
         }),
       ),
     );
-  return { link, syncBack, pull, autoSyncBack, setAutoSyncBack, status, setFailure };
+  return {
+    link,
+    offer,
+    resolveOffer,
+    syncBack,
+    pull,
+    autoSyncBack,
+    setAutoSyncBack,
+    status,
+    setFailure,
+  };
 }

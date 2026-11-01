@@ -478,7 +478,7 @@ test("pull brings new notes and edited fields, and snapshots only cards AnkiDroi
   ]);
 });
 
-test("linking reports the decks this phone took over, so their earlier reviews aren't sent", () => {
+test("linking reports the decks this phone took over, so earlier reviews can be offered", () => {
   const { state } = linked();
   expect(new Collection(environment()).linkAnkiDroid(source()).claimed).toHaveLength(2);
   const other = new Collection(environment("phone-b"), state);

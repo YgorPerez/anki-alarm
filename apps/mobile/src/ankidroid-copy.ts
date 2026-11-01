@@ -17,6 +17,9 @@ const messages = {
     retry: "Tentar novamente",
     choose:
       "Escolha um baralho. Ele vem com os subbaralhos, as notas e o estado de cada cartão, e fica vinculado a este celular.",
+    offer: "Revisões ainda não enviadas ao AnkiDroid: {count}. Deseja enviá-las?",
+    declineOffer: "Não enviar essas revisões",
+    offerError: "Não foi possível salvar sua escolha. Tente novamente.",
     none: "Nenhum baralho no AnkiDroid.",
     linking: "Vinculando {name}…",
     linked: "{name} foi vinculado a este celular.",
@@ -69,6 +72,9 @@ const messages = {
     retry: "Try again",
     choose:
       "Choose a deck. It comes with its subdecks, notes and each card's state, and is linked to this phone.",
+    offer: "Reviews not yet sent to AnkiDroid: {count}. Would you like to send them?",
+    declineOffer: "Don't send these reviews",
+    offerError: "Couldn't save your choice. Try again.",
     none: "No decks in AnkiDroid.",
     linking: "Linking {name}…",
     linked: "{name} is linked to this phone.",
