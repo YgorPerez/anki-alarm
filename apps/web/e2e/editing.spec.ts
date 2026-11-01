@@ -54,6 +54,7 @@ test("an .apkg imports in the browser's database, edits keep after a reload, and
   // The deck exports with its media, through the browser's download.
   await page.goto("/?lang=en");
   await page.getByRole("link", { name: "Edit Português::Verbos" }).click();
+  await page.getByRole("button", { name: "Deck options" }).click();
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export .apkg" }).click();
   const file = await download;
