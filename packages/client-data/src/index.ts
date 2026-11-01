@@ -3,6 +3,8 @@ import { eq, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Semaphore } from "effect";
 import {
   uuid7,
+  deckPreset,
+  schedulingOptions,
   studyQueue,
   checkLogEntry,
   dueInDays,
@@ -357,8 +359,12 @@ const open = (driver: SQLiteConnection, media: MediaFiles) =>
               ))
           )
             throw new Error("Card is not available for study");
+          const deck = state.decks.find((d) => d.id === card.fields.deckId.value);
+          const preset = deck && deckPreset(state, deck);
+          if (!preset) throw new Error("Deck preset missing");
           return {
             ...base,
+            options: schedulingOptions(preset),
             kind: "review",
             cardId,
             grade,

@@ -1,6 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import {
   cardMemory,
+  schedulingOptions,
   nextIntervals,
   Collection,
   replayCard,
@@ -475,4 +476,35 @@ test("intervals use the card's deck retention override and respond to undo", () 
     { kind: "void", id: "undo", cardId, at: now + 1, targetId: "answer" },
   ];
   expect(nextIntervals(state, log, cardId, now)).toEqual(nextIntervals(state, [], cardId, now));
+});
+
+test("preset edits leave answered cards alone and only change later answers", () => {
+  const { state, cardId, preset } = fixture();
+  const options = schedulingOptions(preset);
+  const review: LogEntry = {
+    kind: "review",
+    id: "first",
+    cardId,
+    at: now,
+    grade: 1,
+    durationMs: 100,
+    origin: "phone",
+    options,
+  };
+  const before = cardMemory(state, [review], cardId, now);
+  preset.fields.learningSteps.value[0] = 30;
+  preset.fields.desiredRetention.value = 0.99;
+  preset.fields.fsrsParameters.value[0] = 5;
+  expect(cardMemory(state, [review], cardId, now)).toEqual(before);
+  expect(options.learningSteps[0]).toBe(1);
+  expect(options.fsrsParameters[0]).not.toBe(5);
+  const later: LogEntry = {
+    ...review,
+    id: "later",
+    at: now + 60_000,
+    options: schedulingOptions(preset),
+  };
+  expect(cardMemory(state, [review, later], cardId, now)?.due.getTime()).toBe(
+    later.at + 30 * 60_000,
+  );
 });

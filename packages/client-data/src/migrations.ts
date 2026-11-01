@@ -1,3 +1,4 @@
+import { DEFAULT_FSRS_PARAMETERS } from "@app/core";
 // Migration ids are global across the two local databases. Keep published ids stable.
 const migrations = [
   {
@@ -74,6 +75,33 @@ const migrations = [
     database: "anki-alarm.db",
     statements: [
       "CREATE TABLE IF NOT EXISTS tombstones (id TEXT PRIMARY KEY NOT NULL, body TEXT NOT NULL)",
+    ],
+  },
+  {
+    // ADR 0008: freeze the inputs used by old replay before a user can edit a preset.
+    id: 11,
+    database: "collection.db",
+    statements: [
+      `WITH options AS (
+        SELECT c.id AS card_id, json_object(
+          'desiredRetention', COALESCE(json_extract(d.body, '$.fields.desiredRetention.value'), json_extract(p.body, '$.fields.desiredRetention.value')),
+          'learningSteps', json(json_extract(p.body, '$.fields.learningSteps.value')),
+          'fsrsParameters', json(COALESCE(json_extract(p.body, '$.fields.fsrsParameters.value'), '${JSON.stringify(DEFAULT_FSRS_PARAMETERS)}'))
+        ) AS body
+        FROM cards c
+        JOIN decks d ON d.id = json_extract(c.body, '$.fields.deckId.value')
+        JOIN presets p ON p.id = json_extract(d.body, '$.fields.presetId.value')
+      )
+      UPDATE review_log SET body = json_set(body, '$.options', json((
+        SELECT body FROM options WHERE card_id = json_extract(review_log.body, '$.cardId')
+      )))
+      WHERE json_extract(body, '$.kind') = 'review'
+        AND json_extract(body, '$.options') IS NULL
+        AND json_extract(body, '$.cardId') IN (SELECT card_id FROM options)
+        AND NOT EXISTS (SELECT 1 FROM schema_migrations WHERE id = 11)`,
+      `UPDATE outbox SET body = (SELECT body FROM review_log WHERE id = outbox.record_id)
+       WHERE kind = 'reviewLog' AND record_id IN (SELECT id FROM review_log)
+         AND NOT EXISTS (SELECT 1 FROM schema_migrations WHERE id = 11)`,
     ],
   },
 ] as const;

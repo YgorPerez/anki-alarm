@@ -124,6 +124,8 @@ export type {
   ReliabilityStep,
 } from "./reliability.ts";
 export {
+  deckPreset,
+  schedulingOptions,
   replayCard,
   nextIntervals,
   studyQueue,
@@ -224,3 +226,5 @@ export {
   quickAlarmsDone,
 } from "./quick-alarm.ts";
 export type { QuickAlarmOptions } from "./quick-alarm.ts";
+
+export type { SchedulingOptions } from "./study.ts";
