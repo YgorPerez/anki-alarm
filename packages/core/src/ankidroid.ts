@@ -1,6 +1,7 @@
 import { default_w, State } from "ts-fsrs";
 import { ankiAnswerAction, ankiQuestionAction, ankiSeconds } from "./auto-advance.ts";
-import { validOption, type Card, type CollectionState, type PresetOptions } from "./collection.ts";
+import type { Card, CollectionState, PresetOptions } from "./collection.ts";
+import { validOption } from "./preset-rules.ts";
 import { displayOrderFromAnki } from "./display-order.ts";
 import { easyDaysFromAnki } from "./easy-days.ts";
 import { importId } from "./ids.ts";

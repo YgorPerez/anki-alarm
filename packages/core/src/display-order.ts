@@ -6,7 +6,7 @@ const MIX = { mix: 0, after: 1, before: 2 } as const;
  * stores for it. Part of the `.apkg` format: never renumber. Zero is Anki's default for all five.
  * The app is FSRS-only, so Anki's ease orders are the difficulty orders it shows under FSRS.
  */
-export const DISPLAY_ORDER = {
+const DISPLAY_ORDER = {
   newGatherPriority: {
     deck: 0,
     deckThenRandomNotes: 5,

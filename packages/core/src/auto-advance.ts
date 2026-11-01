@@ -6,7 +6,7 @@ export const ANSWER_ACTIONS = ["bury", "again", "good", "hard", "showReminder"] 
 export type QuestionAction = (typeof QUESTION_ACTIONS)[number];
 export type AnswerAction = (typeof ANSWER_ACTIONS)[number];
 
-export const MAX_AUTO_ADVANCE_SECONDS = 9999;
+const MAX_AUTO_ADVANCE_SECONDS = 9999;
 
 /** Anki's defaults: off, because each side's seconds start at 0. */
 export const AUTO_ADVANCE_DEFAULTS = {

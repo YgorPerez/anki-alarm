@@ -13,14 +13,8 @@ export {
 export type { Hex, Theme, ThemeChoice, ThemeField, ThemeMode } from "./theme.ts";
 export { uuid7, cardId, importId } from "./ids.ts";
 export type { ImportKind } from "./ids.ts";
-export {
-  Collection,
-  DEFAULT_FSRS_PARAMETERS,
-  parseCollection,
-  parseRecord,
-  validOption,
-  PRESET_LIMITS,
-} from "./collection.ts";
+export { Collection, DEFAULT_FSRS_PARAMETERS, parseCollection, parseRecord } from "./collection.ts";
+export { validOption, PRESET_LIMITS } from "./preset-rules.ts";
 export {
   ankiDroidAccess,
   ankiDroidScheduler,

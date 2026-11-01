@@ -4,7 +4,8 @@ import {
   type AnswerAction,
   type QuestionAction,
 } from "./auto-advance.ts";
-import { validOption, type Preset, type PresetOptions } from "./collection.ts";
+import type { Preset, PresetOptions } from "./collection.ts";
+import { validOption } from "./preset-rules.ts";
 import { DISPLAY_ORDER_KEYS, validDisplayOrder, type DisplayOrder } from "./display-order.ts";
 import { EASY_DAYS, type EasyDay } from "./easy-days.ts";
 import type { Locale } from "./locale.ts";
