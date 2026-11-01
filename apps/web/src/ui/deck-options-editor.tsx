@@ -14,12 +14,13 @@ import {
   type Preset,
   type PresetOptions,
 } from "@app/core";
+import { displayOrderFields } from "@app/editing-ui";
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
 
 import { editingCopy, type EditingKey } from "#/editing-copy.ts";
 import { EasyDaysField } from "#/ui/easy-days-field.tsx";
-import { Field, TextField } from "#/ui/form.tsx";
+import { Field, Select, TextField } from "#/ui/form.tsx";
 import { SaveStatus } from "#/ui/note-editor.tsx";
 import { Button } from "#/ui/shadcn/button.tsx";
 
@@ -337,6 +338,34 @@ export function DeckOptionsEditor({
           <EasyDaysField value={field.state.value} locale={locale} onChange={field.handleChange} />
         )}
       </form.Field>
+      <section aria-labelledby="display-order" className="flex flex-col gap-5">
+        <h3 id="display-order" className="text-label font-bold">
+          {t("displayOrder")}
+        </h3>
+        <div className="grid gap-5 sm:grid-cols-2">
+          {displayOrderFields(locale).map(({ key, label, choices }) => (
+            <form.Field key={key} name={key}>
+              {(field) => (
+                <Field label={label}>
+                  {(props) => (
+                    <Select
+                      {...props}
+                      value={field.state.value}
+                      onChange={(event) => field.handleChange(event.target.value)}
+                    >
+                      {choices.map((choice) => (
+                        <option key={choice.value} value={choice.value}>
+                          {choice.label}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+              )}
+            </form.Field>
+          ))}
+        </div>
+      </section>
     </form>
   );
 }

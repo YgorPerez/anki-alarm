@@ -140,6 +140,10 @@ test("deck options reject values FSRS or the daily limits can't use", () => {
     { name: " " },
   ])
     expect(() => collection.updatePreset(id, patch)).toThrow("Invalid deck options");
+  // A display order takes only Anki's choices, even from a client that skipped its form.
+  const unknownChoice = JSON.parse('"sideways"');
+  expect(() => collection.updatePreset(id, { newMix: unknownChoice })).toThrow("Invalid");
+  expect(() => collection.updatePreset(id, { reviewOrder: unknownChoice })).toThrow("Invalid");
   expect(() => collection.updatePreset("missing", {})).toThrow("Invalid deck options");
   // Forms check each option with the same rule.
   expect(validOption.desiredRetention(0.5)).toBe(false);
@@ -241,7 +245,14 @@ test("deck options forms read what the user types with Core's rules", () => {
     maximumInterval: 36500,
     fsrsParameters: preset.fields.fsrsParameters.value,
     easyDays: ["normal", "normal", "normal", "normal", "normal", "normal", "normal"],
+    newGatherPriority: "deck",
+    newSortOrder: "template",
+    newMix: "mix",
+    interdayLearningMix: "mix",
+    reviewOrder: "day",
   });
+  expect(readPresetTexts({ ...texts, reviewOrder: "random" })?.reviewOrder).toBe("random");
+  expect(readPresetTexts({ ...texts, reviewOrder: "sideways" })).toBeUndefined();
   expect(presetTexts(preset, "en").desiredRetention).toBe("0.9");
   expect(texts.easyDays).toBe("normal normal normal normal normal normal normal");
   expect(readPresetTexts({ ...texts, learningSteps: "", name: " Mine " })).toMatchObject({

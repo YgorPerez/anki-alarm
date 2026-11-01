@@ -369,6 +369,68 @@ test("Basic notes stored before note fields had their own list are upgraded", ()
 });
 
 const utf8 = (s: string) => [...new TextEncoder().encode(s)];
+/** Reads a fixture after `change` edits its collection, for options the fixtures leave at default. */
+function changed(zip: Record<string, Uint8Array>, change: (db: DatabaseSync) => void) {
+  const base = host(zip);
+  return {
+    ...base,
+    openSqlite: async (bytes: Uint8Array) => {
+      const path = join(work, `${opened++}.db`);
+      writeFileSync(path, bytes);
+      const db = new DatabaseSync(path);
+      change(db);
+      db.close();
+      return base.openSqlite(readFileSync(path));
+    },
+  };
+}
+const displayOrder = (source: AnkiPackage) => source.presets[0]!.displayOrder;
+const CHOSEN = {
+  newGatherPriority: "deckThenRandomNotes",
+  newSortOrder: "randomNoteThenTemplate",
+  newMix: "before",
+  interdayLearningMix: "after",
+  reviewOrder: "relativeOverdueness",
+};
+
+test("imports take the five display order options, or Anki's defaults when untouched", async () => {
+  const packages = await Promise.all(["legacy1.apkg", "legacy2.apkg", "latest.apkg"].map(read));
+  for (const { package: source } of packages)
+    expect(displayOrder(source)).toEqual({
+      newGatherPriority: "deck",
+      newSortOrder: "template",
+      newMix: "mix",
+      interdayLearningMix: "mix",
+      reviewOrder: "day",
+    });
+  // Schema 11 keeps them as JSON keys.
+  const legacy = await readApkg(
+    changed(fixture("legacy2.apkg"), (db) => {
+      const [col] = db.prepare("SELECT dconf FROM col").all();
+      const dconf = JSON.parse(String(col!.dconf));
+      for (const preset of Object.values<object>(dconf))
+        Object.assign(preset, {
+          newGatherPriority: 5,
+          newSortOrder: 3,
+          newMix: 2,
+          interdayLearningMix: 1,
+          reviewOrder: 12,
+        });
+      db.prepare("UPDATE col SET dconf = ?").run(JSON.stringify(dconf));
+    }),
+  );
+  expect(displayOrder(legacy.package)).toEqual(CHOSEN);
+  // Schema 18 keeps them in the protobuf config: new_mix = 30 through new_card_gather_priority = 34.
+  const latest = await readApkg(
+    changed(fixture("latest.apkg"), (db) => {
+      db.exec(
+        "UPDATE deck_config SET config = unhex(hex(config) || 'F00102F8010180020388020C900205')",
+      );
+    }),
+  );
+  expect(displayOrder(latest.package)).toEqual(CHOSEN);
+});
+
 /** A protobuf MediaEntry: name = 1, size = 2, sha1 = 3, legacy_zip_filename = 255. */
 const mediaEntry = (name: string, legacy?: number) => {
   const bytes = [0x0a, utf8(name).length, ...utf8(name), 0x10, 0x05, 0x1a, 0x01, 0xff];

@@ -143,8 +143,13 @@ test("deck options save limits, retention and learning steps, and refuse what FS
   await fireEvent.changeText(screen.getByLabelText("Etapas de reaprendizado (minutos)"), "3 20");
   await fireEvent.changeText(screen.getByLabelText("Limite de lapsos (0 desativa)"), "4");
   await fireEvent.changeText(screen.getByLabelText("Intervalo máximo (dias)"), "90");
-  await press("radio", "Aleatória");
+  await fireEvent.press(
+    within(screen.getByLabelText("Ordem de inserção")).getByRole("radio", { name: "Aleatória" }),
+  );
   await press("radio", "Suspender");
+  const newMix = within(screen.getByLabelText("Cartões novos e revisões"));
+  await fireEvent.press(newMix.getByRole("radio", { name: "Antes das revisões" }));
+  await press("radio", "Atraso relativo");
   await press("button", "Salvar");
   await screen.findByRole("button", { name: "Opções do baralho" });
 
@@ -163,6 +168,9 @@ test("deck options save limits, retention and learning steps, and refuse what FS
     preset.fields.buryReviews.value,
     preset.fields.buryLearning.value,
   ]).toEqual([true, true, true]);
+  expect(preset.fields.newMix.value).toBe("before");
+  expect(preset.fields.interdayLearningMix.value).toBe("mix");
+  expect(preset.fields.reviewOrder.value).toBe("relativeOverdueness");
 });
 
 test("deck options set each weekday's easy day", async () => {

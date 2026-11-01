@@ -1,7 +1,14 @@
 // The editors' shared copy: deck options, notes and card actions read the same on the phone and the
 // web. Each app spreads it into its own messages and adds the keys only its screens have. The
 // limits come from Core, so the copy can't drift from the rules it states.
-import { MAX_DUE_DAYS, PRESET_LIMITS, type Messages } from "@app/core";
+import {
+  DISPLAY_ORDER_KEYS,
+  MAX_DUE_DAYS,
+  PRESET_LIMITS,
+  type DisplayOrder,
+  type Locale,
+  type Messages,
+} from "@app/core";
 
 const { maxPerDay, minRetention, maxRetention, fsrsParameters } = PRESET_LIMITS;
 /** A retention as each locale writes it: 0,70 in pt-BR, 0.70 in English. */
@@ -43,6 +50,7 @@ export const editingMessages = {
     replayAudio: "Repetir áudio",
     answerTimer: "Tempo de resposta",
     deckOptions: "Opções do baralho",
+    displayOrder: "Ordem de exibição",
     advanced: "Avançado",
     discardOptions: "Descartar as alterações não salvas?",
     presetName: "Nome da predefinição",
@@ -133,6 +141,7 @@ export const editingMessages = {
     replayAudio: "Replay audio",
     answerTimer: "Answer time",
     deckOptions: "Deck options",
+    displayOrder: "Display order",
     advanced: "Advanced",
     discardOptions: "Discard unsaved changes?",
     presetName: "Preset name",
@@ -205,3 +214,127 @@ export const editingMessages = {
       "Forget and Set due date stay in the app: AnkiDroid doesn't get these changes. This card's next review in AnkiDroid replaces them.",
   },
 } satisfies Messages<string>;
+
+type DisplayOrderCopy = {
+  [K in keyof DisplayOrder]: { label: string; choices: Record<DisplayOrder[K], string> };
+};
+// Each option's choices, in the order Anki lists them.
+const displayOrderCopy: Record<Locale, DisplayOrderCopy> = {
+  "pt-BR": {
+    newGatherPriority: {
+      label: "Coleta de cartões novos",
+      choices: {
+        deck: "Baralho",
+        deckThenRandomNotes: "Baralho, depois notas aleatórias",
+        lowestPosition: "Posição crescente",
+        highestPosition: "Posição decrescente",
+        randomNotes: "Notas aleatórias",
+        randomCards: "Cartões aleatórios",
+      },
+    },
+    newSortOrder: {
+      label: "Ordem dos cartões novos",
+      choices: {
+        template: "Tipo de cartão, depois ordem de coleta",
+        noSort: "Ordem de coleta",
+        templateThenRandom: "Tipo de cartão, depois aleatória",
+        randomNoteThenTemplate: "Nota aleatória, depois tipo de cartão",
+        randomCard: "Aleatória",
+      },
+    },
+    newMix: {
+      label: "Cartões novos e revisões",
+      choices: {
+        mix: "Misturar com as revisões",
+        after: "Depois das revisões",
+        before: "Antes das revisões",
+      },
+    },
+    interdayLearningMix: {
+      label: "Aprendizado e revisões",
+      choices: {
+        mix: "Misturar com as revisões",
+        after: "Depois das revisões",
+        before: "Antes das revisões",
+      },
+    },
+    reviewOrder: {
+      label: "Ordem das revisões",
+      choices: {
+        day: "Vencimento, depois aleatória",
+        dayThenDeck: "Vencimento, depois baralho",
+        deckThenDay: "Baralho, depois vencimento",
+        intervalsAscending: "Intervalos crescentes",
+        intervalsDescending: "Intervalos decrescentes",
+        difficultyDescending: "Dificuldade decrescente",
+        difficultyAscending: "Dificuldade crescente",
+        retrievabilityAscending: "Recuperabilidade crescente",
+        retrievabilityDescending: "Recuperabilidade decrescente",
+        relativeOverdueness: "Atraso relativo",
+        random: "Aleatória",
+        added: "Ordem de adição",
+        reverseAdded: "Ordem de adição invertida",
+      },
+    },
+  },
+  en: {
+    newGatherPriority: {
+      label: "New card gathering",
+      choices: {
+        deck: "Deck",
+        deckThenRandomNotes: "Deck, then random notes",
+        lowestPosition: "Ascending position",
+        highestPosition: "Descending position",
+        randomNotes: "Random notes",
+        randomCards: "Random cards",
+      },
+    },
+    newSortOrder: {
+      label: "New card sort order",
+      choices: {
+        template: "Card type, then order gathered",
+        noSort: "Order gathered",
+        templateThenRandom: "Card type, then random",
+        randomNoteThenTemplate: "Random note, then card type",
+        randomCard: "Random",
+      },
+    },
+    newMix: {
+      label: "New cards versus reviews",
+      choices: { mix: "Mix with reviews", after: "After reviews", before: "Before reviews" },
+    },
+    interdayLearningMix: {
+      label: "Learning versus reviews",
+      choices: { mix: "Mix with reviews", after: "After reviews", before: "Before reviews" },
+    },
+    reviewOrder: {
+      label: "Review sort order",
+      choices: {
+        day: "Due date, then random",
+        dayThenDeck: "Due date, then deck",
+        deckThenDay: "Deck, then due date",
+        intervalsAscending: "Ascending intervals",
+        intervalsDescending: "Descending intervals",
+        difficultyDescending: "Descending difficulty",
+        difficultyAscending: "Ascending difficulty",
+        retrievabilityAscending: "Ascending retrievability",
+        retrievabilityDescending: "Descending retrievability",
+        relativeOverdueness: "Relative overdueness",
+        random: "Random",
+        added: "Order added",
+        reverseAdded: "Reverse order added",
+      },
+    },
+  },
+};
+
+/** The display order options as both deck options screens list them. */
+export const displayOrderFields = (locale: Locale) =>
+  DISPLAY_ORDER_KEYS.map((key) => ({
+    key,
+    label: displayOrderCopy[locale][key].label,
+    choices: Object.entries(displayOrderCopy[locale][key].choices).map(([value, label]) => ({
+      value,
+      label,
+    })),
+  }));

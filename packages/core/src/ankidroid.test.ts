@@ -121,6 +121,38 @@ const withTags = (tags: string, mod = 1_760_000_000) => {
   return linked;
 };
 
+/** The preset a deck gets when linked with these options. */
+const linkedPreset = (json: object) => {
+  const linked = source();
+  linked.decks = linked.decks.map((d) => ({ ...d, options: JSON.stringify(json) }));
+  const c = new Collection(environment());
+  c.linkAnkiDroid(linked);
+  return c.snapshot().presets[0]!.fields;
+};
+
+test("a linked deck starts with its AnkiDroid options' display order", () => {
+  expect(
+    linkedPreset({
+      newGatherPriority: 5,
+      newSortOrder: 3,
+      newMix: 2,
+      interdayLearningMix: 1,
+      reviewOrder: 12,
+    }),
+  ).toMatchObject({
+    newGatherPriority: { value: "deckThenRandomNotes" },
+    newSortOrder: { value: "randomNoteThenTemplate" },
+    newMix: { value: "before" },
+    interdayLearningMix: { value: "after" },
+    reviewOrder: { value: "relativeOverdueness" },
+  });
+  // Older options and numbers from a later Anki take Anki's defaults.
+  expect(linkedPreset({ newMix: 99 })).toMatchObject({
+    newGatherPriority: { value: "deck" },
+    newMix: { value: "mix" },
+  });
+});
+
 test("linking takes AnkiDroid's mark; afterwards a pull keeps the app's", () => {
   const c = new Collection(environment());
   c.linkAnkiDroid(withTags("verb marked"));

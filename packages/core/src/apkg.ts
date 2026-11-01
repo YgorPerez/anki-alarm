@@ -1,4 +1,5 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh copies are sorted. */
+import { displayOrderFromAnki, type DisplayOrder } from "./display-order.ts";
 import { easyDaysFromAnki, type EasyDay } from "./easy-days.ts";
 import { safeMediaName } from "./media.ts";
 import { Message } from "./protobuf.ts";
@@ -79,6 +80,8 @@ export interface AnkiPackage {
     maximumAnswerSeconds?: number;
     showTimer?: boolean;
     stopTimerOnAnswer?: boolean;
+    /** Absent means Anki's defaults. */
+    displayOrder?: DisplayOrder;
   }[];
   notes: {
     id: number;
@@ -409,6 +412,7 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         maximumAnswerSeconds: typeof c.maxTaken === "number" ? c.maxTaken : 60,
         showTimer: c.timer === 1,
         stopTimerOnAnswer: c.stopTimerOnAnswer === true,
+        displayOrder: displayOrderFromAnki(c),
       })),
   };
 }
@@ -503,6 +507,13 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
         maximumAnswerSeconds: c.number(24) ?? 0,
         showTimer: c.number(25) === 1,
         stopTimerOnAnswer: c.number(38) === 1,
+        displayOrder: displayOrderFromAnki({
+          newMix: c.number(30),
+          interdayLearningMix: c.number(31),
+          newSortOrder: c.number(32),
+          reviewOrder: c.number(33),
+          newGatherPriority: c.number(34),
+        }),
       };
     }),
   };

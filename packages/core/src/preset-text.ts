@@ -1,4 +1,5 @@
 import { validOption, type Preset, type PresetOptions } from "./collection.ts";
+import { DISPLAY_ORDER_KEYS, validDisplayOrder, type DisplayOrder } from "./display-order.ts";
 import { EASY_DAYS, type EasyDay } from "./easy-days.ts";
 import type { Locale } from "./locale.ts";
 
@@ -18,6 +19,10 @@ const list = (text: string, separator: RegExp) => {
 };
 const isEasyDay = (text: string): text is EasyDay => EASY_DAYS.some((day) => day === text);
 const boolean = (text: string) => (text === "true" ? true : text === "false" ? false : undefined);
+const choice =
+  <K extends keyof DisplayOrder>(key: K) =>
+  (text: string) =>
+    validDisplayOrder(key, text) ? text : undefined;
 const read = {
   buryNew: boolean,
   buryReviews: boolean,
@@ -44,6 +49,11 @@ const read = {
     const days = text.split(" ");
     return days.every(isEasyDay) ? days : undefined;
   },
+  newGatherPriority: choice("newGatherPriority"),
+  newSortOrder: choice("newSortOrder"),
+  newMix: choice("newMix"),
+  interdayLearningMix: choice("interdayLearningMix"),
+  reviewOrder: choice("reviewOrder"),
 } satisfies { [K in keyof PresetOptions]: (text: string) => PresetOptions[K] | undefined };
 const KEYS = [
   "dontPlayAutomatically",
@@ -69,6 +79,7 @@ const KEYS = [
   "buryNew",
   "buryReviews",
   "buryLearning",
+  ...DISPLAY_ORDER_KEYS,
 ] as const satisfies readonly (keyof PresetOptions)[];
 const ok = <T>(value: T | undefined, rule: (value: T) => boolean) =>
   value !== undefined && rule(value);
@@ -102,6 +113,11 @@ export const validPresetText: Record<keyof PresetOptions, (text: string) => bool
   maximumInterval: (text) => ok(read.maximumInterval(text), validOption.maximumInterval),
   fsrsParameters: (text) => ok(read.fsrsParameters(text), validOption.fsrsParameters),
   easyDays: (text) => ok(read.easyDays(text), validOption.easyDays),
+  newGatherPriority: (text) => validDisplayOrder("newGatherPriority", text),
+  newSortOrder: (text) => validDisplayOrder("newSortOrder", text),
+  newMix: (text) => validDisplayOrder("newMix", text),
+  interdayLearningMix: (text) => validDisplayOrder("interdayLearningMix", text),
+  reviewOrder: (text) => validDisplayOrder("reviewOrder", text),
 };
 
 /** A preset's options as text, with the locale's decimal comma. */
@@ -131,6 +147,11 @@ export function presetTexts(preset: Preset, locale: Locale): PresetTexts {
     maximumInterval: String(f.maximumInterval.value),
     fsrsParameters: f.fsrsParameters.value.join(", "),
     easyDays: f.easyDays.value.join(" "),
+    newGatherPriority: f.newGatherPriority.value,
+    newSortOrder: f.newSortOrder.value,
+    newMix: f.newMix.value,
+    interdayLearningMix: f.interdayLearningMix.value,
+    reviewOrder: f.reviewOrder.value,
   };
 }
 
@@ -162,5 +183,10 @@ export function readPresetTexts(texts: PresetTexts): PresetOptions | undefined {
     maximumInterval: read.maximumInterval(texts.maximumInterval)!,
     fsrsParameters: read.fsrsParameters(texts.fsrsParameters)!,
     easyDays: read.easyDays(texts.easyDays)!,
+    newGatherPriority: read.newGatherPriority(texts.newGatherPriority)!,
+    newSortOrder: read.newSortOrder(texts.newSortOrder)!,
+    newMix: read.newMix(texts.newMix)!,
+    interdayLearningMix: read.interdayLearningMix(texts.interdayLearningMix)!,
+    reviewOrder: read.reviewOrder(texts.reviewOrder)!,
   };
 }

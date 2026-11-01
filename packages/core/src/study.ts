@@ -1,7 +1,16 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only freshly filtered/mapped arrays are sorted. */
-import { createEmptyCard, fsrs, State, type Card as MemoryState, type Grade } from "ts-fsrs";
+import {
+  computeDecayFactor,
+  createEmptyCard,
+  forgetting_curve,
+  fsrs,
+  State,
+  type Card as MemoryState,
+  type Grade,
+} from "ts-fsrs";
 import type { Card, CollectionState, Deck, Preset } from "./collection.ts";
 import { dailyLimit } from "./daily-limits.ts";
+import type { DisplayOrder } from "./display-order.ts";
 import { easyDayInterval, type EasyDays } from "./easy-days.ts";
 export type { MemoryState, Grade };
 /** FSRS card states: New, Learning, Review, Relearning. */
@@ -309,10 +318,157 @@ function deckLineage(collection: CollectionState, deck: Deck) {
     (d) => d.id === deck.id || name.startsWith(`${d.fields.name.value}::`),
   );
 }
+const DAY_MS = 86_400_000;
+/** FNV-1a, so "random" orders hold still while a study day's queue is rebuilt after each answer. */
+function stableHash(id: string, salt: number) {
+  let hash = 0x81_1c_9d_c5;
+  for (const char of `${salt}:${id}`) hash = Math.imul(hash ^ char.charCodeAt(0), 0x01_00_01_93);
+  return hash >>> 0;
+}
+/** Anki's even mix: `two` spreads through `one`, and the longer side comes first. */
+function intersperse<T>(one: readonly T[], two: readonly T[]) {
+  const ratio = (one.length + 1) / (two.length + 1);
+  const mixed: T[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < one.length && j < two.length)
+    mixed.push((j + 1) * ratio < i + 1 ? two[j++]! : one[i++]!);
+  return [...mixed, ...one.slice(i), ...two.slice(j)];
+}
+const merged = <T>(mix: DisplayOrder["newMix"], reviews: readonly T[], other: readonly T[]) => {
+  if (mix === "after") return [...reviews, ...other];
+  return mix === "before" ? [...other, ...reviews] : intersperse(reviews, other);
+};
+type Queued = { card: Card; memory: MemoryState; newPosition: number };
+type SortKey = (item: Queued) => number | string;
+const by =
+  (keys: readonly SortKey[]) =>
+  (a: Queued, b: Queued): number => {
+    for (const key of keys) {
+      const [x, y] = [key(a), key(b)];
+      if (x !== y) return x < y ? -1 : 1;
+    }
+    return 0;
+  };
+const negative = (key: SortKey) => (item: Queued) => -Number(key(item));
+const position: SortKey = (item) => item.newPosition;
+const noteOf: SortKey = ({ card }) => card.fields.noteId.value;
+const template: SortKey = ({ card }) => card.fields.ordinal.value;
+const dueDay: SortKey = ({ memory }) => studyDayStart(memory.due.getTime());
+const interval: SortKey = ({ memory }) => memory.scheduled_days;
+const difficulty: SortKey = ({ memory }) => memory.difficulty;
+const added: SortKey = ({ card }) => card.anki?.id ?? card.fields.noteId.hlc.wallMs;
+/** Anki's collation: case-insensitive, with a parent right before its subdecks. */
+const deckSortName = (deck: Deck) =>
+  deck.fields.name.value.toLowerCase().replaceAll("::", "\u001f");
+/**
+ * Learning that waits for a later study day: ts-fsrs marks a step of a day or more as Review with
+ * steps left, and a shorter step can still end past the day boundary.
+ */
+const isInterday = ({ memory }: Queued) => {
+  if (memory.state === State.Review) return memory.learning_steps > 0;
+  return (
+    memory.last_review !== undefined &&
+    studyDayStart(memory.due.getTime()) > studyDayStart(memory.last_review.getTime())
+  );
+};
+/**
+ * The study order, built as Anki's queue is. Learning steps due within the day come first; then
+ * reviews, interday learning and new cards merge as the studied deck's preset says. The daily
+ * limits pick which reviews and new cards take part, in gather order; new cards then sort.
+ */
+function displayQueue<T extends Queued>(
+  items: readonly T[],
+  options: {
+    preset: Preset;
+    presetOf: (card: Card) => Preset;
+    decks: readonly Deck[];
+    /** Reserves a daily limit slot for a card; false when one of its limits has none left. */
+    spend: (card: Card, kind: "new" | "review") => boolean;
+    salt: number;
+    now: number;
+  },
+): T[] {
+  const { preset, presetOf, decks, spend, salt, now } = options;
+  const f = preset.fields;
+  const ranks = new Map(
+    [...decks]
+      .map((d) => [deckSortName(d), d.id] as const)
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([, id], rank) => [id, rank]),
+  );
+  const deck: SortKey = ({ card }) => ranks.get(card.fields.deckId.value)!;
+  const randomNote: SortKey = ({ card }) => stableHash(card.fields.noteId.value, salt);
+  const randomCard: SortKey = ({ card }) => stableHash(card.id, salt);
+  const gather: { [K in DisplayOrder["newGatherPriority"]]: readonly SortKey[] } = {
+    deck: [deck, position, noteOf, template],
+    deckThenRandomNotes: [deck, randomNote, noteOf, template],
+    lowestPosition: [position, noteOf, template],
+    highestPosition: [negative(position), noteOf, template],
+    randomNotes: [randomNote, noteOf, template],
+    randomCards: [randomCard],
+  };
+  const sort: { [K in DisplayOrder["newSortOrder"]]: readonly SortKey[] } = {
+    template: [template],
+    noSort: [],
+    templateThenRandom: [template, randomCard],
+    randomNoteThenTemplate: [randomNote, template],
+    randomCard: [randomCard],
+  };
+  const retrievability = ({ card, memory }: Queued) =>
+    forgetting_curve(
+      presetOf(card).fields.fsrsParameters.value,
+      Math.max(0, now - (memory.last_review?.getTime() ?? now)) / DAY_MS,
+      memory.stability,
+    );
+  // How far past its interval a card is: Anki's FSRS relative overdueness.
+  const overdueness = (item: Queued) => {
+    const own = presetOf(item.card).fields;
+    const { decay } = computeDecayFactor(own.fsrsParameters.value);
+    const stretch = (r: number) => r ** (1 / decay) - 1;
+    return stretch(retrievability(item)) / stretch(own.desiredRetention.value);
+  };
+  const review: { [K in DisplayOrder["reviewOrder"]]: readonly SortKey[] } = {
+    day: [dueDay],
+    dayThenDeck: [dueDay, deck],
+    deckThenDay: [deck, dueDay],
+    intervalsAscending: [interval],
+    intervalsDescending: [negative(interval)],
+    difficultyDescending: [negative(difficulty)],
+    difficultyAscending: [difficulty],
+    retrievabilityAscending: [retrievability],
+    retrievabilityDescending: [negative(retrievability)],
+    relativeOverdueness: [negative(overdueness)],
+    random: [],
+    added: [added, template],
+    reverseAdded: [negative(added), template],
+  };
+  const reviewOrder = by([...review[f.reviewOrder.value], randomCard]);
+  const ofState = (...states: State[]) => items.filter((i) => states.includes(i.memory.state));
+  const learning = ofState(State.Learning, State.Relearning);
+  const intraday = learning
+    .filter((i) => !isInterday(i))
+    .sort(by([({ memory }) => memory.due.getTime(), ({ card }) => card.id]));
+  // Reviews reserve first: by default new cards share the review limit with them.
+  const allowed = ofState(State.Review)
+    .sort(reviewOrder)
+    .filter(({ card }) => spend(card, "review"));
+  const interday = [...learning, ...allowed].filter((i) => isInterday(i)).sort(reviewOrder);
+  const reviews = allowed.filter((i) => !isInterday(i));
+  const fresh = ofState(State.New)
+    .sort(by(gather[f.newGatherPriority.value]))
+    .filter(({ card }) => spend(card, "new"))
+    .sort(by(sort[f.newSortOrder.value]));
+  return [
+    ...intraday,
+    ...merged(f.newMix.value, merged(f.interdayLearningMix.value, reviews, interday), fresh),
+  ];
+}
 /**
  * The cards to study now in a deck and its subdecks, as Anki studies them. Each card schedules
- * with its own deck's preset. The daily limits are the studied deck's, or with
- * `applyAllParentLimits`, those of every deck from the top parent down to the card's own.
+ * with its own deck's preset; the display order is the studied deck's. The daily limits are the
+ * studied deck's, or with `applyAllParentLimits`, those of every deck from the top parent down to
+ * the card's own.
  */
 function studyCandidates(
   collection: CollectionState,
@@ -381,7 +537,7 @@ function studyCandidates(
     }
   }
   // What each limiting deck has left today, counting its subdecks' answers. By default new cards
-  // use up the review limit too. Fresh per call, so `spend` can reserve from it.
+  // use up the review limit too. Fresh per call, so the queue can reserve from it with `spend`.
   const budgets = new Map<string, { new: number; review: number }>();
   const budget = (d: Deck) => {
     const known = budgets.get(d.id);
@@ -417,7 +573,7 @@ function studyCandidates(
     }
     return true;
   };
-  const queue = collection.cards
+  const candidates = collection.cards
     .filter(
       (c) => family.has(c.fields.deckId.value) && !c.fields.suspended?.value && !isBuried(c, now),
     )
@@ -426,21 +582,15 @@ function studyCandidates(
       memory: replayCard(card.id, entries.get(card.id) ?? [], presetOf(card), now),
       newPosition: insertionPosition(card, entries.get(card.id) ?? [], voided, presetOf(card)),
     }))
-    .filter(({ card, memory }) =>
-      memory.state === State.New
-        ? budgetsOf(card).every((b) => b.new > 0)
-        : memory.due.getTime() <= now &&
-          (memory.state !== State.Review || budgetsOf(card).every((b) => b.review > 0)),
-    )
-    .sort(
-      (a, b) =>
-        (a.memory.state === State.New ? 1 : 0) - (b.memory.state === State.New ? 1 : 0) ||
-        (a.memory.state === State.New && b.memory.state === State.New
-          ? a.newPosition - b.newPosition
-          : a.memory.due.getTime() - b.memory.due.getTime()) ||
-        a.card.id.localeCompare(b.card.id),
-    );
-  return { queue, spend };
+    .filter(({ memory }) => memory.state === State.New || memory.due.getTime() <= now);
+  return displayQueue(candidates, {
+    preset,
+    presetOf,
+    decks: collection.decks.filter((d) => family.has(d.id)),
+    spend,
+    salt: dayStart,
+    now,
+  });
 }
 
 export function studyQueue(
@@ -450,7 +600,7 @@ export function studyQueue(
   now: number,
   dayStart = studyDayStart(now),
 ) {
-  return studyCandidates(collection, log, deckId, now, dayStart).queue;
+  return studyCandidates(collection, log, deckId, now, dayStart);
 }
 
 /**
@@ -480,12 +630,10 @@ export function studyCounts(
   deckId: string,
   now: number,
 ) {
-  const { queue, spend } = studyCandidates(collection, log, deckId, now);
   const counts = { new: 0, learning: 0, review: 0 };
-  // The queue holds new cards last, so reviews reserve their share of the limits first.
-  for (const { card, memory } of queue) {
-    if (memory.state === State.New) counts.new += spend(card, "new") ? 1 : 0;
-    else if (memory.state === State.Review) counts.review += spend(card, "review") ? 1 : 0;
+  for (const { memory } of studyCandidates(collection, log, deckId, now)) {
+    if (memory.state === State.New) counts.new++;
+    else if (memory.state === State.Review) counts.review++;
     else counts.learning++;
   }
   return counts;
