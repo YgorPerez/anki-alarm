@@ -10,6 +10,12 @@ import {
   type AnkiDroidCard,
   type AnkiDroidSource,
 } from "./ankidroid.ts";
+import {
+  DEFAULT_DISPLAY_ORDER,
+  DISPLAY_ORDER_KEYS,
+  validDisplayOrder,
+  type DisplayOrder,
+} from "./display-order.ts";
 import { cardId, importId, uuid7 } from "./ids.ts";
 import { isLanguageTag } from "./locale.ts";
 import { editedNoteType, editedValues, noteTypeProblems, type NoteTypeEdit } from "./note-types.ts";
@@ -56,26 +62,28 @@ const AUDIO_TIMER_DEFAULTS = {
   showTimer: false,
   stopTimerOnAnswer: false,
 };
-export type Preset = RecordFields<{
-  name: string;
-  buryNew: boolean;
-  buryReviews: boolean;
-  buryLearning: boolean;
-  newPerDay: number;
-  reviewsPerDay: number;
-  desiredRetention: number;
-  /** Minutes. */
-  learningSteps: number[];
-  /** Absent on legacy app presets, which were all defaults. */
-  isDefault?: boolean;
-  /** FSRS-6's 21 weights. */
-  fsrsParameters: number[];
-  dontPlayAutomatically: boolean;
-  skipQuestionWhenReplayingAnswer: boolean;
-  maximumAnswerSeconds: number;
-  showTimer: boolean;
-  stopTimerOnAnswer: boolean;
-}> &
+export type Preset = RecordFields<
+  {
+    name: string;
+    buryNew: boolean;
+    buryReviews: boolean;
+    buryLearning: boolean;
+    newPerDay: number;
+    reviewsPerDay: number;
+    desiredRetention: number;
+    /** Minutes. */
+    learningSteps: number[];
+    /** Absent on legacy app presets, which were all defaults. */
+    isDefault?: boolean;
+    /** FSRS-6's 21 weights. */
+    fsrsParameters: number[];
+    dontPlayAutomatically: boolean;
+    skipQuestionWhenReplayingAnswer: boolean;
+    maximumAnswerSeconds: number;
+    showTimer: boolean;
+    stopTimerOnAnswer: boolean;
+  } & DisplayOrder
+> &
   AnkiIdentity;
 /** Legacy app presets and explicitly marked defaults cannot be deleted. */
 export const isDefaultPreset = (preset: Preset): boolean =>
@@ -100,6 +108,7 @@ const presetKeys = [
   "buryNew",
   "buryReviews",
   "buryLearning",
+  ...DISPLAY_ORDER_KEYS,
 ] as const satisfies readonly (keyof PresetOptions)[];
 /** The bounds of a preset's options, for the rules below and the copy that states them. */
 export const PRESET_LIMITS = {
@@ -132,6 +141,11 @@ export const validOption: { [K in keyof PresetOptions]: (value: PresetOptions[K]
     v.every((n) => Number.isFinite(n) && n > 0),
   fsrsParameters: (v) =>
     Array.isArray(v) && v.length === PRESET_LIMITS.fsrsParameters && v.every(Number.isFinite),
+  newGatherPriority: (v) => validDisplayOrder("newGatherPriority", v),
+  newSortOrder: (v) => validDisplayOrder("newSortOrder", v),
+  newMix: (v) => validDisplayOrder("newMix", v),
+  interdayLearningMix: (v) => validDisplayOrder("interdayLearningMix", v),
+  reviewOrder: (v) => validDisplayOrder("reviewOrder", v),
 };
 export interface Template {
   name: string;
@@ -245,7 +259,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
  * Reads stored records in the current shape, upgrading what earlier versions saved with the
  * records' own clocks, so the upgrade itself is not an edit: Basic notes kept `front` and `back` as
  * properties and a `deckId` the cards now own; note types had one front and back template; presets
- * had no `fsrsParameters`, decks no `desiredRetention`, notes no `tags`, cards no `suspended` or
+ * had no `fsrsParameters` or display order, decks no `desiredRetention`, notes no `tags`, cards no `suspended` or
  * `buriedUntil`. Current records pass through unchanged.
  */
 export function parseCollection(stored: StoredCollection): CollectionState {
@@ -263,7 +277,10 @@ export function parseCollection(stored: StoredCollection): CollectionState {
     };
   }
   for (const preset of state.presets) {
-    for (const [key, value] of Object.entries(AUDIO_TIMER_DEFAULTS)) {
+    for (const [key, value] of Object.entries({
+      ...AUDIO_TIMER_DEFAULTS,
+      ...DEFAULT_DISPLAY_ORDER,
+    })) {
       if (!(key in preset.fields))
         Object.assign(preset.fields, { [key]: { value, hlc: preset.fields.name.hlc } });
     }
@@ -424,6 +441,7 @@ export class Collection {
         desiredRetention: 0.9,
         learningSteps: [1, 10],
         fsrsParameters: [...DEFAULT_FSRS_PARAMETERS],
+        ...DEFAULT_DISPLAY_ORDER,
       });
       this.state.presets.push(preset);
     }
@@ -645,6 +663,15 @@ export class Collection {
       stopTimerOnAnswer: factory
         ? AUDIO_TIMER_DEFAULTS.stopTimerOnAnswer
         : source.fields.stopTimerOnAnswer.value,
+      newGatherPriority: factory
+        ? DEFAULT_DISPLAY_ORDER.newGatherPriority
+        : source.fields.newGatherPriority.value,
+      newSortOrder: factory ? DEFAULT_DISPLAY_ORDER.newSortOrder : source.fields.newSortOrder.value,
+      newMix: factory ? DEFAULT_DISPLAY_ORDER.newMix : source.fields.newMix.value,
+      interdayLearningMix: factory
+        ? DEFAULT_DISPLAY_ORDER.interdayLearningMix
+        : source.fields.interdayLearningMix.value,
+      reviewOrder: factory ? DEFAULT_DISPLAY_ORDER.reviewOrder : source.fields.reviewOrder.value,
       isDefault: false,
     });
     this.state.presets.push(preset);
@@ -1048,6 +1075,7 @@ export class Collection {
         buryLearning: p.buryLearning ?? false,
         fsrsParameters: [...weights],
         ...(p.appId && p.isDefault !== undefined ? { isDefault: p.isDefault } : {}),
+        ...(p.displayOrder ?? DEFAULT_DISPLAY_ORDER),
       };
       if (merge("presets", this.state.presets, index.presets, { id, values, mtime, rest }))
         presets.set(p.id, id);

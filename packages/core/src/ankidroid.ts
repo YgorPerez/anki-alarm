@@ -1,5 +1,6 @@
 import { State } from "ts-fsrs";
 import type { Card, CollectionState } from "./collection.ts";
+import { displayOrderFromAnki, type DisplayOrder } from "./display-order.ts";
 import { importId } from "./ids.ts";
 import { isBuried, type LogEntry } from "./study.ts";
 
@@ -111,7 +112,7 @@ export function linkedAnkiDroidDecks(source: AnkiDroidSource): AnkiDroidDeck[] {
   );
 }
 
-export interface ImportedPreset {
+export interface ImportedPreset extends DisplayOrder {
   ankiId: number;
   buryNew: boolean;
   buryReviews: boolean;
@@ -151,6 +152,7 @@ export function presetFromOptions(json: string): ImportedPreset {
       Array.isArray(delays) && delays.every((d) => typeof d === "number" && d > 0)
         ? delays
         : [1, 10],
+    ...displayOrderFromAnki(raw),
   };
 }
 

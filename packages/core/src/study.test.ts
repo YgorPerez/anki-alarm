@@ -53,7 +53,7 @@ test("replays FSRS reviews in answer order and void restores the earlier state",
 test("daily limits count cards once, include alarm answers and leave learning available", () => {
   const { state, deckId, cardId, preset } = fixture();
   preset.fields.newPerDay.value = 1;
-  expect(studyQueue(state, [], deckId, now)).toHaveLength(2);
+  expect(studyQueue(state, [], deckId, now)).toHaveLength(1);
   const log: LogEntry[] = [
     { kind: "review", id: "a", cardId, at: now, grade: 1, durationMs: 1, origin: "alarm" },
   ];
@@ -124,7 +124,7 @@ test("review limit includes web answers and void restores the daily allowance", 
   log.push({ kind: "review", id: "r", cardId, at: now, grade: 3, durationMs: 100, origin: "web" });
   expect(studyQueue(state, log, deckId, now)).toHaveLength(0);
   log.push({ kind: "void", id: "v", cardId, at: now + 1, targetId: "r" });
-  expect(studyQueue(state, log, deckId, now + 1)).toHaveLength(2);
+  expect(studyQueue(state, log, deckId, now + 1)).toHaveLength(1);
 });
 
 import { studyDayStart, renderCard, usesScripts } from "./index.ts";

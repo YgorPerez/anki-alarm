@@ -338,6 +338,39 @@ test("the package is Legacy 2 with Anki's scheduling columns, FSRS state and rev
   expect(graded.every((r) => Number(r.type) <= 2 && r.time === 4200)).toBe(true);
 });
 
+test("the five display order options travel as Anki's numbers and come back", async () => {
+  const { collection, log } = await studied();
+  const before = collection.snapshot();
+  const presetId = before.decks.find((d) => d.id === deckId(before, "Inglês"))!.fields.presetId;
+  collection.updatePreset(presetId.value, {
+    newGatherPriority: "deckThenRandomNotes",
+    newSortOrder: "randomNoteThenTemplate",
+    newMix: "before",
+    interdayLearningMix: "after",
+    reviewOrder: "relativeOverdueness",
+  });
+  const state = collection.snapshot();
+  const { zip, package: source } = await exported(state, log, "Inglês");
+  const [col] = rows(zip, "SELECT dconf FROM col");
+  const dconf = JSON.parse(String(col!.dconf));
+  expect(dconf[Object.keys(dconf)[0]!]).toMatchObject({
+    newGatherPriority: 5,
+    newSortOrder: 3,
+    newMix: 2,
+    interdayLearningMix: 1,
+    reviewOrder: 12,
+  });
+  const other = new Collection(environment("phone-b"));
+  other.importAnki(source);
+  expect(other.snapshot().presets[0]!.fields).toMatchObject({
+    newGatherPriority: { value: "deckThenRandomNotes" },
+    newSortOrder: { value: "randomNoteThenTemplate" },
+    newMix: { value: "before" },
+    interdayLearningMix: { value: "after" },
+    reviewOrder: { value: "relativeOverdueness" },
+  });
+});
+
 test("media are asked for by bare file name only", async () => {
   const collection = new Collection(environment());
   const deck = collection.createDeck("Paths");

@@ -38,6 +38,8 @@ test("a new deck gets options and a note, which the browser finds and edits as y
   expect(screen.getByRole("button", { name: "Salvar" })).toHaveProperty("disabled", true);
   await user.clear(newPerDay);
   await user.type(newPerDay, "5");
+  await user.selectOptions(screen.getByLabelText("Cartões novos e revisões"), "Antes das revisões");
+  await user.selectOptions(screen.getByLabelText("Ordem das revisões"), "Atraso relativo");
   await user.click(screen.getByRole("button", { name: "Salvar" }));
   expect(await screen.findByText("Salvo.")).toBeDefined();
   // Leaving and coming back shows what was saved.
@@ -51,6 +53,11 @@ test("a new deck gets options and a note, which the browser finds and edits as y
   ]) {
     expect(screen.getByRole("checkbox", { name })).toHaveProperty("checked", true);
   }
+  expect(screen.getByLabelText("Cartões novos e revisões")).toHaveProperty("value", "before");
+  expect(screen.getByLabelText("Ordem das revisões")).toHaveProperty(
+    "value",
+    "relativeOverdueness",
+  );
 
   await user.click(screen.getByRole("link", { name: "‹ Voltar" }));
   await user.click(screen.getByRole("button", { name: "Adicionar nota" }));

@@ -7,13 +7,14 @@ import {
   type Preset,
   type PresetOptions,
 } from "@app/core";
+import { displayOrderFields } from "@app/editing-ui";
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
 import { RetentionSlider } from "./RetentionSlider.tsx";
 import { Switch, Text, View } from "react-native";
-import { Button, SaveButtons, TextField } from "./controls.tsx";
+import { Button, Choice, SaveButtons, TextField } from "./controls.tsx";
 import { editingCopy } from "./editing-copy.ts";
-import { regular } from "./fonts.ts";
+import { bold, regular } from "./fonts.ts";
 
 /** Edits a preset: the daily limits and FSRS options its decks share. */
 export function DeckOptionsEditor({
@@ -189,6 +190,22 @@ export function DeckOptionsEditor({
               control
             );
           }}
+        </form.Field>
+      ))}
+      <Text style={bold} accessibilityRole="header" className="text-label text-foreground">
+        {t("displayOrder")}
+      </Text>
+      {displayOrderFields(locale).map(({ key, label, choices }) => (
+        <form.Field key={key} name={key}>
+          {(field) => (
+            <Choice
+              label={label}
+              options={choices}
+              value={field.state.value}
+              onChange={field.handleChange}
+              disabled={busy}
+            />
+          )}
         </form.Field>
       ))}
     </View>

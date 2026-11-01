@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native/pure";
 import { expect, test } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Effect } from "effect";
@@ -140,6 +140,9 @@ test("deck options save limits, retention and learning steps, and refuse what FS
   );
   await fireEvent.changeText(screen.getByLabelText("Cartões novos por dia"), "5");
   await fireEvent.changeText(screen.getByLabelText("Etapas de aprendizado (minutos)"), "2 15");
+  const newMix = within(screen.getByLabelText("Cartões novos e revisões"));
+  await fireEvent.press(newMix.getByRole("radio", { name: "Antes das revisões" }));
+  await press("radio", "Atraso relativo");
   await press("button", "Salvar");
   await screen.findByRole("button", { name: "Opções do baralho" });
 
@@ -153,6 +156,9 @@ test("deck options save limits, retention and learning steps, and refuse what FS
     preset.fields.buryReviews.value,
     preset.fields.buryLearning.value,
   ]).toEqual([true, true, true]);
+  expect(preset.fields.newMix.value).toBe("before");
+  expect(preset.fields.interdayLearningMix.value).toBe("mix");
+  expect(preset.fields.reviewOrder.value).toBe("relativeOverdueness");
 });
 
 test("Set due date and Forget append their log entries for a studied card", async () => {

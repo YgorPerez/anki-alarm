@@ -1,6 +1,7 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh copies are sorted. */
 /* oxlint-disable eslint/no-await-in-loop -- Statements run in order, one media file at a time. */
 import { APP_ID_KEY } from "./apkg.ts";
+import { displayOrderToAnki } from "./display-order.ts";
 import { mediaReferences, safeMediaName } from "./media.ts";
 import type { Card, CollectionState, Deck, Field, NoteType, Preset } from "./collection.ts";
 import { importId, sha1, type ImportKind } from "./ids.ts";
@@ -598,6 +599,13 @@ function presetJson(preset: Preset, anki: { id: number; appId?: string }) {
     maxTaken: f.maximumAnswerSeconds.value,
     timer: f.showTimer.value ? 1 : 0,
     stopTimerOnAnswer: f.stopTimerOnAnswer.value,
+    ...displayOrderToAnki({
+      newGatherPriority: f.newGatherPriority.value,
+      newSortOrder: f.newSortOrder.value,
+      newMix: f.newMix.value,
+      interdayLearningMix: f.interdayLearningMix.value,
+      reviewOrder: f.reviewOrder.value,
+    }),
   };
 }
 

@@ -157,6 +157,8 @@ export type { BrowseRow } from "./browse.ts";
 export { runCommand } from "./commands.ts";
 export { answerUndo, popUndo, pushUndo, runStudyAction, UNDO_LIMIT } from "./undo.ts";
 export type { StudyAction, UndoStack, UndoStep } from "./undo.ts";
+export { DISPLAY_ORDER_KEYS } from "./display-order.ts";
+export type { DisplayOrder } from "./display-order.ts";
 export { presetTexts, readPresetTexts, validPresetText } from "./preset-text.ts";
 export type { PresetTexts } from "./preset-text.ts";
 export type { CollectionCommand } from "./commands.ts";
