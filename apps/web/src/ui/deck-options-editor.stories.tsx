@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { expect, fireEvent, fn, userEvent, within } from "storybook/test";
 
 import { DeckOptionsEditor } from "./deck-options-editor.tsx";
 import { editorFixture } from "./editor-fixtures.ts";
@@ -20,9 +20,8 @@ export const SharedPreset: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByText("Estas opções valem para 2 baralhos.")).toBeVisible();
     const retention = canvas.getByLabelText("Retenção desejada");
-    await expect(retention).toHaveValue("0,9");
-    await userEvent.clear(retention);
-    await userEvent.type(retention, "0,85");
+    await expect(retention).toHaveValue("90");
+    await fireEvent.change(retention, { target: { value: "85" } });
     await userEvent.click(canvas.getByRole("button", { name: "Salvar" }));
     await expect(args.onSave).toHaveBeenCalledWith(
       expect.objectContaining({ desiredRetention: 0.85, newPerDay: 20, learningSteps: [1, 10] }),

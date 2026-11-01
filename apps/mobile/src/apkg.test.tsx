@@ -109,6 +109,7 @@ test("exports a deck into a picked folder and importing the file back adds nothi
     </QueryClientProvider>,
   );
   await fireEvent.press(await screen.findByRole("button", { name: /Português::Verbos/ }));
+  await fireEvent.press(screen.getByRole("button", { name: "Opções do baralho" }));
   // Leaving the folder picker exports nothing and says nothing.
   await fireEvent.press(await screen.findByRole("button", { name: "Exportar .apkg" }));
   await screen.findByRole("button", { name: "Exportar .apkg" });

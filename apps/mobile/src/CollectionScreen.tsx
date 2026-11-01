@@ -14,6 +14,8 @@ import {
   type LogEntry,
   type Note,
   type NoteDraft,
+  type Preset,
+  type PresetOptions,
 } from "@app/core";
 import type { ClientData } from "@app/client-data";
 import { useForm } from "@tanstack/react-form";
@@ -91,24 +93,23 @@ export function CollectionScreen({
   const [form, setForm] = useState<Form>();
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
+  const optionsDirty = useRef(false);
   const [error, setError] = useState(false);
   const [notice, setNotice] = useState("");
   const t = copy(locale);
   const goBack = useCallback(() => {
     if (studying || linking) return false;
     if (locked.current) return true;
+    if (form?.kind === "options" && !optionsDirty.current) {
+      setForm(undefined);
+      setError(false);
+      return true;
+    }
     if (form) {
-      Alert.alert(t("discardTitle"), t("discardBody"), [
-        { text: t("cancel"), style: "cancel" },
-        {
-          text: t("discard"),
-          style: "destructive",
-          onPress: () => {
-            setForm(undefined);
-            setError(false);
-          },
-        },
-      ]);
+      confirmDiscard(t, () => {
+        setForm(undefined);
+        setError(false);
+      });
       return true;
     }
     if (deckId) {
@@ -280,15 +281,19 @@ export function CollectionScreen({
     const preset = state.presets.find((p) => p.id === deck?.fields.presetId.value);
     if (form?.kind === "options" && preset)
       return (
-        <DeckOptionsEditor
+        <DeckOptionsScreen
           preset={preset}
-          deckCount={state.decks.filter((d) => d.fields.presetId.value === preset.id).length}
+          state={state}
+          deck={deck}
           locale={locale}
           busy={busy}
-          onCancel={cancel}
+          onDirtyChange={(dirty) => {
+            optionsDirty.current = dirty;
+          }}
+          onCancel={goBack}
           onSave={(options) =>
             void change(
-              (c: Collection) => c.updatePreset(preset.id, options),
+              (c) => c.updatePreset(preset.id, options),
               () => setForm(undefined),
             )
           }
@@ -298,7 +303,6 @@ export function CollectionScreen({
       return (
         <DeckDetails
           t={t}
-          locale={locale}
           deck={deck}
           notes={notesIn(state, deck.id)}
           busy={busy}
@@ -336,6 +340,7 @@ export function CollectionScreen({
         goBack={goBack}
         onExit={onExit}
         onTheme={onTheme}
+        onOptions={() => setForm({ kind: "options" })}
       />
       <DeckStudyStart
         deck={deck}
@@ -364,6 +369,49 @@ export function CollectionScreen({
     </CollectionPage>
   );
 }
+function confirmDiscard(t: Translate, onDiscard: () => void) {
+  Alert.alert(t("discardTitle"), t("discardBody"), [
+    { text: t("cancel"), style: "cancel" },
+    { text: t("discard"), style: "destructive", onPress: onDiscard },
+  ]);
+}
+
+/** Options and export share a screen, separate from the deck's notes. */
+function DeckOptionsScreen({
+  preset,
+  state,
+  deck,
+  locale,
+  busy,
+  onDirtyChange,
+  onCancel,
+  onSave,
+}: {
+  preset: Preset;
+  state: CollectionState;
+  deck: Deck | undefined;
+  locale: Locale;
+  busy: boolean;
+  onDirtyChange: (dirty: boolean) => void;
+  onCancel: () => void;
+  onSave: (options: PresetOptions) => void;
+}) {
+  return (
+    <>
+      <DeckOptionsEditor
+        preset={preset}
+        deckCount={state.decks.filter((d) => d.fields.presetId.value === preset.id).length}
+        locale={locale}
+        busy={busy}
+        onDirtyChange={onDirtyChange}
+        onCancel={onCancel}
+        onSave={onSave}
+      />
+      {deck && <DeckExport deckId={deck.id} locale={locale} busy={busy} />}
+    </>
+  );
+}
+
 function CollectionHeading({
   t,
   locale,
@@ -373,12 +421,14 @@ function CollectionHeading({
   goBack,
   onExit,
   onTheme,
+  onOptions,
 }: {
   t: Translate;
   locale: Locale;
   form: Form | undefined;
   deck: Deck | undefined;
   busy: boolean;
+  onOptions: () => void;
   goBack: () => void;
   onExit: (() => void) | undefined;
   onTheme: () => void;
@@ -390,6 +440,9 @@ function CollectionHeading({
           <Button label={t("back")} disabled={busy} onPress={goBack} />
         ) : (
           onExit && <Button label={t("alarms")} disabled={busy} onPress={onExit} />
+        )}
+        {!form && deck && (
+          <Button label={editingCopy(locale)("deckOptions")} disabled={busy} onPress={onOptions} />
         )}
         {!form && !deck && <Button label={t("theme")} disabled={busy} onPress={onTheme} />}
       </View>
@@ -536,7 +589,6 @@ function DeckNameEditor({
 }
 function DeckDetails({
   t,
-  locale,
   deck,
   notes,
   busy,
@@ -544,7 +596,6 @@ function DeckDetails({
   remove,
 }: {
   t: Translate;
-  locale: Locale;
   deck: Deck;
   notes: Note[];
   busy: boolean;
@@ -580,16 +631,10 @@ function DeckDetails({
         </Pressable>
       ))}
       <Button
-        label={editingCopy(locale)("deckOptions")}
-        disabled={busy}
-        onPress={() => edit({ kind: "options" })}
-      />
-      <Button
         label={t("rename")}
         disabled={busy}
         onPress={() => edit({ kind: "deck", id: deck.id })}
       />
-      <DeckExport deckId={deck.id} locale={locale} busy={busy} />
       <Button label={t("delete")} destructive disabled={busy} onPress={remove} />
     </>
   );

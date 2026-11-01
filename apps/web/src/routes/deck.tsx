@@ -1,6 +1,6 @@
 import type { Deck, Locale } from "@app/core";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useBlocker } from "@tanstack/react-router";
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
 
@@ -18,19 +18,27 @@ import { Button } from "#/ui/shadcn/button.tsx";
 
 // No deck: the form for a new one.
 export const Route = createFileRoute("/deck")({
-  validateSearch: (search: Record<string, unknown>): { deck?: string } =>
-    typeof search["deck"] === "string" ? { deck: search["deck"] } : {},
+  validateSearch: (search: Record<string, unknown>): { deck?: string; options?: boolean } => ({
+    ...(typeof search["deck"] === "string" ? { deck: search["deck"] } : {}),
+    ...(search["options"] === true ? { options: true } : {}),
+  }),
   component: DeckPage,
 });
 
 function DeckPage() {
-  const { deck: deckId, lang = "pt-BR" } = Route.useSearch();
+  const { deck: deckId, options, lang = "pt-BR" } = Route.useSearch();
   const t = editingCopy(lang);
   const query = useQuery(collectionQuery);
   const deck = query.data?.collection.decks.find((d) => d.id === deckId);
   return (
     <main className="mx-auto flex min-h-dvh max-w-3xl flex-col gap-8 p-6">
-      <BackLink lang={lang} label={t("goBack")} />
+      {options && deckId ? (
+        <Link to="/deck" search={{ deck: deckId, ...langSearch(lang) }}>
+          ‹ {t("goBack")}
+        </Link>
+      ) : (
+        <BackLink lang={lang} label={t("goBack")} />
+      )}
       {!deckId ? (
         <NewDeck lang={lang} t={t} />
       ) : !query.data ? (
@@ -38,7 +46,13 @@ function DeckPage() {
       ) : !deck ? (
         <Notice tone="muted">{t("deckMissing")}</Notice>
       ) : (
-        <DeckEditor key={deck.id} deck={deck} lang={lang} t={t} />
+        <DeckEditor
+          key={`${deck.id}-${Boolean(options)}`}
+          deck={deck}
+          lang={lang}
+          t={t}
+          options={Boolean(options)}
+        />
       )}
     </main>
   );
@@ -62,7 +76,17 @@ function NewDeck({ lang, t }: { lang: Locale; t: EditingT }) {
   );
 }
 
-function DeckEditor({ deck, lang, t }: { deck: Deck; lang: Locale; t: EditingT }) {
+function DeckEditor({
+  deck,
+  lang,
+  t,
+  options,
+}: {
+  deck: Deck;
+  lang: Locale;
+  t: EditingT;
+  options: boolean;
+}) {
   const navigate = useNavigate();
   const { data } = useQuery(collectionQuery);
   const collection = data!.collection;
@@ -71,9 +95,48 @@ function DeckEditor({ deck, lang, t }: { deck: Deck; lang: Locale; t: EditingT }
   const sharing = collection.decks.filter((d) => d.fields.presetId.value === preset?.id).length;
   const cards = collection.cards.filter((c) => c.fields.deckId.value === deck.id).length;
   const [deleteFailed, setDeleteFailed] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  useBlocker({
+    shouldBlockFn: () => dirty && !window.confirm(t("discardOptions")),
+    enableBeforeUnload: dirty,
+  });
+  if (options)
+    return (
+      <>
+        <h1 className="text-title font-bold">{t("deckOptions")}</h1>
+        <p className="text-body text-muted-foreground">{name}</p>
+        {preset && (
+          <DeckOptionsEditor
+            key={preset.id}
+            preset={preset}
+            onDirtyChange={setDirty}
+            deckCount={sharing}
+            locale={lang}
+            onSave={async (patch) => {
+              await change({ kind: "updatePreset", id: preset.id, patch });
+            }}
+          />
+        )}
+        <DeckExport deckId={deck.id} t={t} />
+      </>
+    );
   return (
     <>
-      <h1 className="text-title font-bold">{name}</h1>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-title font-bold">{name}</h1>
+        <Button
+          variant="outline"
+          size="lg"
+          onClick={() =>
+            void navigate({
+              to: "/deck",
+              search: { deck: deck.id, options: true, ...langSearch(lang) },
+            })
+          }
+        >
+          {t("deckOptions")}
+        </Button>
+      </header>
       <nav className="flex flex-wrap gap-3">
         <Button
           variant="secondary"
@@ -98,18 +161,6 @@ function DeckEditor({ deck, lang, t }: { deck: Deck; lang: Locale; t: EditingT }
         action={t("rename")}
         onSave={(next) => change({ kind: "renameDeck", id: deck.id, name: next }).then(() => {})}
       />
-      {preset && (
-        <DeckOptionsEditor
-          key={preset.id}
-          preset={preset}
-          deckCount={sharing}
-          locale={lang}
-          onSave={async (options) => {
-            await change({ kind: "updatePreset", id: preset.id, patch: options });
-          }}
-        />
-      )}
-      <DeckExport deckId={deck.id} t={t} />
       <section className="flex flex-col gap-3">
         <Confirm
           label={t("deleteDeck")}
