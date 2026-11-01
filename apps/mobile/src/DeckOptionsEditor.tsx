@@ -1,6 +1,8 @@
 import {
+  ANSWER_ACTIONS,
   DEFAULT_FSRS_PARAMETERS,
   deckLimitTexts,
+  QUESTION_ACTIONS,
   presetTexts,
   readPresetTexts,
   scopedLimit,
@@ -21,6 +23,15 @@ import { Button, Choice, SaveButtons, TextField } from "./controls.tsx";
 import { editingCopy } from "./editing-copy.ts";
 import { EasyDaysField } from "./EasyDaysField.tsx";
 import { bold, regular } from "./fonts.ts";
+
+const ACTION_LABELS = {
+  showAnswer: "actionShowAnswer",
+  showReminder: "actionShowReminder",
+  bury: "actionBury",
+  again: "actionAgain",
+  good: "actionGood",
+  hard: "actionHard",
+} as const;
 
 /** Edits a preset: the daily limits and FSRS options its decks share. */
 export function DeckOptionsEditor({
@@ -70,6 +81,18 @@ export function DeckOptionsEditor({
     {
       key: "maximumAnswerSeconds",
       label: t("maximumAnswerSeconds"),
+      error: t("invalidLimit"),
+      numeric: true,
+    },
+    {
+      key: "secondsToShowQuestion",
+      label: t("secondsToShowQuestion"),
+      error: t("invalidLimit"),
+      numeric: true,
+    },
+    {
+      key: "secondsToShowAnswer",
+      label: t("secondsToShowAnswer"),
       error: t("invalidLimit"),
       numeric: true,
     },
@@ -272,6 +295,54 @@ export function DeckOptionsEditor({
           )}
         </form.Field>
       ))}
+      <View className="gap-3">
+        <Text style={regular} className="text-label font-bold text-foreground">
+          {t("autoAdvance")}
+        </Text>
+        <form.Field name="waitForAudio">
+          {(field) => (
+            <View className="min-h-12 flex-row items-center justify-between gap-3">
+              <Text style={regular} className="flex-1 text-body text-foreground">
+                {t("waitForAudio")}
+              </Text>
+              <Switch
+                accessibilityLabel={t("waitForAudio")}
+                value={field.state.value === "true"}
+                onValueChange={(value) => field.handleChange(String(value))}
+                disabled={busy}
+              />
+            </View>
+          )}
+        </form.Field>
+        <form.Field name="questionAction">
+          {(field) => (
+            <Choice<string>
+              label={t("questionAction")}
+              options={QUESTION_ACTIONS.map((value) => ({
+                value,
+                label: t(ACTION_LABELS[value]),
+              }))}
+              value={field.state.value}
+              onChange={field.handleChange}
+              disabled={busy}
+            />
+          )}
+        </form.Field>
+        <form.Field name="answerAction">
+          {(field) => (
+            <Choice<string>
+              label={t("answerAction")}
+              options={ANSWER_ACTIONS.map((value) => ({
+                value,
+                label: t(ACTION_LABELS[value]),
+              }))}
+              value={field.state.value}
+              onChange={field.handleChange}
+              disabled={busy}
+            />
+          )}
+        </form.Field>
+      </View>
       {fields.map((spec) => (
         <form.Field
           key={spec.key}

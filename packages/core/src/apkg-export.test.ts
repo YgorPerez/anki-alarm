@@ -578,3 +578,24 @@ test("apkg round trip preserves new card, lapse and maximum interval options", a
     maximumInterval: 90,
   });
 });
+
+test("apkg round trip carries auto advance options", async () => {
+  const { collection, log, english } = await studied();
+  collection.updatePreset(english.fields.presetId.value, {
+    secondsToShowQuestion: 2.5,
+    secondsToShowAnswer: 4,
+    waitForAudio: false,
+    questionAction: "showReminder",
+    answerAction: "good",
+  });
+  const { package: source } = await exported(collection.snapshot(), log, "Inglês");
+  const copy = new Collection(environment("copy"));
+  copy.importAnki(source);
+  const preset = copy.snapshot().presets.find((p) => p.fields.secondsToShowQuestion.value === 2.5);
+  expect(preset?.fields).toMatchObject({
+    secondsToShowAnswer: { value: 4 },
+    waitForAudio: { value: false },
+    questionAction: { value: "showReminder" },
+    answerAction: { value: "good" },
+  });
+});

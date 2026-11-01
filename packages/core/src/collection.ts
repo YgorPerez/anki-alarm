@@ -3,6 +3,15 @@ import { default_w } from "ts-fsrs";
 import type { AnkiPackage } from "./apkg.ts";
 import type { LimitKind, LimitScope } from "./daily-limits.ts";
 import {
+  ANSWER_ACTIONS,
+  AUTO_ADVANCE_DEFAULTS,
+  QUESTION_ACTIONS,
+  autoAdvanceOptions,
+  validAutoAdvanceSeconds,
+  type AnswerAction,
+  type QuestionAction,
+} from "./auto-advance.ts";
+import {
   linkedAnkiDroidDecks,
   presetFromOptions,
   seenReps,
@@ -101,6 +110,11 @@ export type Preset = RecordFields<
     maximumAnswerSeconds: number;
     showTimer: boolean;
     stopTimerOnAnswer: boolean;
+    secondsToShowQuestion: number;
+    secondsToShowAnswer: number;
+    waitForAudio: boolean;
+    questionAction: QuestionAction;
+    answerAction: AnswerAction;
   } & DisplayOrder
 > &
   AnkiIdentity;
@@ -112,6 +126,11 @@ export type PresetOptions = {
   [K in Exclude<keyof Preset["fields"], "isDefault">]: Preset["fields"][K]["value"];
 };
 const presetKeys = [
+  "secondsToShowQuestion",
+  "secondsToShowAnswer",
+  "waitForAudio",
+  "questionAction",
+  "answerAction",
   "dontPlayAutomatically",
   "skipQuestionWhenReplayingAnswer",
   "maximumAnswerSeconds",
@@ -157,6 +176,11 @@ export const validOption: { [K in keyof PresetOptions]: (value: PresetOptions[K]
   maximumAnswerSeconds: (v) => Number.isSafeInteger(v) && v >= 0 && v <= 9999,
   showTimer: (v) => typeof v === "boolean",
   stopTimerOnAnswer: (v) => typeof v === "boolean",
+  secondsToShowQuestion: validAutoAdvanceSeconds,
+  secondsToShowAnswer: validAutoAdvanceSeconds,
+  waitForAudio: (v) => typeof v === "boolean",
+  questionAction: (v) => QUESTION_ACTIONS.includes(v),
+  answerAction: (v) => ANSWER_ACTIONS.includes(v),
   name: (v) => typeof v === "string" && Boolean(v.trim()),
   newPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
   reviewsPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
@@ -322,6 +346,7 @@ export function parseCollection(stored: StoredCollection): CollectionState {
       ...AUDIO_TIMER_DEFAULTS,
       ...LIMIT_RULE_DEFAULTS,
       ...DEFAULT_DISPLAY_ORDER,
+      ...AUTO_ADVANCE_DEFAULTS,
     })) {
       if (!(key in preset.fields))
         Object.assign(preset.fields, { [key]: { value, hlc: preset.fields.name.hlc } });
@@ -475,6 +500,7 @@ export class Collection {
         isDefault: true,
         ...AUDIO_TIMER_DEFAULTS,
         ...LIMIT_RULE_DEFAULTS,
+        ...AUTO_ADVANCE_DEFAULTS,
         name: "Default",
         buryNew: false,
         buryReviews: false,
@@ -757,6 +783,7 @@ export class Collection {
         ? DEFAULT_DISPLAY_ORDER.interdayLearningMix
         : source.fields.interdayLearningMix.value,
       reviewOrder: factory ? DEFAULT_DISPLAY_ORDER.reviewOrder : source.fields.reviewOrder.value,
+      ...(factory ? AUTO_ADVANCE_DEFAULTS : autoAdvanceOptions(source)),
       isDefault: false,
     });
     this.state.presets.push(preset);
@@ -965,6 +992,7 @@ export class Collection {
             {
               ...AUDIO_TIMER_DEFAULTS,
               ...LIMIT_RULE_DEFAULTS,
+              ...AUTO_ADVANCE_DEFAULTS,
               relearningSteps: [10],
               insertionOrder: "sequential" as const,
               leechThreshold: 8,
@@ -1183,6 +1211,12 @@ export class Collection {
         maximumAnswerSeconds: p.maximumAnswerSeconds ?? AUDIO_TIMER_DEFAULTS.maximumAnswerSeconds,
         showTimer: p.showTimer ?? AUDIO_TIMER_DEFAULTS.showTimer,
         stopTimerOnAnswer: p.stopTimerOnAnswer ?? AUDIO_TIMER_DEFAULTS.stopTimerOnAnswer,
+        secondsToShowQuestion:
+          p.secondsToShowQuestion ?? AUTO_ADVANCE_DEFAULTS.secondsToShowQuestion,
+        secondsToShowAnswer: p.secondsToShowAnswer ?? AUTO_ADVANCE_DEFAULTS.secondsToShowAnswer,
+        waitForAudio: p.waitForAudio ?? AUTO_ADVANCE_DEFAULTS.waitForAudio,
+        questionAction: p.questionAction ?? AUTO_ADVANCE_DEFAULTS.questionAction,
+        answerAction: p.answerAction ?? AUTO_ADVANCE_DEFAULTS.answerAction,
         name,
         newPerDay,
         reviewsPerDay,

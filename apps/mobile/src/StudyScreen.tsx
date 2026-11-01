@@ -1,5 +1,6 @@
-import { deckPreset } from "@app/core";
+import { autoAdvanceStep, deckPreset } from "@app/core";
 import { StudyAudio } from "./StudyAudio.tsx";
+import { useAutoAdvance } from "./use-auto-advance.ts";
 import { useStudyTimer } from "./use-study-timer.ts";
 import { autoSyncBack } from "./ankidroid-sync-query.ts";
 import type { AnkiDroidApi } from "./ankidroid.ts";
@@ -62,7 +63,9 @@ export function StudyScreen({
   const t = copy(locale);
   const insets = useSafeAreaInsets();
   const dark = useColorScheme() === "dark";
-  const study = useStudySession(deckId, onExit);
+  const [editing, setEditing] = useState<string>();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const study = useStudySession(deckId, onExit, Boolean(editing) || menuOpen);
   const { query, busy, error, canUndo, undo } = study;
   const client = useQueryClient();
   const completed = Boolean(query.data && !study.card && !busy);
@@ -84,7 +87,6 @@ export function StudyScreen({
     },
     [ankiDroid, client],
   );
-  const [editing, setEditing] = useState<string>();
   const deckName = query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value;
   const frame = { paddingTop: insets.top, paddingBottom: insets.bottom };
   if (editing)
@@ -115,6 +117,7 @@ export function StudyScreen({
         locale={locale}
         onExit={onExit}
         onUndo={canUndo ? undo : undefined}
+        onMenuOpenChange={setMenuOpen}
       />
       <StudyFeedback
         locale={locale}
@@ -179,7 +182,14 @@ function StudyReview({
               side={revealed ? "back" : "front"}
               preset={study.preset}
               locale={locale}
+              onPlaying={study.audioPlaying}
+              onFinished={study.audioFinished}
             />
+          )}
+          {study.reminder && (
+            <Text accessibilityLiveRegion="polite" className="text-label text-attention">
+              {editingCopy(locale)(revealed ? "answerReminder" : "questionReminder")}
+            </Text>
           )}
           <AnswerControls
             intervals={study.intervals}
@@ -235,7 +245,9 @@ function StudyNavigation({
   locale,
   onExit,
   onUndo,
+  onMenuOpenChange,
 }: {
+  onMenuOpenChange: (open: boolean) => void;
   annotations: ReactNode;
   counts: ReturnType<typeof studyCounts> | undefined;
   items: Parameters<typeof StudyMenu>[0]["items"];
@@ -271,7 +283,7 @@ function StudyNavigation({
         <ThemedIcon icon={Undo2} />
       </Pressable>
       {annotations}
-      <StudyMenu items={items} locale={locale} busy={busy} />
+      <StudyMenu items={items} locale={locale} busy={busy} onOpenChange={onMenuOpenChange} />
     </View>
   );
 }
@@ -441,7 +453,9 @@ function gradeRows({ width, fontScale }: { width: number; fontScale: number }) {
   return pill >= 4 * 17 * fontScale ? [[1, 2, 3, 4] as const] : [[1, 2] as const, [3, 4] as const];
 }
 
-function useStudySession(deckId: string, onExit: () => void) {
+const GRADE_ACTIONS = { again: 1, hard: 2, good: 3 } as const;
+
+function useStudySession(deckId: string, onExit: () => void, held: boolean) {
   const client = useQueryClient();
   const [revealedId, setRevealedId] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -449,6 +463,8 @@ function useStudySession(deckId: string, onExit: () => void) {
   /** This session's answers and card-menu actions, newest last: what Undo reverses. */
   const history = useUndoStack();
   const [undone, setUndone] = useState<string>();
+  /** The card and side whose audio has ended. */
+  const [audioFinishedOn, setAudioFinishedOn] = useState<string>();
   const lock = useRef(false);
   const query = useQuery({
     queryKey: ["study", deckId],
@@ -532,6 +548,24 @@ function useStudySession(deckId: string, onExit: () => void) {
       await Promise.all([refresh(), client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY })]);
     });
   }
+  const reveal = () => {
+    timer.stop();
+    setRevealedId(cardId);
+  };
+  const side = cardId && `${cardId}-${revealed}`;
+  const autoAdvance = useAutoAdvance({
+    side,
+    step: preset && autoAdvanceStep(preset, revealed ? "back" : "front"),
+    // A failed write keeps the card and waits for the user, rather than trying again by itself.
+    held: held || busy || error || !screenActive,
+    audioFinished: Boolean(side && audioFinishedOn === side),
+    run: (action) => {
+      if (!cardId) return;
+      if (action === "showAnswer") reveal();
+      else if (action === "bury") void leave({ kind: "buryCard", cardId });
+      else void answer(GRADE_ACTIONS[action]);
+    },
+  });
   return {
     preset,
     timer,
@@ -550,13 +584,13 @@ function useStudySession(deckId: string, onExit: () => void) {
     busy,
     error,
     revealed,
-    reveal: () => {
-      timer.stop();
-      setRevealedId(cardId);
-    },
+    reveal,
     answer,
     change,
     leave,
+    reminder: autoAdvance.reminder,
+    audioPlaying: () => setAudioFinishedOn(undefined),
+    audioFinished: () => setAudioFinishedOn(side),
     canUndo: history.canUndo,
     undo,
     refresh,

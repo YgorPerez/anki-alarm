@@ -242,3 +242,6 @@ export { isDefaultPreset } from "./collection.ts";
 export { studyAnswerDuration } from "./study.ts";
 
 export { studyAudio } from "./read-aloud.ts";
+
+export { ANSWER_ACTIONS, QUESTION_ACTIONS, autoAdvanceStep } from "./auto-advance.ts";
+export type { AnswerAction, AutoAdvanceStep, QuestionAction } from "./auto-advance.ts";

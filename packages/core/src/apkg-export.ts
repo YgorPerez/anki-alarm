@@ -1,6 +1,7 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh copies are sorted. */
 /* oxlint-disable eslint/no-await-in-loop -- Statements run in order, one media file at a time. */
 import { APP_ID_KEY } from "./apkg.ts";
+import { ankiAutoAdvance, autoAdvanceOptions } from "./auto-advance.ts";
 import { displayOrderToAnki } from "./display-order.ts";
 import { easyDaysToAnki } from "./easy-days.ts";
 import { mediaReferences, safeMediaName } from "./media.ts";
@@ -630,6 +631,7 @@ function presetJson(preset: Preset, anki: { id: number; appId?: string }) {
       interdayLearningMix: f.interdayLearningMix.value,
       reviewOrder: f.reviewOrder.value,
     }),
+    ...ankiAutoAdvance(autoAdvanceOptions(preset)),
   };
 }
 

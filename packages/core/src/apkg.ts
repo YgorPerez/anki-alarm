@@ -1,4 +1,11 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh copies are sorted. */
+import {
+  ankiAnswerAction,
+  ankiQuestionAction,
+  ankiSeconds,
+  type AnswerAction,
+  type QuestionAction,
+} from "./auto-advance.ts";
 import { displayOrderFromAnki, type DisplayOrder } from "./display-order.ts";
 import { easyDaysFromAnki, type EasyDay } from "./easy-days.ts";
 import { safeMediaName } from "./media.ts";
@@ -82,6 +89,11 @@ export interface AnkiPackage {
     stopTimerOnAnswer?: boolean;
     /** Absent means Anki's defaults. */
     displayOrder?: DisplayOrder;
+    secondsToShowQuestion?: number;
+    secondsToShowAnswer?: number;
+    waitForAudio?: boolean;
+    questionAction?: QuestionAction;
+    answerAction?: AnswerAction;
   }[];
   notes: {
     id: number;
@@ -413,6 +425,12 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         showTimer: c.timer === 1,
         stopTimerOnAnswer: c.stopTimerOnAnswer === true,
         displayOrder: displayOrderFromAnki(c),
+        secondsToShowQuestion: ankiSeconds(c.secondsToShowQuestion),
+        secondsToShowAnswer: ankiSeconds(c.secondsToShowAnswer),
+        // Older packages don't have it; Anki's default is on.
+        waitForAudio: c.waitForAudio !== false,
+        questionAction: ankiQuestionAction(c.questionAction),
+        answerAction: ankiAnswerAction(c.answerAction),
       })),
   };
 }
@@ -514,6 +532,12 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
           reviewOrder: c.number(33),
           newGatherPriority: c.number(34),
         }),
+        // Proto3 leaves zero values out, so absent is 0, off or the first action.
+        secondsToShowQuestion: ankiSeconds(c.float(41)),
+        secondsToShowAnswer: ankiSeconds(c.float(42)),
+        waitForAudio: c.number(44) === 1,
+        questionAction: ankiQuestionAction(c.number(36)),
+        answerAction: ankiAnswerAction(c.number(43)),
       };
     }),
   };
