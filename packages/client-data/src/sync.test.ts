@@ -3,6 +3,9 @@ import { DatabaseSync } from "node:sqlite";
 import {
   answerUndo,
   cardMemory,
+  nextIntervals,
+  studyDayStart,
+  type EasyDay,
   isBuried,
   newAlarm,
   popUndo,
@@ -595,6 +598,8 @@ test("flag and mark sync independently from card moves and note field edits", as
   }
 });
 
+const NORMAL_DAYS: EasyDay[] = Array.from({ length: 7 }, () => "normal");
+
 test("phone and web converge after offline answers under different scheduling options", async () => {
   const server = memorySyncServer();
   const api = await connect(server);
@@ -642,4 +647,47 @@ test("phone and web converge after offline answers under different scheduling op
   const there = cardMemory(await run(web.data.collection), webLog, cardId, 3000);
   expect(here).toEqual(there);
   expect(here?.due.getTime()).toBe(3000 + 60_000);
+});
+
+test("easy days replay the same on phone and web, whatever either edits later", async () => {
+  const server = memorySyncServer();
+  const api = await connect(server);
+  const phone = await device("phone");
+  const web = await device("web");
+  const state = await run(
+    phone.data.changeCollection((c) => {
+      const deck = c.createDeck("Words");
+      c.addBasicNote(deck.id, "one", "um");
+    }),
+  );
+  const cardId = state.cards[0]!.id;
+  const presetId = state.presets[0]!.id;
+  await run(phone.data.adoptAccount("user-1"));
+  await run(web.data.adoptAccount("user-1"));
+  phone.clock.now = 2000;
+  const exact = nextIntervals(state, [], cardId, 2000)![4] / 86_400;
+  // Monday first, so this is the weekday Easy lands on.
+  const landing = (new Date(studyDayStart(2000)).getDay() + 6 + exact) % 7;
+  const week = NORMAL_DAYS.map((day, weekday) => (weekday === landing ? "minimum" : day));
+  await run(phone.data.changeCollection((c) => c.updatePreset(presetId, { easyDays: week })));
+  await run(phone.data.answerCard(cardId, 4, 100));
+  await run(phone.data.sync(api.client));
+  await run(web.data.sync(api.client));
+  await run(web.data.changeCollection((c) => c.updatePreset(presetId, { easyDays: NORMAL_DAYS })));
+  await run(web.data.sync(api.client));
+  await run(phone.data.sync(api.client));
+  const here = cardMemory(
+    await run(phone.data.collection),
+    await run(phone.data.reviewLog),
+    cardId,
+    3000,
+  );
+  const there = cardMemory(
+    await run(web.data.collection),
+    await run(web.data.reviewLog),
+    cardId,
+    3000,
+  );
+  expect(here?.scheduled_days).toBe(exact - 1);
+  expect(here).toEqual(there);
 });

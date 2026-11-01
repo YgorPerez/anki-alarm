@@ -480,7 +480,7 @@ test("intervals use the card's deck retention override and respond to undo", () 
 
 test("preset edits leave answered cards alone and only change later answers", () => {
   const { state, cardId, preset } = fixture();
-  const options = schedulingOptions(preset);
+  const options = schedulingOptions(preset, now);
   const review: LogEntry = {
     kind: "review",
     id: "first",
@@ -502,7 +502,7 @@ test("preset edits leave answered cards alone and only change later answers", ()
     ...review,
     id: "later",
     at: now + 60_000,
-    options: schedulingOptions(preset),
+    options: schedulingOptions(preset, now),
   };
   expect(cardMemory(state, [review, later], cardId, now)?.due.getTime()).toBe(
     later.at + 30 * 60_000,

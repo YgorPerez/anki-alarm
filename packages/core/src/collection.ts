@@ -12,6 +12,7 @@ import {
 } from "./ankidroid.ts";
 import { cardId, importId, uuid7 } from "./ids.ts";
 import { isLanguageTag } from "./locale.ts";
+import { EASY_DAYS, NORMAL_WEEK, type EasyDay } from "./easy-days.ts";
 import { editedNoteType, editedValues, noteTypeProblems, type NoteTypeEdit } from "./note-types.ts";
 import { deckPreset, schedulingOptions, dueInDays, studyDayStart, type LogEntry } from "./study.ts";
 
@@ -50,6 +51,8 @@ export type Preset = RecordFields<{
   learningSteps: number[];
   /** FSRS-6's 21 weights. */
   fsrsParameters: number[];
+  /** Each weekday, Monday first. */
+  easyDays: EasyDay[];
 }> &
   AnkiIdentity;
 export type PresetOptions = {
@@ -62,6 +65,7 @@ const presetKeys = [
   "desiredRetention",
   "learningSteps",
   "fsrsParameters",
+  "easyDays",
 ] as const satisfies readonly (keyof PresetOptions)[];
 /** The bounds of a preset's options, for the rules below and the copy that states them. */
 export const PRESET_LIMITS = {
@@ -86,6 +90,7 @@ export const validOption: { [K in keyof PresetOptions]: (value: PresetOptions[K]
     v.every((n) => Number.isFinite(n) && n > 0),
   fsrsParameters: (v) =>
     Array.isArray(v) && v.length === PRESET_LIMITS.fsrsParameters && v.every(Number.isFinite),
+  easyDays: (v) => Array.isArray(v) && v.length === 7 && v.every((d) => EASY_DAYS.includes(d)),
 };
 export interface Template {
   name: string;
@@ -199,8 +204,8 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
  * Reads stored records in the current shape, upgrading what earlier versions saved with the
  * records' own clocks, so the upgrade itself is not an edit: Basic notes kept `front` and `back` as
  * properties and a `deckId` the cards now own; note types had one front and back template; presets
- * had no `fsrsParameters`, decks no `desiredRetention`, notes no `tags`, cards no `suspended` or
- * `buriedUntil`. Current records pass through unchanged.
+ * had no `fsrsParameters` or `easyDays`, decks no `desiredRetention`, notes no `tags`, cards no
+ * `suspended` or `buriedUntil`. Current records pass through unchanged.
  */
 export function parseCollection(stored: StoredCollection): CollectionState {
   // Each record is brought to its current shape below.
@@ -208,11 +213,13 @@ export function parseCollection(stored: StoredCollection): CollectionState {
   const state = copy(stored) as unknown as CollectionState;
   for (const deck of state.decks)
     deck.fields.desiredRetention ??= { value: null, hlc: deck.fields.name.hlc };
-  for (const preset of state.presets)
+  for (const preset of state.presets) {
     preset.fields.fsrsParameters ??= {
       value: [...DEFAULT_FSRS_PARAMETERS],
       hlc: preset.fields.name.hlc,
     };
+    preset.fields.easyDays ??= { value: [...NORMAL_WEEK], hlc: preset.fields.name.hlc };
+  }
   for (const card of state.cards) {
     card.fields.suspended ??= { value: false, hlc: card.fields.ordinal.hlc };
     card.fields.buriedUntil ??= { value: null, hlc: card.fields.ordinal.hlc };
@@ -351,6 +358,7 @@ export class Collection {
         desiredRetention: 0.9,
         learningSteps: [1, 10],
         fsrsParameters: [...DEFAULT_FSRS_PARAMETERS],
+        easyDays: [...NORMAL_WEEK],
       });
       this.state.presets.push(preset);
     }
@@ -654,7 +662,14 @@ export class Collection {
       steps.set(id, options.learningSteps);
       if (!this.state.presets.some((p) => p.id === presetId))
         this.state.presets.push({
-          ...this.record({ ...options, fsrsParameters: [...DEFAULT_FSRS_PARAMETERS] }, presetId),
+          ...this.record(
+            {
+              ...options,
+              fsrsParameters: [...DEFAULT_FSRS_PARAMETERS],
+              easyDays: [...NORMAL_WEEK],
+            },
+            presetId,
+          ),
           anki: { id: ankiId },
         });
       const deck = this.state.decks.find((d) => d.id === id);
@@ -861,6 +876,7 @@ export class Collection {
         desiredRetention,
         learningSteps,
         fsrsParameters: [...weights],
+        easyDays: p.easyDays ?? [...NORMAL_WEEK],
       };
       if (merge("presets", this.state.presets, index.presets, { id, values, mtime, rest }))
         presets.set(p.id, id);
@@ -962,7 +978,7 @@ export class Collection {
           grade: r.grade,
           durationMs: r.durationMs,
           origin: "import",
-          options: schedulingOptions(preset),
+          options: schedulingOptions(preset, r.at),
         });
       } else if (r.kind === "reset") log.push({ ...base, kind: "reset" });
       else log.push({ ...base, kind: "setDueDate", due: dueAfter(r.at, r.interval) });

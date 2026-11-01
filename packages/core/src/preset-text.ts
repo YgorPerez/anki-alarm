@@ -1,4 +1,5 @@
 import { validOption, type Preset, type PresetOptions } from "./collection.ts";
+import { EASY_DAYS, type EasyDay } from "./easy-days.ts";
 import type { Locale } from "./locale.ts";
 
 /** Deck options as a form holds them: the text the user types for each one. */
@@ -15,6 +16,7 @@ const list = (text: string, separator: RegExp) => {
   const values = parts.map(Number);
   return parts.every((p) => p !== "") && values.every(Number.isFinite) ? values : undefined;
 };
+const isEasyDay = (text: string): text is EasyDay => EASY_DAYS.some((day) => day === text);
 const read = {
   name: (text: string) => text.trim(),
   newPerDay: integer,
@@ -22,6 +24,10 @@ const read = {
   desiredRetention: decimal,
   learningSteps: (text: string) => list(text, /\s+/),
   fsrsParameters: (text: string) => list(text, /[\s,;]+/),
+  easyDays: (text: string) => {
+    const days = text.split(" ");
+    return days.every(isEasyDay) ? days : undefined;
+  },
 } satisfies { [K in keyof PresetOptions]: (text: string) => PresetOptions[K] | undefined };
 const KEYS = [
   "name",
@@ -30,6 +36,7 @@ const KEYS = [
   "desiredRetention",
   "learningSteps",
   "fsrsParameters",
+  "easyDays",
 ] as const satisfies readonly (keyof PresetOptions)[];
 const ok = <T>(value: T | undefined, rule: (value: T) => boolean) =>
   value !== undefined && rule(value);
@@ -42,6 +49,7 @@ export const validPresetText: Record<keyof PresetOptions, (text: string) => bool
   desiredRetention: (text) => ok(read.desiredRetention(text), validOption.desiredRetention),
   learningSteps: (text) => ok(read.learningSteps(text), validOption.learningSteps),
   fsrsParameters: (text) => ok(read.fsrsParameters(text), validOption.fsrsParameters),
+  easyDays: (text) => ok(read.easyDays(text), validOption.easyDays),
 };
 
 /** A preset's options as text, with the locale's decimal comma. */
@@ -55,6 +63,7 @@ export function presetTexts(preset: Preset, locale: Locale): PresetTexts {
     desiredRetention: decimalText(f.desiredRetention.value),
     learningSteps: f.learningSteps.value.join(" "),
     fsrsParameters: f.fsrsParameters.value.join(", "),
+    easyDays: f.easyDays.value.join(" "),
   };
 }
 
@@ -68,5 +77,6 @@ export function readPresetTexts(texts: PresetTexts): PresetOptions | undefined {
     desiredRetention: read.desiredRetention(texts.desiredRetention)!,
     learningSteps: read.learningSteps(texts.learningSteps)!,
     fsrsParameters: read.fsrsParameters(texts.fsrsParameters)!,
+    easyDays: read.easyDays(texts.easyDays)!,
   };
 }

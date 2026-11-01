@@ -1,6 +1,7 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only freshly filtered/mapped arrays are sorted. */
 import { createEmptyCard, fsrs, State, type Card as MemoryState, type Grade } from "ts-fsrs";
 import type { Card, CollectionState, Deck, Preset } from "./collection.ts";
+import { easyDayInterval, type EasyDays } from "./easy-days.ts";
 export type { MemoryState, Grade };
 /** FSRS card states: New, Learning, Review, Relearning. */
 export { State as CardState };
@@ -9,14 +10,27 @@ export type SchedulingOptions = {
   desiredRetention: number;
   learningSteps: number[];
   fsrsParameters: number[];
+  /**
+   * Absent when every day is normal, as on reviews from before easy days. The answer's weekday is
+   * recorded because a replay in another time zone would read another one from the clock.
+   */
+  easyDays?: EasyDays;
 };
-export function schedulingOptions(preset: Preset): SchedulingOptions {
+function fsrsOptions(preset: Preset): SchedulingOptions {
   return {
     desiredRetention: preset.fields.desiredRetention.value,
     learningSteps: [...preset.fields.learningSteps.value],
     fsrsParameters: [...preset.fields.fsrsParameters.value],
   };
 }
+/** The options an answer at `at` records. */
+export function schedulingOptions(preset: Preset, at: number): SchedulingOptions {
+  const days = preset.fields.easyDays.value;
+  if (days.every((day) => day === "normal")) return fsrsOptions(preset);
+  const weekday = (new Date(studyDayStart(at)).getDay() + 6) % 7;
+  return { ...fsrsOptions(preset), easyDays: { days: [...days], weekday } };
+}
+const DAY = 86_400_000;
 type Entry = { id: string; cardId: string; at: number };
 export type LogEntry = Entry &
   (
@@ -71,11 +85,7 @@ export function replayEntries(
     visit?.(entry, state);
     switch (entry.kind) {
       case "review":
-        state = schedulerFor(entry.options ?? schedulingOptions(preset)).next(
-          state,
-          new Date(entry.at),
-          entry.grade,
-        ).card;
+        state = answered(entry.options ?? fsrsOptions(preset), state, entry.at, entry.grade);
         break;
       case "reset":
         state = createEmptyCard(new Date(entry.at));
@@ -106,6 +116,43 @@ function schedulerFor(options: SchedulingOptions) {
     learning_steps: options.learningSteps.map((n) => `${n}m` as const),
   });
 }
+function answered(options: SchedulingOptions, memory: MemoryState, at: number, grade: Grade) {
+  return options.easyDays
+    ? answers(options, memory, at)[grade]
+    : schedulerFor(options).next(memory, new Date(at), grade).card;
+}
+/** Each grade's next state; the days Hard, Good and Easy send a card to follow the easy days. */
+function answers(options: SchedulingOptions, memory: MemoryState, at: number) {
+  const scheduler = schedulerFor(options);
+  const choices = scheduler.repeat(memory, new Date(at));
+  const states: Record<Grade, MemoryState> = {
+    1: choices[1].card,
+    2: choices[2].card,
+    3: choices[3].card,
+    4: choices[4].card,
+  };
+  if (!options.easyDays) return states;
+  const previous = memory.state === State.Review ? { previous: memory.scheduled_days } : {};
+  let floor = 1;
+  for (const grade of [2, 3, 4] as const) {
+    const card = states[grade];
+    if (card.state !== State.Review) continue;
+    const maximum = scheduler.parameters.maximum_interval;
+    const days = easyDayInterval(card.scheduled_days, options.easyDays, {
+      floor,
+      maximum,
+      ...previous,
+    });
+    const moved = (days - card.scheduled_days) * DAY;
+    states[grade] = {
+      ...card,
+      scheduled_days: days,
+      due: new Date(card.due.getTime() + moved),
+    };
+    floor = days + 1;
+  }
+  return states;
+}
 
 /** Seconds until each grade's due date, using the card's own preset, without adding reviews. */
 export function nextIntervals(
@@ -119,8 +166,8 @@ export function nextIntervals(
   const preset = deck && deckPreset(collection, deck);
   if (!preset) return undefined;
   const memory = replayCard(cardId, log, preset, now);
-  const choices = schedulerFor(schedulingOptions(preset)).repeat(memory, new Date(now));
-  const seconds = (grade: Grade) => (choices[grade].card.due.getTime() - now) / 1000;
+  const choices = answers(schedulingOptions(preset, now), memory, now);
+  const seconds = (grade: Grade) => (choices[grade].due.getTime() - now) / 1000;
   return { 1: seconds(1), 2: seconds(2), 3: seconds(3), 4: seconds(4) };
 }
 

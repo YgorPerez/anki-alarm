@@ -376,7 +376,7 @@ const open = (driver: SQLiteConnection, media: MediaFiles) =>
           if (!preset) throw new Error("Deck preset missing");
           return {
             ...base,
-            options: schedulingOptions(preset),
+            options: schedulingOptions(preset, base.at),
             kind: "review",
             cardId,
             grade,

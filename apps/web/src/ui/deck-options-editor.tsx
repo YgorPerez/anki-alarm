@@ -12,6 +12,7 @@ import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
 
 import { editingCopy, type EditingKey } from "#/editing-copy.ts";
+import { EasyDaysField } from "#/ui/easy-days-field.tsx";
 import { Field, TextField } from "#/ui/form.tsx";
 import { SaveStatus } from "#/ui/note-editor.tsx";
 import { Button } from "#/ui/shadcn/button.tsx";
@@ -163,6 +164,11 @@ export function DeckOptionsEditor({
           </form.Field>
         ))}
       </div>
+      <form.Field name="easyDays">
+        {(field) => (
+          <EasyDaysField value={field.state.value} locale={locale} onChange={field.handleChange} />
+        )}
+      </form.Field>
     </form>
   );
 }

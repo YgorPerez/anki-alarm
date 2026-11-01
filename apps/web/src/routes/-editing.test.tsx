@@ -30,12 +30,18 @@ test("a new deck gets options and a note, which the browser finds and edits as y
   expect(screen.getByRole("button", { name: "Salvar" })).toHaveProperty("disabled", true);
   await user.clear(newPerDay);
   await user.type(newPerDay, "5");
+  expect(screen.getByLabelText("Domingo")).toHaveProperty("value", "normal");
+  await user.selectOptions(screen.getByLabelText("Domingo"), "Mínimo");
+  await user.selectOptions(screen.getByLabelText("Sábado"), "Reduzido");
   await user.click(screen.getByRole("button", { name: "Salvar" }));
   expect(await screen.findByText("Salvo.")).toBeDefined();
   // Leaving and coming back shows what was saved.
   await user.click(screen.getByRole("link", { name: "‹ Voltar" }));
   await user.click(await screen.findByRole("button", { name: "Opções do baralho" }));
   expect(await screen.findByLabelText("Cartões novos por dia")).toHaveProperty("value", "5");
+  expect(screen.getByLabelText("Domingo")).toHaveProperty("value", "minimum");
+  expect(screen.getByLabelText("Sábado")).toHaveProperty("value", "reduced");
+  expect(screen.getByLabelText("Sexta-feira")).toHaveProperty("value", "normal");
 
   await user.click(screen.getByRole("link", { name: "‹ Voltar" }));
   await user.click(screen.getByRole("button", { name: "Adicionar nota" }));

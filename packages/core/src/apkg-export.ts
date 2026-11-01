@@ -1,6 +1,7 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh copies are sorted. */
 /* oxlint-disable eslint/no-await-in-loop -- Statements run in order, one media file at a time. */
 import { APP_ID_KEY } from "./apkg.ts";
+import { easyDaysToAnki } from "./easy-days.ts";
 import { mediaReferences, safeMediaName } from "./media.ts";
 import type { Card, CollectionState, Deck, Field, NoteType, Preset } from "./collection.ts";
 import { importId, sha1, type ImportKind } from "./ids.ts";
@@ -586,6 +587,7 @@ function presetJson(preset: Preset, anki: { id: number; appId?: string }) {
     lapse: { ...DCONF.lapse, delays: RELEARNING_STEPS },
     fsrsParams6: f.fsrsParameters.value,
     desiredRetention: f.desiredRetention.value,
+    easyDaysPercentages: easyDaysToAnki(f.easyDays.value),
   };
 }
 

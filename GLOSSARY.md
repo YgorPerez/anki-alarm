@@ -22,6 +22,9 @@ Decks nest.
 
 **Dismissal.** The end of an alarm session: N cards rated Good or Easy.
 
+**Easy day.** A weekday's setting in a preset: minimum, reduced or normal. Later answers avoid
+minimum and reduced days within Anki's fuzz range.
+
 **Grade.** Again, Hard, Good or Easy. Good and Easy count as right in an alarm session.
 
 **Linked deck.** A deck imported from AnkiDroid that keeps AnkiDroid's note and card ids, so it can

@@ -1,4 +1,5 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh copies are sorted. */
+import { easyDaysFromAnki, type EasyDay } from "./easy-days.ts";
 import { safeMediaName } from "./media.ts";
 import { Message } from "./protobuf.ts";
 
@@ -53,6 +54,8 @@ export interface AnkiPackage {
     learningSteps: number[];
     /** FSRS-6 weights; absent or empty means the defaults. */
     fsrsParameters?: number[];
+    /** Absent means every day is normal. */
+    easyDays?: EasyDay[];
   }[];
   notes: {
     id: number;
@@ -347,6 +350,7 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         desiredRetention: retention(c.desiredRetention, 0.9),
         learningSteps: steps(record(c.new).delays),
         fsrsParameters: fsrs6(steps(c.fsrsParams6)),
+        easyDays: easyDaysFromAnki(steps(c.easyDaysPercentages)),
       })),
   };
 }
@@ -409,6 +413,7 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
         desiredRetention: retention(c.float(37), 0.9),
         learningSteps: c.floats(1),
         fsrsParameters: fsrs6(c.floats(6)),
+        easyDays: easyDaysFromAnki(c.floats(4)),
       };
     }),
   };

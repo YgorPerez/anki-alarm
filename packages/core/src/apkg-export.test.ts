@@ -412,3 +412,20 @@ test("all seven flags and the marked tag survive an apkg round-trip", async () =
   ]);
   expect(restored.snapshot().notes.every((n) => n.fields.tags.value.includes("marked"))).toBe(true);
 });
+
+test("easy days survive an export and import, in Anki's percentages", async () => {
+  const collection = new Collection(environment());
+  const deck = collection.createDeck("Trip");
+  collection.addBasicNote(deck.id, "one", "um");
+  const presetId = collection.snapshot().presets[0]!.id;
+  const week = ["normal", "normal", "normal", "normal", "normal", "reduced", "minimum"] as const;
+  collection.updatePreset(presetId, { easyDays: [...week] });
+  const state = collection.snapshot();
+  const { zip, package: source } = await exported(state, [], "Trip");
+  const [col] = rows(zip, "SELECT dconf FROM col");
+  const dconf = JSON.parse(String(col!.dconf));
+  expect(dconf[Object.keys(dconf)[0]!].easyDaysPercentages).toEqual([1, 1, 1, 1, 1, 0.5, 0]);
+  const fresh = new Collection(environment("phone-b"));
+  fresh.importAnki(source);
+  expect(fresh.snapshot().presets[0]!.fields.easyDays.value).toEqual(week);
+});

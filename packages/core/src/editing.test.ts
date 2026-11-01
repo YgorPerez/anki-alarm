@@ -225,8 +225,10 @@ test("deck options forms read what the user types with Core's rules", () => {
     desiredRetention: 0.9,
     learningSteps: [1, 10],
     fsrsParameters: preset.fields.fsrsParameters.value,
+    easyDays: ["normal", "normal", "normal", "normal", "normal", "normal", "normal"],
   });
   expect(presetTexts(preset, "en").desiredRetention).toBe("0.9");
+  expect(texts.easyDays).toBe("normal normal normal normal normal normal normal");
   expect(readPresetTexts({ ...texts, learningSteps: "", name: " Mine " })).toMatchObject({
     name: "Mine",
     learningSteps: [],
@@ -236,6 +238,8 @@ test("deck options forms read what the user types with Core's rules", () => {
     ["desiredRetention", "0,5"],
     ["learningSteps", "1 x"],
     ["fsrsParameters", "1, 2"],
+    ["easyDays", "normal normal"],
+    ["easyDays", "normal normal normal normal normal normal sometimes"],
     ["name", " "],
   ] as const) {
     expect(validPresetText[key](text)).toBe(false);
