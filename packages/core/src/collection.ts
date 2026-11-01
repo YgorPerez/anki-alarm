@@ -713,7 +713,7 @@ export class Collection {
       steps.set(id, options.learningSteps);
       if (!this.state.presets.some((p) => p.id === presetId))
         this.state.presets.push({
-          ...this.record({ ...options, fsrsParameters: [...DEFAULT_FSRS_PARAMETERS] }, presetId),
+          ...this.record(options, presetId),
           anki: { id: ankiId },
         });
       const deck = this.state.decks.find((d) => d.id === id);

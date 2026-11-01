@@ -1,4 +1,4 @@
-import { State } from "ts-fsrs";
+import { default_w, State } from "ts-fsrs";
 import type { Card, CollectionState } from "./collection.ts";
 import { importId } from "./ids.ts";
 import { isBuried, type LogEntry } from "./study.ts";
@@ -118,6 +118,7 @@ export interface ImportedPreset {
   reviewsPerDay: number;
   desiredRetention: number;
   learningSteps: number[];
+  fsrsParameters: number[];
 }
 const number = (value: unknown, fallback: number) =>
   typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -141,6 +142,12 @@ export function presetFromOptions(json: string): ImportedPreset {
     newPerDay: number(section("new")["perDay"], 20),
     reviewsPerDay: number(section("rev")["perDay"], 200),
     desiredRetention: number(raw["desiredRetention"], 0.9),
+    fsrsParameters:
+      Array.isArray(raw["fsrsParams6"]) &&
+      raw["fsrsParams6"].length === 21 &&
+      raw["fsrsParams6"].every((n) => typeof n === "number" && Number.isFinite(n))
+        ? raw["fsrsParams6"]
+        : [...default_w],
     learningSteps:
       Array.isArray(delays) && delays.every((d) => typeof d === "number" && d > 0)
         ? delays
@@ -404,4 +411,12 @@ export function syncBackBuryPlan(
     (ad && ad.queue >= 0 ? plan.send : plan.done).push(bury);
   }
   return plan;
+}
+
+/** The provider hides the collection-wide FSRS switch; memory on reviewed cards is a signal only. */
+export function ankiDroidScheduler(source: AnkiDroidSource): "fsrs" | "sm2" | "unknown" {
+  const ids = new Set(linkedAnkiDroidDecks(source).map((d) => d.id));
+  const reviewed = source.cards.filter((c) => ids.has(c.originalDeckId || c.deckId) && c.reps > 0);
+  if (!reviewed.length) return "unknown";
+  return reviewed.some((c) => c.stability !== null) ? "fsrs" : "sm2";
 }

@@ -1,8 +1,10 @@
 import { expect, test } from "vite-plus/test";
 import {
   Collection,
+  DEFAULT_FSRS_PARAMETERS,
   browseCards,
   ankiDroidAccess,
+  ankiDroidScheduler,
   ankiDroidSyncWaitMs,
   cardId,
   cardsStayInApp,
@@ -517,4 +519,34 @@ test("a newer AnkiDroid pull preserves local flag and mark choices", () => {
   update.notes[0]!.tags = "updated marked";
   c.linkAnkiDroid(update, []);
   expect(c.snapshot().notes[0]!.fields.tags.value).toEqual(["updated"]);
+});
+
+test("linking takes FSRS-6 parameters and pulling preserves the app's options", () => {
+  const c = new Collection(environment());
+  const ad = source();
+  const weights = [...DEFAULT_FSRS_PARAMETERS];
+  weights[0] = 0.4;
+  ad.decks.forEach((d) => {
+    d.options = JSON.stringify({ ...JSON.parse(d.options), fsrsParams6: weights });
+  });
+  const { deckId } = c.linkAnkiDroid(ad);
+  const presetId = c.snapshot().decks.find((d) => d.id === deckId)!.fields.presetId.value;
+  expect(c.snapshot().presets.find((p) => p.id === presetId)!.fields.fsrsParameters.value).toEqual(
+    weights,
+  );
+  c.updatePreset(presetId, { newPerDay: 7, fsrsParameters: [...DEFAULT_FSRS_PARAMETERS] });
+  c.linkAnkiDroid(ad);
+  const preset = c.snapshot().presets.find((p) => p.id === presetId)!;
+  expect(preset.fields.newPerDay.value).toBe(7);
+  expect(preset.fields.fsrsParameters.value).toEqual(DEFAULT_FSRS_PARAMETERS);
+});
+
+test("AnkiDroid scheduler detection uses reviewed cards and leaves new-only decks unknown", () => {
+  const ad = source();
+  ad.cards = [card({})];
+  expect(ankiDroidScheduler(ad)).toBe("unknown");
+  ad.cards = [card({ reps: 1, stability: null })];
+  expect(ankiDroidScheduler(ad)).toBe("sm2");
+  ad.cards = [card({ reps: 1, stability: 2.5 })];
+  expect(ankiDroidScheduler(ad)).toBe("fsrs");
 });

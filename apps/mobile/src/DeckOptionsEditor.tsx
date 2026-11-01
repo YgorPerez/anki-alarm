@@ -1,3 +1,6 @@
+import { AnkiDroidOptions } from "./AnkiDroidOptions.tsx";
+import type { AnkiDroidApi } from "./ankidroid.ts";
+import type { Deck } from "@app/core";
 import {
   DEFAULT_FSRS_PARAMETERS,
   presetTexts,
@@ -18,6 +21,8 @@ import { regular } from "./fonts.ts";
 /** Edits a preset: the daily limits and FSRS options its decks share. */
 export function DeckOptionsEditor({
   preset,
+  linkedDeck,
+  ankiDroid,
   deckCount,
   locale,
   busy,
@@ -26,6 +31,8 @@ export function DeckOptionsEditor({
   onCancel,
 }: {
   onDirtyChange?: (dirty: boolean) => void;
+  linkedDeck?: Deck;
+  ankiDroid?: AnkiDroidApi;
   preset: Preset;
   deckCount: number;
   locale: Locale;
@@ -84,6 +91,27 @@ export function DeckOptionsEditor({
         <Text style={regular} className="text-body text-attention">
           {t("sharedPreset", { count: String(deckCount) })}
         </Text>
+      )}
+      {linkedDeck && ankiDroid && (
+        <AnkiDroidOptions
+          deck={linkedDeck}
+          api={ankiDroid}
+          locale={locale}
+          busy={busy}
+          onBring={(options) => {
+            form.setFieldValue("newPerDay", String(options.newPerDay));
+            form.setFieldValue("reviewsPerDay", String(options.reviewsPerDay));
+            form.setFieldValue(
+              "desiredRetention",
+              locale === "pt-BR"
+                ? String(options.desiredRetention).replace(".", ",")
+                : String(options.desiredRetention),
+            );
+            form.setFieldValue("learningSteps", options.learningSteps.join(" "));
+            form.setFieldValue("fsrsParameters", options.fsrsParameters.join(", "));
+            onDirtyChange?.(true);
+          }}
+        />
       )}
       <form.Field name="desiredRetention">
         {(field) => (

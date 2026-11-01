@@ -197,3 +197,71 @@ test("an unrecorded answer stops sending with a visible reason and keeps later a
   await press(/Japonês/);
   expect(await screen.findByText("2 revisões pendentes para o AnkiDroid.")).toBeDefined();
 });
+
+test("deck options brings AnkiDroid values into the form, warns about SM-2, and saves on request", async () => {
+  await run((data) => data.linkAnkiDroidDeck(fixture.source));
+  const source = structuredClone(fixture.source);
+  source.decks.forEach((deck) => {
+    deck.options = JSON.stringify({
+      ...JSON.parse(deck.options),
+      new: { perDay: 42, delays: [3, 15] },
+      fsrsParams6: [
+        0.4, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 0.796, 1.4835,
+        0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658, 0.1542,
+      ],
+    });
+  });
+  source.cards.forEach((card) => {
+    card.reps = 1;
+    card.stability = null;
+  });
+  await show(memoryAnkiDroid({ installed: ready, sources: [source] }));
+  await press(/Japonês/);
+  await press("Opções do baralho");
+  expect(await screen.findByText(/Os agendamentos vão diferir/)).toBeDefined();
+  expect(screen.getByText(/Alterações aqui não chegam ao AnkiDroid/)).toBeDefined();
+  await press("Trazer do AnkiDroid");
+  await waitFor(() =>
+    expect(screen.getByLabelText("Cartões novos por dia").props.value).toBe("42"),
+  );
+  expect(screen.getByLabelText("Etapas de aprendizado (minutos)").props.value).toBe("3 15");
+  await press("Avançado");
+  expect(screen.getByLabelText("Parâmetros do FSRS").props.value).toMatch(/^0.4,/);
+  const before = await run((data) => data.collection);
+  expect(before.presets[0]!.fields.newPerDay.value).not.toBe(42);
+  await press("Salvar");
+  await waitFor(async () => {
+    const after = await run((data) => data.collection);
+    expect(after.presets[0]!.fields.newPerDay.value).toBe(42);
+    expect(after.presets[0]!.fields.fsrsParameters.value[0]).toBe(0.4);
+  });
+});
+
+test("Bring from AnkiDroid reports provider failures, retries, and leaves copied options unsaved", async () => {
+  await run((data) => data.linkAnkiDroidDeck(fixture.source));
+  const api = memoryAnkiDroid({ installed: ready, sources: [fixture.source] });
+  const read = api.readDeck;
+  api.readDeck = () => Effect.fail(new AnkiDroidError("permission"));
+  await show(api);
+  await press(/Japonês/);
+  await press("Opções do baralho");
+  expect(
+    await screen.findByText("Não foi possível ler o AnkiDroid. Tente novamente."),
+  ).toBeDefined();
+  const source = structuredClone(fixture.source);
+  source.cards = [];
+  source.decks.forEach((d) => {
+    d.options = JSON.stringify({ ...JSON.parse(d.options), new: { perDay: 43 } });
+  });
+  api.readDeck = () => Effect.succeed(source);
+  await press("Trazer do AnkiDroid");
+  await waitFor(() =>
+    expect(screen.getByLabelText("Cartões novos por dia").props.value).toBe("43"),
+  );
+  expect(
+    await screen.findByText(/Não foi possível verificar se o AnkiDroid usa FSRS/),
+  ).toBeDefined();
+  const state = await run((data) => data.collection);
+  expect(state.presets[0]!.fields.newPerDay.value).not.toBe(43);
+  api.readDeck = read;
+});

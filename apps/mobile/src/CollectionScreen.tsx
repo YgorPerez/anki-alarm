@@ -285,6 +285,7 @@ export function CollectionScreen({
     if (form?.kind === "options" && preset)
       return (
         <DeckOptionsScreen
+          ankiDroid={ankiDroid}
           preset={preset}
           state={state}
           deck={deck}
@@ -395,6 +396,7 @@ function confirmDiscard(t: Translate, onDiscard: () => void) {
 
 /** Options and export share a screen, separate from the deck's notes. */
 function DeckOptionsScreen({
+  ankiDroid,
   onPresetChange,
   preset,
   state,
@@ -405,6 +407,7 @@ function DeckOptionsScreen({
   onCancel,
   onSave,
 }: {
+  ankiDroid: AnkiDroidApi;
   onPresetChange: (command: CollectionCommand, onSaved: () => void) => void;
   preset: Preset;
   state: CollectionState;
@@ -428,6 +431,8 @@ function DeckOptionsScreen({
         />
       )}
       <DeckOptionsEditor
+        linkedDeck={deck?.fields.linkedBy ? deck : undefined}
+        ankiDroid={ankiDroid}
         key={`${preset.id}-${preset.fields.name.value}`}
         preset={preset}
         deckCount={state.decks.filter((d) => d.fields.presetId.value === preset.id).length}
