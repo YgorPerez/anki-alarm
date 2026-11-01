@@ -988,22 +988,7 @@ export class Collection {
       steps.set(id, options.learningSteps);
       if (!this.state.presets.some((p) => p.id === presetId))
         this.state.presets.push({
-          ...this.record(
-            {
-              ...AUDIO_TIMER_DEFAULTS,
-              ...LIMIT_RULE_DEFAULTS,
-              ...AUTO_ADVANCE_DEFAULTS,
-              relearningSteps: [10],
-              insertionOrder: "sequential" as const,
-              leechThreshold: 8,
-              leechAction: "tagOnly" as const,
-              maximumInterval: 36500,
-              ...options,
-              fsrsParameters: [...DEFAULT_FSRS_PARAMETERS],
-              easyDays: [...NORMAL_WEEK],
-            },
-            presetId,
-          ),
+          ...this.record(options, presetId),
           anki: { id: ankiId },
         });
       const deck = this.state.decks.find((d) => d.id === id);

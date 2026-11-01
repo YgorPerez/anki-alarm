@@ -144,42 +144,50 @@ export const validPresetText: Record<keyof PresetOptions, (text: string) => bool
 };
 
 /** A preset's options as text, with the locale's decimal comma. */
-export function presetTexts(preset: Preset, locale: Locale): PresetTexts {
-  const f = preset.fields;
+export const presetTexts = (preset: Preset, locale: Locale): PresetTexts =>
+  textsOf((key) => preset.fields[key].value, locale);
+/** Options read from elsewhere as text, the same way. */
+export const presetOptionTexts = (options: PresetOptions, locale: Locale): PresetTexts =>
+  textsOf((key) => options[key], locale);
+
+function textsOf(
+  get: <K extends keyof PresetOptions>(key: K) => PresetOptions[K],
+  locale: Locale,
+): PresetTexts {
   const decimalText = (n: number) => (locale === "pt-BR" ? String(n).replace(".", ",") : String(n));
   return {
-    buryNew: String(f.buryNew.value),
-    buryReviews: String(f.buryReviews.value),
-    buryLearning: String(f.buryLearning.value),
-    dontPlayAutomatically: String(f.dontPlayAutomatically.value),
-    skipQuestionWhenReplayingAnswer: String(f.skipQuestionWhenReplayingAnswer.value),
-    maximumAnswerSeconds: String(f.maximumAnswerSeconds.value),
-    showTimer: String(f.showTimer.value),
-    stopTimerOnAnswer: String(f.stopTimerOnAnswer.value),
-    secondsToShowQuestion: decimalText(f.secondsToShowQuestion.value),
-    secondsToShowAnswer: decimalText(f.secondsToShowAnswer.value),
-    waitForAudio: String(f.waitForAudio.value),
-    questionAction: f.questionAction.value,
-    answerAction: f.answerAction.value,
-    name: f.name.value,
-    newPerDay: String(f.newPerDay.value),
-    reviewsPerDay: String(f.reviewsPerDay.value),
-    newIgnoreReviewLimit: String(f.newIgnoreReviewLimit.value),
-    applyAllParentLimits: String(f.applyAllParentLimits.value),
-    desiredRetention: decimalText(f.desiredRetention.value),
-    learningSteps: f.learningSteps.value.join(" "),
-    relearningSteps: f.relearningSteps.value.join(" "),
-    insertionOrder: f.insertionOrder.value,
-    leechThreshold: String(f.leechThreshold.value),
-    leechAction: f.leechAction.value,
-    maximumInterval: String(f.maximumInterval.value),
-    fsrsParameters: f.fsrsParameters.value.join(", "),
-    easyDays: f.easyDays.value.join(" "),
-    newGatherPriority: f.newGatherPriority.value,
-    newSortOrder: f.newSortOrder.value,
-    newMix: f.newMix.value,
-    interdayLearningMix: f.interdayLearningMix.value,
-    reviewOrder: f.reviewOrder.value,
+    buryNew: String(get("buryNew")),
+    buryReviews: String(get("buryReviews")),
+    buryLearning: String(get("buryLearning")),
+    dontPlayAutomatically: String(get("dontPlayAutomatically")),
+    skipQuestionWhenReplayingAnswer: String(get("skipQuestionWhenReplayingAnswer")),
+    maximumAnswerSeconds: String(get("maximumAnswerSeconds")),
+    showTimer: String(get("showTimer")),
+    stopTimerOnAnswer: String(get("stopTimerOnAnswer")),
+    secondsToShowQuestion: decimalText(get("secondsToShowQuestion")),
+    secondsToShowAnswer: decimalText(get("secondsToShowAnswer")),
+    waitForAudio: String(get("waitForAudio")),
+    questionAction: get("questionAction"),
+    answerAction: get("answerAction"),
+    name: get("name"),
+    newPerDay: String(get("newPerDay")),
+    reviewsPerDay: String(get("reviewsPerDay")),
+    newIgnoreReviewLimit: String(get("newIgnoreReviewLimit")),
+    applyAllParentLimits: String(get("applyAllParentLimits")),
+    desiredRetention: decimalText(get("desiredRetention")),
+    learningSteps: get("learningSteps").join(" "),
+    relearningSteps: get("relearningSteps").join(" "),
+    insertionOrder: get("insertionOrder"),
+    leechThreshold: String(get("leechThreshold")),
+    leechAction: get("leechAction"),
+    maximumInterval: String(get("maximumInterval")),
+    fsrsParameters: get("fsrsParameters").join(", "),
+    easyDays: get("easyDays").join(" "),
+    newGatherPriority: get("newGatherPriority"),
+    newSortOrder: get("newSortOrder"),
+    newMix: get("newMix"),
+    interdayLearningMix: get("interdayLearningMix"),
+    reviewOrder: get("reviewOrder"),
   };
 }
 

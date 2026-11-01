@@ -199,8 +199,9 @@ AnkiDroid decks become the app's own decks. The app schedules them with FSRS lik
   fails it doesn't ask. Within 5 minutes of the last request a tap does neither and says how long
   to wait, across restarts. AnkiDroid reports no result, so the app says only that it asked.
 - A linked deck's options are the app's own after linking and pull never overwrites them. **Bring
-  from AnkiDroid** copies them on request, FSRS parameters included. The API can't write options, so
-  changes here don't reach AnkiDroid.
+  from AnkiDroid** copies them on request, FSRS parameters included, and puts the daily limits back on
+  the preset. Linking reads the same options; one AnkiDroid's JSON lacks takes Anki's default. The API
+  can't write options, so changes here don't reach AnkiDroid.
 - Buries go with sync back too, after the card's answers (an answer would unbury it): each linked
   card still buried in the app is buried in AnkiDroid once, checked by reading its queue back. A
   card already out of AnkiDroid's queue, or gone from it, needs nothing. A bury that ended before

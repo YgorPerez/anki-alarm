@@ -23,6 +23,8 @@ export {
 } from "./collection.ts";
 export {
   ankiDroidAccess,
+  ankiDroidScheduler,
+  presetFromOptions,
   ankiDroidSyncWaitMs,
   cardsStayInApp,
   linkableAnkiDroidDecks,
@@ -162,7 +164,7 @@ export { answerUndo, popUndo, pushUndo, runStudyAction, UNDO_LIMIT } from "./und
 export type { StudyAction, UndoStack, UndoStep } from "./undo.ts";
 export { DISPLAY_ORDER_KEYS } from "./display-order.ts";
 export type { DisplayOrder } from "./display-order.ts";
-export { presetTexts, readPresetTexts, validPresetText } from "./preset-text.ts";
+export { presetOptionTexts, presetTexts, readPresetTexts, validPresetText } from "./preset-text.ts";
 export type { PresetTexts } from "./preset-text.ts";
 export type { CollectionCommand } from "./commands.ts";
 export type {

@@ -1,6 +1,8 @@
-import { State } from "ts-fsrs";
-import type { Card, CollectionState } from "./collection.ts";
-import { displayOrderFromAnki, type DisplayOrder } from "./display-order.ts";
+import { default_w, State } from "ts-fsrs";
+import { ankiAnswerAction, ankiQuestionAction, ankiSeconds } from "./auto-advance.ts";
+import { validOption, type Card, type CollectionState, type PresetOptions } from "./collection.ts";
+import { displayOrderFromAnki } from "./display-order.ts";
+import { easyDaysFromAnki } from "./easy-days.ts";
 import { importId } from "./ids.ts";
 import { isBuried, type LogEntry } from "./study.ts";
 
@@ -112,20 +114,32 @@ export function linkedAnkiDroidDecks(source: AnkiDroidSource): AnkiDroidDeck[] {
   );
 }
 
-export interface ImportedPreset extends DisplayOrder {
+export interface ImportedPreset extends PresetOptions {
   ankiId: number;
-  buryNew: boolean;
-  buryReviews: boolean;
-  buryLearning: boolean;
-  name: string;
-  newPerDay: number;
-  reviewsPerDay: number;
-  desiredRetention: number;
-  learningSteps: number[];
 }
+
 const number = (value: unknown, fallback: number) =>
   typeof value === "number" && Number.isFinite(value) ? value : fallback;
-/** Reads a deck's schema-11 options JSON; missing or broken keys take the app's defaults. */
+// The value when the app could save it as this option: the rule `updatePreset` applies.
+const numberOption = (
+  key:
+    | "newPerDay"
+    | "reviewsPerDay"
+    | "leechThreshold"
+    | "maximumInterval"
+    | "desiredRetention"
+    | "maximumAnswerSeconds",
+  value: unknown,
+  fallback: number,
+) => (typeof value === "number" && validOption[key](value) ? value : fallback);
+const isNumbers = (value: unknown): value is number[] =>
+  Array.isArray(value) && value.every((n) => typeof n === "number");
+const listOption = (
+  key: "learningSteps" | "relearningSteps" | "fsrsParameters",
+  value: unknown,
+  fallback: number[],
+) => (isNumbers(value) && validOption[key](value) ? value : fallback);
+/** Reads a deck's schema-11 options JSON; missing or broken keys take Anki's defaults. */
 export function presetFromOptions(json: string): ImportedPreset {
   let raw: Record<string, unknown> = {};
   try {
@@ -138,21 +152,43 @@ export function presetFromOptions(json: string): ImportedPreset {
     const value = raw[key];
     return value && typeof value === "object" ? { ...value } : {};
   };
-  const delays = section("new")["delays"];
+  const [fresh, rev, lapse] = [section("new"), section("rev"), section("lapse")];
+  const percentages = raw["easyDaysPercentages"];
   return {
     ankiId: number(raw["id"], 1),
-    buryNew: section("new")["bury"] === true,
-    buryReviews: section("rev")["bury"] === true,
-    buryLearning: raw["buryInterdayLearning"] === true,
-    name: typeof raw["name"] === "string" && raw["name"] ? raw["name"] : "Default",
-    newPerDay: number(section("new")["perDay"], 20),
-    reviewsPerDay: number(section("rev")["perDay"], 200),
-    desiredRetention: number(raw["desiredRetention"], 0.9),
-    learningSteps:
-      Array.isArray(delays) && delays.every((d) => typeof d === "number" && d > 0)
-        ? delays
-        : [1, 10],
+    name:
+      typeof raw["name"] === "string" && validOption.name(raw["name"]) ? raw["name"] : "Default",
+    newPerDay: numberOption("newPerDay", fresh["perDay"], 20),
+    reviewsPerDay: numberOption("reviewsPerDay", rev["perDay"], 200),
+    // Anki keeps these two for the whole collection, so AnkiDroid's JSON may not have them.
+    newIgnoreReviewLimit: raw["newCardsIgnoreReviewLimit"] === true,
+    applyAllParentLimits: raw["applyAllParentLimits"] === true,
+    learningSteps: listOption("learningSteps", fresh["delays"], [1, 10]),
+    insertionOrder: fresh["order"] === 0 ? "random" : "sequential",
+    relearningSteps: listOption("relearningSteps", lapse["delays"], [10]),
+    leechThreshold: numberOption("leechThreshold", lapse["leechFails"], 8),
+    leechAction: lapse["leechAction"] === 0 ? "suspend" : "tagOnly",
+    maximumInterval: numberOption("maximumInterval", rev["maxIvl"], 36500),
     ...displayOrderFromAnki(raw),
+    desiredRetention: numberOption("desiredRetention", raw["desiredRetention"], 0.9),
+    fsrsParameters: listOption("fsrsParameters", raw["fsrsParams6"], [...default_w]),
+    buryNew: fresh["bury"] === true,
+    buryReviews: rev["bury"] === true,
+    buryLearning: raw["buryInterdayLearning"] === true,
+    dontPlayAutomatically: raw["autoplay"] === false,
+    skipQuestionWhenReplayingAnswer: raw["replayq"] === false,
+    maximumAnswerSeconds: numberOption("maximumAnswerSeconds", raw["maxTaken"], 60),
+    showTimer: raw["timer"] === 1,
+    stopTimerOnAnswer: raw["stopTimerOnAnswer"] === true,
+    secondsToShowQuestion: ankiSeconds(raw["secondsToShowQuestion"]),
+    secondsToShowAnswer: ankiSeconds(raw["secondsToShowAnswer"]),
+    // Older versions don't have it; Anki's default is on.
+    waitForAudio: raw["waitForAudio"] !== false,
+    questionAction: ankiQuestionAction(raw["questionAction"]),
+    answerAction: ankiAnswerAction(raw["answerAction"]),
+    easyDays: easyDaysFromAnki(
+      Array.isArray(percentages) ? percentages.filter((p) => typeof p === "number") : [],
+    ),
   };
 }
 
@@ -412,4 +448,12 @@ export function syncBackBuryPlan(
     (ad && ad.queue >= 0 ? plan.send : plan.done).push(bury);
   }
   return plan;
+}
+
+/** The provider hides the collection-wide FSRS switch; memory on reviewed cards is a signal only. */
+export function ankiDroidScheduler(source: AnkiDroidSource): "fsrs" | "sm2" | "unknown" {
+  const ids = new Set(linkedAnkiDroidDecks(source).map((d) => d.id));
+  const reviewed = source.cards.filter((c) => ids.has(c.originalDeckId || c.deckId) && c.reps > 0);
+  if (!reviewed.length) return "unknown";
+  return reviewed.some((c) => c.stability !== null) ? "fsrs" : "sm2";
 }

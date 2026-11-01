@@ -119,6 +119,9 @@ function DeckEditor({
             }}
           />
         )}
+        {deck.fields.linkedBy && (
+          <p className="text-body text-muted-foreground">{t("ankiDroidOptionsNote")}</p>
+        )}
         {preset && (
           <DeckOptionsEditor
             key={`${preset.id}-${preset.fields.name.value}`}

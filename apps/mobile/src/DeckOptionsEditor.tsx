@@ -1,8 +1,11 @@
+import { AnkiDroidOptions } from "./AnkiDroidOptions.tsx";
+import type { AnkiDroidApi } from "./ankidroid.ts";
 import {
   ANSWER_ACTIONS,
   DEFAULT_FSRS_PARAMETERS,
   deckLimitTexts,
   QUESTION_ACTIONS,
+  presetOptionTexts,
   presetTexts,
   readPresetTexts,
   scopedLimit,
@@ -37,6 +40,7 @@ const ACTION_LABELS = {
 export function DeckOptionsEditor({
   preset,
   deck,
+  ankiDroid,
   deckCount,
   locale,
   busy,
@@ -45,6 +49,7 @@ export function DeckOptionsEditor({
   onCancel,
 }: {
   onDirtyChange?: (dirty: boolean) => void;
+  ankiDroid?: AnkiDroidApi;
   preset: Preset;
   /** The deck whose options these are: its limits can be set for it alone. */
   deck?: Deck;
@@ -140,6 +145,26 @@ export function DeckOptionsEditor({
         <Text style={regular} className="text-body text-attention">
           {t("sharedPreset", { count: String(deckCount) })}
         </Text>
+      )}
+      {deck?.fields.linkedBy && ankiDroid && (
+        <AnkiDroidOptions
+          deck={deck}
+          api={ankiDroid}
+          locale={locale}
+          busy={busy}
+          onBring={(options) => {
+            const { values } = form.state;
+            form.reset(
+              {
+                ...presetOptionTexts({ ...options, name: values.name }, locale),
+                newScope: "preset",
+                reviewScope: "preset",
+              },
+              { keepDefaultValues: true },
+            );
+            onDirtyChange?.(true);
+          }}
+        />
       )}
       <form.Field name="desiredRetention">
         {(field) => (

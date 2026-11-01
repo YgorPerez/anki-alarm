@@ -197,3 +197,165 @@ test("an unrecorded answer stops sending with a visible reason and keeps later a
   await press(/Japonês/);
   expect(await screen.findByText("2 revisões pendentes para o AnkiDroid.")).toBeDefined();
 });
+
+test("deck options brings AnkiDroid values into the form, warns about SM-2, and saves on request", async () => {
+  await run((data) => data.linkAnkiDroidDeck(fixture.source));
+  const source = structuredClone(fixture.source);
+  source.decks.forEach((deck) => {
+    deck.options = JSON.stringify({
+      ...JSON.parse(deck.options),
+      new: { perDay: 42, delays: [3, 15], bury: true, order: 0 },
+      rev: { perDay: 177, bury: true, maxIvl: 400 },
+      lapse: { delays: [5, 20], leechFails: 4, leechAction: 0 },
+      newCardsIgnoreReviewLimit: true,
+      applyAllParentLimits: true,
+      newGatherPriority: 5,
+      newSortOrder: 3,
+      newMix: 2,
+      interdayLearningMix: 1,
+      reviewOrder: 12,
+      buryInterdayLearning: true,
+      autoplay: false,
+      replayq: false,
+      maxTaken: 45,
+      timer: 1,
+      stopTimerOnAnswer: true,
+      secondsToShowQuestion: 2.5,
+      secondsToShowAnswer: 4,
+      waitForAudio: false,
+      questionAction: 1,
+      answerAction: 2,
+      easyDaysPercentages: [1, 1, 0.5, 1, 1, 0, 0],
+      desiredRetention: 0.85,
+      fsrsParams6: [
+        0.4, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 0.796, 1.4835,
+        0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658, 0.1542,
+      ],
+    });
+  });
+  source.cards.forEach((card) => {
+    card.reps = 1;
+    card.stability = null;
+  });
+  await show(memoryAnkiDroid({ installed: ready, sources: [source] }));
+  await press(/Japonês/);
+  await press("Opções do baralho");
+  expect(await screen.findByText(/Os agendamentos vão diferir/)).toBeDefined();
+  expect(screen.getByText(/Alterações aqui não chegam ao AnkiDroid/)).toBeDefined();
+  await press("Trazer do AnkiDroid");
+  await waitFor(() =>
+    expect(screen.getByLabelText("Cartões novos por dia").props.value).toBe("42"),
+  );
+  expect(screen.getByLabelText("Etapas de aprendizado (minutos)").props.value).toBe("3 15");
+  await press("Avançado");
+  expect(screen.getByLabelText("Parâmetros do FSRS").props.value).toMatch(/^0.4,/);
+  const before = await run((data) => data.collection);
+  expect(before.presets[0]!.fields.newPerDay.value).not.toBe(42);
+  await press("Salvar");
+  await waitFor(async () => {
+    const after = await run((data) => data.collection);
+    expect(after.presets[0]!.fields.newPerDay.value).toBe(42);
+    expect(after.presets[0]!.fields.fsrsParameters.value[0]).toBe(0.4);
+    const fields = after.presets[0]!.fields;
+    expect(fields.buryNew.value).toBe(true);
+    expect(fields.buryReviews.value).toBe(true);
+    expect(fields.buryLearning.value).toBe(true);
+    expect(fields.dontPlayAutomatically.value).toBe(true);
+    expect(fields.skipQuestionWhenReplayingAnswer.value).toBe(true);
+    expect(fields.maximumAnswerSeconds.value).toBe(45);
+    expect(fields.showTimer.value).toBe(true);
+    expect(fields.stopTimerOnAnswer.value).toBe(true);
+    expect(fields.reviewsPerDay.value).toBe(177);
+    expect(fields.learningSteps.value).toEqual([3, 15]);
+    expect(fields.insertionOrder.value).toBe("random");
+    expect(fields.relearningSteps.value).toEqual([5, 20]);
+    expect(fields.leechThreshold.value).toBe(4);
+    expect(fields.leechAction.value).toBe("suspend");
+    expect(fields.maximumInterval.value).toBe(400);
+    expect(fields.newIgnoreReviewLimit.value).toBe(true);
+    expect(fields.applyAllParentLimits.value).toBe(true);
+    expect(fields.newGatherPriority.value).toBe("deckThenRandomNotes");
+    expect(fields.newSortOrder.value).toBe("randomNoteThenTemplate");
+    expect(fields.newMix.value).toBe("before");
+    expect(fields.interdayLearningMix.value).toBe("after");
+    expect(fields.reviewOrder.value).toBe("relativeOverdueness");
+    expect(fields.secondsToShowQuestion.value).toBe(2.5);
+    expect(fields.secondsToShowAnswer.value).toBe(4);
+    expect(fields.waitForAudio.value).toBe(false);
+    expect(fields.questionAction.value).toBe("showReminder");
+    expect(fields.answerAction.value).toBe("good");
+    expect(fields.easyDays.value).toEqual([
+      "normal",
+      "normal",
+      "reduced",
+      "normal",
+      "normal",
+      "minimum",
+      "minimum",
+    ]);
+    expect(fields.desiredRetention.value).toBe(0.85);
+    // The preset's name stays the app's.
+    expect(fields.name.value).toBe(before.presets[0]!.fields.name.value);
+  });
+});
+
+test("Bring from AnkiDroid puts a limit this deck kept for itself back on the preset", async () => {
+  await run((data) => data.linkAnkiDroidDeck(fixture.source));
+  const state = await run((data) => data.collection);
+  const deckId = state.decks.find((d) => d.fields.linkedBy)!.id;
+  await run((data) =>
+    data.changeCollection((c) => {
+      c.setDeckLimit(deckId, "new", "deck", 3);
+    }),
+  );
+  const source = structuredClone(fixture.source);
+  source.decks.forEach((deck) => {
+    deck.options = JSON.stringify({ ...JSON.parse(deck.options), new: { perDay: 42 } });
+  });
+  await show(memoryAnkiDroid({ installed: ready, sources: [source] }));
+  await press(/Japonês/);
+  await press("Opções do baralho");
+  await screen.findByLabelText("Cartões novos por dia");
+  expect(screen.getByLabelText("Cartões novos por dia").props.value).toBe("3");
+  await press("Trazer do AnkiDroid");
+  await waitFor(() =>
+    expect(screen.getByLabelText("Cartões novos por dia").props.value).toBe("42"),
+  );
+  await press("Salvar");
+  await waitFor(async () => {
+    const after = await run((data) => data.collection);
+    const deck = after.decks.find((d) => d.id === deckId)!;
+    const preset = after.presets.find((p) => p.id === deck.fields.presetId.value)!;
+    expect(preset.fields.newPerDay.value).toBe(42);
+    expect(deck.fields.newLimit?.value ?? null).toBeNull();
+  });
+});
+
+test("Bring from AnkiDroid reports provider failures, retries, and leaves copied options unsaved", async () => {
+  await run((data) => data.linkAnkiDroidDeck(fixture.source));
+  const api = memoryAnkiDroid({ installed: ready, sources: [fixture.source] });
+  const read = api.readDeck;
+  api.readDeck = () => Effect.fail(new AnkiDroidError("permission"));
+  await show(api);
+  await press(/Japonês/);
+  await press("Opções do baralho");
+  expect(
+    await screen.findByText("Não foi possível ler o AnkiDroid. Tente novamente."),
+  ).toBeDefined();
+  const source = structuredClone(fixture.source);
+  source.cards = [];
+  source.decks.forEach((d) => {
+    d.options = JSON.stringify({ ...JSON.parse(d.options), new: { perDay: 43 } });
+  });
+  api.readDeck = () => Effect.succeed(source);
+  await press("Trazer do AnkiDroid");
+  await waitFor(() =>
+    expect(screen.getByLabelText("Cartões novos por dia").props.value).toBe("43"),
+  );
+  expect(
+    await screen.findByText(/Não foi possível verificar se o AnkiDroid usa FSRS/),
+  ).toBeDefined();
+  const state = await run((data) => data.collection);
+  expect(state.presets[0]!.fields.newPerDay.value).not.toBe(43);
+  api.readDeck = read;
+});

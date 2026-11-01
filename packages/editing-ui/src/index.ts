@@ -33,6 +33,15 @@ export const EASY_DAY_MESSAGES = {
 
 export const editingMessages = {
   "pt-BR": {
+    ankiDroidOptionsNote:
+      "Alterações aqui não chegam ao AnkiDroid. Puxar não altera estas opções. Para copiar as opções de lá, use Trazer do AnkiDroid no celular que vinculou o baralho.",
+    bringAnkiDroid: "Trazer do AnkiDroid",
+    bringAnkiDroidHint:
+      "Copia para esta predefinição. Confira os valores e toque em Salvar para aplicar aos baralhos que a usam.",
+    ankiDroidSm2:
+      "Os cartões revisados indicam que o AnkiDroid não usa FSRS. Os agendamentos vão diferir: este app sempre usa FSRS.",
+    ankiDroidUnknown:
+      "Não foi possível verificar se o AnkiDroid usa FSRS. A API não informa essa opção; sem FSRS, os agendamentos vão diferir.",
     preset: "Predefinição",
     usedByDecks: "Usada por {count} baralhos",
     presetActionName: "Nome para a predefinição",
@@ -138,6 +147,15 @@ export const editingMessages = {
       "Esquecer e Definir vencimento ficam só no app: o AnkiDroid não recebe essas mudanças. A próxima revisão deste cartão no AnkiDroid as substitui.",
   },
   en: {
+    ankiDroidOptionsNote:
+      "Changes here do not reach AnkiDroid. Pull does not change these options. To copy its options, use Bring from AnkiDroid on the phone that linked the deck.",
+    bringAnkiDroid: "Bring from AnkiDroid",
+    bringAnkiDroidHint:
+      "Copies into this preset. Check the values and tap Save to apply to every deck using it.",
+    ankiDroidSm2:
+      "Reviewed cards suggest AnkiDroid is not using FSRS. The schedules will differ: this app always uses FSRS.",
+    ankiDroidUnknown:
+      "Could not verify whether AnkiDroid uses FSRS. The API does not expose this setting; without FSRS, the schedules will differ.",
     preset: "Preset",
     usedByDecks: "Used by {count} decks",
     presetActionName: "Name for preset",
