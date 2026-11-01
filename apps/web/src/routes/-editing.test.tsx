@@ -16,6 +16,14 @@ test("a new deck gets options and a note, which the browser finds and edits as y
   expect(screen.queryByRole("button", { name: "Exportar .apkg" })).toBeNull();
   await user.click(screen.getByRole("button", { name: "Opções do baralho" }));
 
+  for (const name of [
+    "Enterrar irmãos novos",
+    "Enterrar irmãos de revisão",
+    "Enterrar irmãos em aprendizado",
+  ]) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- User interactions run in order.
+    await user.click(screen.getByRole("checkbox", { name }));
+  }
   const retention = screen.getByRole("slider", { name: "Retenção desejada" });
   fireEvent.change(retention, { target: { value: "85" } });
   expect(retention).toHaveProperty("value", "85");
@@ -42,6 +50,13 @@ test("a new deck gets options and a note, which the browser finds and edits as y
   expect(screen.getByLabelText("Domingo")).toHaveProperty("value", "minimum");
   expect(screen.getByLabelText("Sábado")).toHaveProperty("value", "reduced");
   expect(screen.getByLabelText("Sexta-feira")).toHaveProperty("value", "normal");
+  for (const name of [
+    "Enterrar irmãos novos",
+    "Enterrar irmãos de revisão",
+    "Enterrar irmãos em aprendizado",
+  ]) {
+    expect(screen.getByRole("checkbox", { name })).toHaveProperty("checked", true);
+  }
 
   await user.click(screen.getByRole("link", { name: "‹ Voltar" }));
   await user.click(screen.getByRole("button", { name: "Adicionar nota" }));

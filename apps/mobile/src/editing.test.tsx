@@ -116,6 +116,14 @@ test("deck options save limits, retention and learning steps, and refuse what FS
   await press("button", "Opções do baralho");
   expect(screen.getByRole("button", { name: "Exportar .apkg" })).toBeDefined();
   expect(await screen.findByText(/Estas opções valem para \d+ baralhos\./)).toBeDefined();
+  for (const name of [
+    "Enterrar irmãos novos",
+    "Enterrar irmãos de revisão",
+    "Enterrar irmãos em aprendizado",
+  ]) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- User interactions run in order.
+    await fireEvent(screen.getByRole("switch", { name }), "valueChange", true);
+  }
   const slider = screen.getByRole("adjustable", { name: "Retenção desejada" });
   expect(slider.props.accessibilityValue.now).toBe(90);
   await fireEvent(slider, "accessibilityAction", { nativeEvent: { actionName: "decrement" } });
@@ -140,6 +148,11 @@ test("deck options save limits, retention and learning steps, and refuse what FS
   expect(preset.fields.newPerDay.value).toBe(5);
   expect(preset.fields.learningSteps.value).toEqual([2, 15]);
   expect(preset.fields.fsrsParameters.value).toHaveLength(21);
+  expect([
+    preset.fields.buryNew.value,
+    preset.fields.buryReviews.value,
+    preset.fields.buryLearning.value,
+  ]).toEqual([true, true, true]);
 });
 
 test("deck options set each weekday's easy day", async () => {

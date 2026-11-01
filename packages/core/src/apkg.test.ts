@@ -391,6 +391,31 @@ test("media alone are read without the collection, in protobuf order for Latest"
   );
 });
 
+test("current Anki protobuf presets import all three sibling burying options", async () => {
+  const base = host(fixture("latest.apkg"));
+  const { package: source } = await readApkg({
+    ...base,
+    openSqlite: async (bytes) => {
+      const db = await base.openSqlite(bytes);
+      return {
+        ...db,
+        all: async (query) => {
+          const rows = await db.all(query);
+          if (!query.includes("FROM deck_config")) return rows;
+          return rows.map((row) => {
+            if (!(row.config instanceof Uint8Array)) throw new Error("Expected protobuf bytes");
+            row.config = new Uint8Array([...row.config, 216, 1, 1, 224, 1, 1, 232, 1, 1]);
+            return row;
+          });
+        },
+      };
+    },
+  });
+  expect(source.presets.length).toBeGreaterThan(0);
+  for (const preset of source.presets)
+    expect([preset.buryNew, preset.buryReviews, preset.buryLearning]).toEqual([true, true, true]);
+});
+
 const float32 = (values: number[]) => new Uint8Array(new Float32Array(values).buffer);
 test("the current format brings a preset's easy days, Monday first", async () => {
   // Field 4, seven packed floats: what Anki 26.09 writes for its all-normal default.

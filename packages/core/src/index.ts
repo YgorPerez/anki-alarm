@@ -233,3 +233,7 @@ export { EASY_DAYS } from "./easy-days.ts";
 export type { EasyDay } from "./easy-days.ts";
 
 export { isDefaultPreset } from "./collection.ts";
+
+export { studyAnswerDuration } from "./study.ts";
+
+export { studyAudio } from "./read-aloud.ts";

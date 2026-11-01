@@ -10,7 +10,7 @@ import {
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
 import { RetentionSlider } from "./RetentionSlider.tsx";
-import { Text, View } from "react-native";
+import { Switch, Text, View } from "react-native";
 import { Button, SaveButtons, TextField } from "./controls.tsx";
 import { editingCopy } from "./editing-copy.ts";
 import { EasyDaysField } from "./EasyDaysField.tsx";
@@ -48,6 +48,12 @@ export function DeckOptionsEditor({
     },
   });
   const fields = [
+    {
+      key: "maximumAnswerSeconds",
+      label: t("maximumAnswerSeconds"),
+      error: t("invalidLimit"),
+      numeric: true,
+    },
     { key: "name", label: t("presetName"), error: t("invalidName") },
     { key: "newPerDay", label: t("newPerDay"), error: t("invalidLimit"), numeric: true },
     { key: "reviewsPerDay", label: t("reviewsPerDay"), error: t("invalidLimit"), numeric: true },
@@ -96,6 +102,53 @@ export function DeckOptionsEditor({
           />
         )}
       </form.Field>
+      <View className="gap-3">
+        <Text style={regular} className="text-label font-bold text-foreground">
+          {t("burying")}
+        </Text>
+        {(["buryNew", "buryReviews", "buryLearning"] as const).map((key) => (
+          <form.Field key={key} name={key}>
+            {(field) => (
+              <View className="min-h-12 flex-row items-center justify-between gap-3">
+                <Text style={regular} className="flex-1 text-body text-foreground">
+                  {t(key)}
+                </Text>
+                <Switch
+                  accessible
+                  accessibilityRole="switch"
+                  accessibilityLabel={t(key)}
+                  value={field.state.value === "true"}
+                  onValueChange={(value) => field.handleChange(String(value))}
+                  disabled={busy}
+                />
+              </View>
+            )}
+          </form.Field>
+        ))}
+      </View>
+
+      {(
+        [
+          "dontPlayAutomatically",
+          "skipQuestionWhenReplayingAnswer",
+          "showTimer",
+          "stopTimerOnAnswer",
+        ] as const
+      ).map((key) => (
+        <form.Field key={key} name={key}>
+          {(field) => (
+            <View className="min-h-12 flex-row items-center justify-between gap-3">
+              <Text className="shrink text-body text-foreground">{t(key)}</Text>
+              <Switch
+                accessibilityLabel={t(key)}
+                value={field.state.value === "true"}
+                onValueChange={(value) => field.handleChange(String(value))}
+                disabled={busy}
+              />
+            </View>
+          )}
+        </form.Field>
+      ))}
       {fields.map((spec) => (
         <form.Field
           key={spec.key}

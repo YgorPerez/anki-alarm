@@ -582,13 +582,24 @@ function presetJson(preset: Preset, anki: { id: number; appId?: string }) {
     mod: clockOf(preset),
     name: f.name.value,
     usn: -1,
-    new: { ...DCONF.new, delays: f.learningSteps.value, perDay: f.newPerDay.value },
-    rev: { ...DCONF.rev, perDay: f.reviewsPerDay.value },
+    new: {
+      ...DCONF.new,
+      bury: f.buryNew.value,
+      delays: f.learningSteps.value,
+      perDay: f.newPerDay.value,
+    },
+    rev: { ...DCONF.rev, bury: f.buryReviews.value, perDay: f.reviewsPerDay.value },
     lapse: { ...DCONF.lapse, delays: RELEARNING_STEPS },
     ...(f.isDefault ? { ankiAlarmDefault: f.isDefault.value } : {}),
+    buryInterdayLearning: f.buryLearning.value,
     fsrsParams6: f.fsrsParameters.value,
     desiredRetention: f.desiredRetention.value,
     easyDaysPercentages: easyDaysToAnki(f.easyDays.value),
+    autoplay: !f.dontPlayAutomatically.value,
+    replayq: !f.skipQuestionWhenReplayingAnswer.value,
+    maxTaken: f.maximumAnswerSeconds.value,
+    timer: f.showTimer.value ? 1 : 0,
+    stopTimerOnAnswer: f.stopTimerOnAnswer.value,
   };
 }
 

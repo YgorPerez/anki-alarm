@@ -14,7 +14,15 @@ import { cardId, importId, uuid7 } from "./ids.ts";
 import { isLanguageTag } from "./locale.ts";
 import { EASY_DAYS, NORMAL_WEEK, type EasyDay } from "./easy-days.ts";
 import { editedNoteType, editedValues, noteTypeProblems, type NoteTypeEdit } from "./note-types.ts";
-import { deckPreset, schedulingOptions, dueInDays, studyDayStart, type LogEntry } from "./study.ts";
+import {
+  deckPreset,
+  schedulingOptions,
+  dueInDays,
+  studyDayStart,
+  cardMemory,
+  CardState,
+  type LogEntry,
+} from "./study.ts";
 
 /** FSRS-6's default weights, which every new preset starts from. */
 export const DEFAULT_FSRS_PARAMETERS: readonly number[] = default_w;
@@ -42,8 +50,18 @@ export type Deck = RecordFields<{
   language?: string;
 }> &
   AnkiIdentity;
+const AUDIO_TIMER_DEFAULTS = {
+  dontPlayAutomatically: false,
+  skipQuestionWhenReplayingAnswer: false,
+  maximumAnswerSeconds: 60,
+  showTimer: false,
+  stopTimerOnAnswer: false,
+};
 export type Preset = RecordFields<{
   name: string;
+  buryNew: boolean;
+  buryReviews: boolean;
+  buryLearning: boolean;
   newPerDay: number;
   reviewsPerDay: number;
   desiredRetention: number;
@@ -55,6 +73,11 @@ export type Preset = RecordFields<{
   fsrsParameters: number[];
   /** Each weekday, Monday first. */
   easyDays: EasyDay[];
+  dontPlayAutomatically: boolean;
+  skipQuestionWhenReplayingAnswer: boolean;
+  maximumAnswerSeconds: number;
+  showTimer: boolean;
+  stopTimerOnAnswer: boolean;
 }> &
   AnkiIdentity;
 /** Legacy app presets and explicitly marked defaults cannot be deleted. */
@@ -65,6 +88,12 @@ export type PresetOptions = {
   [K in Exclude<keyof Preset["fields"], "isDefault">]: Preset["fields"][K]["value"];
 };
 const presetKeys = [
+  "dontPlayAutomatically",
+  "skipQuestionWhenReplayingAnswer",
+  "maximumAnswerSeconds",
+  "showTimer",
+  "stopTimerOnAnswer",
+
   "name",
   "newPerDay",
   "reviewsPerDay",
@@ -72,6 +101,9 @@ const presetKeys = [
   "learningSteps",
   "fsrsParameters",
   "easyDays",
+  "buryNew",
+  "buryReviews",
+  "buryLearning",
 ] as const satisfies readonly (keyof PresetOptions)[];
 /** The bounds of a preset's options, for the rules below and the copy that states them. */
 export const PRESET_LIMITS = {
@@ -85,6 +117,14 @@ export const PRESET_LIMITS = {
 } as const;
 /** The rule `updatePreset` applies to each option, for forms to check as the user types. */
 export const validOption: { [K in keyof PresetOptions]: (value: PresetOptions[K]) => boolean } = {
+  buryNew: (v) => typeof v === "boolean",
+  buryReviews: (v) => typeof v === "boolean",
+  buryLearning: (v) => typeof v === "boolean",
+  dontPlayAutomatically: (v) => typeof v === "boolean",
+  skipQuestionWhenReplayingAnswer: (v) => typeof v === "boolean",
+  maximumAnswerSeconds: (v) => Number.isSafeInteger(v) && v >= 0 && v <= 9999,
+  showTimer: (v) => typeof v === "boolean",
+  stopTimerOnAnswer: (v) => typeof v === "boolean",
   name: (v) => typeof v === "string" && Boolean(v.trim()),
   newPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
   reviewsPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
@@ -220,11 +260,19 @@ export function parseCollection(stored: StoredCollection): CollectionState {
   for (const deck of state.decks)
     deck.fields.desiredRetention ??= { value: null, hlc: deck.fields.name.hlc };
   for (const preset of state.presets) {
+    for (const key of ["buryNew", "buryReviews", "buryLearning"] as const)
+      preset.fields[key] ??= { value: false, hlc: preset.fields.name.hlc };
     preset.fields.fsrsParameters ??= {
       value: [...DEFAULT_FSRS_PARAMETERS],
       hlc: preset.fields.name.hlc,
     };
     preset.fields.easyDays ??= { value: [...NORMAL_WEEK], hlc: preset.fields.name.hlc };
+  }
+  for (const preset of state.presets) {
+    for (const [key, value] of Object.entries(AUDIO_TIMER_DEFAULTS)) {
+      if (!(key in preset.fields))
+        Object.assign(preset.fields, { [key]: { value, hlc: preset.fields.name.hlc } });
+    }
   }
   // A preset deletion also beats assignments made offline after the deleting device last synced.
   // Keep the redirect derived from the tombstone, so a late deck field cannot resurrect its use.
@@ -372,7 +420,11 @@ export class Collection {
     if (!preset) {
       preset = this.record({
         isDefault: true,
+        ...AUDIO_TIMER_DEFAULTS,
         name: "Default",
+        buryNew: false,
+        buryReviews: false,
+        buryLearning: false,
         newPerDay: 20,
         reviewsPerDay: 200,
         desiredRetention: 0.9,
@@ -585,6 +637,22 @@ export class Collection {
         ? [...DEFAULT_FSRS_PARAMETERS]
         : copy(source.fields.fsrsParameters.value),
       easyDays: factory ? [...NORMAL_WEEK] : copy(source.fields.easyDays.value),
+      buryNew: factory ? false : source.fields.buryNew.value,
+      buryReviews: factory ? false : source.fields.buryReviews.value,
+      buryLearning: factory ? false : source.fields.buryLearning.value,
+      dontPlayAutomatically: factory
+        ? AUDIO_TIMER_DEFAULTS.dontPlayAutomatically
+        : source.fields.dontPlayAutomatically.value,
+      skipQuestionWhenReplayingAnswer: factory
+        ? AUDIO_TIMER_DEFAULTS.skipQuestionWhenReplayingAnswer
+        : source.fields.skipQuestionWhenReplayingAnswer.value,
+      maximumAnswerSeconds: factory
+        ? AUDIO_TIMER_DEFAULTS.maximumAnswerSeconds
+        : source.fields.maximumAnswerSeconds.value,
+      showTimer: factory ? AUDIO_TIMER_DEFAULTS.showTimer : source.fields.showTimer.value,
+      stopTimerOnAnswer: factory
+        ? AUDIO_TIMER_DEFAULTS.stopTimerOnAnswer
+        : source.fields.stopTimerOnAnswer.value,
       isDefault: false,
     });
     this.state.presets.push(preset);
@@ -658,6 +726,51 @@ export class Collection {
   buryCard(id: string) {
     this.setBuriedUntil(id, dueInDays(1, this.env.now()));
   }
+  /** Applies normal-study sibling buries, or restores the buries of an undone answer. */
+  applySiblingBurying(entry: LogEntry, log: readonly LogEntry[]): LogEntry {
+    if (entry.kind === "void") {
+      const target = log.find((e) => e.id === entry.targetId);
+      if (target?.kind === "review")
+        for (const previous of target.siblingBuries ?? []) {
+          const card = this.state.cards.find((c) => c.id === previous.cardId);
+          if (card?.fields.buriedUntil.value === dueInDays(1, target.at))
+            this.setBuriedUntil(card.id, previous.until);
+        }
+      return entry;
+    }
+    if (
+      entry.kind !== "review" ||
+      entry.origin === "alarm" ||
+      entry.origin === "import" ||
+      entry.ringId !== undefined
+    )
+      return entry;
+    const card = this.state.cards.find((c) => c.id === entry.cardId);
+    const deck = this.state.decks.find((d) => d.id === card?.fields.deckId.value);
+    const preset = deck && deckPreset(this.state, deck);
+    if (!card || !preset) throw new Error("Deck preset missing");
+    const previous: { cardId: string; until: number | null }[] = [];
+    for (const sibling of this.cardsOf(card.fields.noteId.value)) {
+      if (
+        sibling.id === card.id ||
+        sibling.fields.suspended.value ||
+        (sibling.fields.buriedUntil.value ?? 0) > entry.at
+      )
+        continue;
+      const memory = cardMemory(this.state, log, sibling.id, entry.at);
+      if (!memory) continue;
+      const bury =
+        memory.state === CardState.New
+          ? preset.fields.buryNew.value
+          : memory.state === CardState.Review
+            ? preset.fields.buryReviews.value
+            : preset.fields.buryLearning.value;
+      if (!bury) continue;
+      previous.push({ cardId: sibling.id, until: sibling.fields.buriedUntil.value });
+      this.setBuriedUntil(sibling.id, dueInDays(1, entry.at));
+    }
+    return previous.length ? { ...entry, siblingBuries: previous } : entry;
+  }
   /** Reverses `buryCard`: the card is back in study at once. */
   unburyCard(id: string) {
     this.setBuriedUntil(id, null);
@@ -724,6 +837,7 @@ export class Collection {
         this.state.presets.push({
           ...this.record(
             {
+              ...AUDIO_TIMER_DEFAULTS,
               ...options,
               fsrsParameters: [...DEFAULT_FSRS_PARAMETERS],
               easyDays: [...NORMAL_WEEK],
@@ -930,11 +1044,21 @@ export class Collection {
       const { name, newPerDay, reviewsPerDay, desiredRetention, learningSteps, mtime } = p;
       const weights = p.fsrsParameters?.length === 21 ? p.fsrsParameters : DEFAULT_FSRS_PARAMETERS;
       const values = {
+        dontPlayAutomatically:
+          p.dontPlayAutomatically ?? AUDIO_TIMER_DEFAULTS.dontPlayAutomatically,
+        skipQuestionWhenReplayingAnswer:
+          p.skipQuestionWhenReplayingAnswer ?? AUDIO_TIMER_DEFAULTS.skipQuestionWhenReplayingAnswer,
+        maximumAnswerSeconds: p.maximumAnswerSeconds ?? AUDIO_TIMER_DEFAULTS.maximumAnswerSeconds,
+        showTimer: p.showTimer ?? AUDIO_TIMER_DEFAULTS.showTimer,
+        stopTimerOnAnswer: p.stopTimerOnAnswer ?? AUDIO_TIMER_DEFAULTS.stopTimerOnAnswer,
         name,
         newPerDay,
         reviewsPerDay,
         desiredRetention,
         learningSteps,
+        buryNew: p.buryNew ?? false,
+        buryReviews: p.buryReviews ?? false,
+        buryLearning: p.buryLearning ?? false,
         fsrsParameters: [...weights],
         easyDays: p.easyDays ?? [...NORMAL_WEEK],
         ...(p.appId && p.isDefault !== undefined ? { isDefault: p.isDefault } : {}),
