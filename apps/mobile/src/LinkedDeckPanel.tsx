@@ -13,12 +13,19 @@ import { regular } from "./fonts.ts";
 
 type Translate = ReturnType<typeof ankiDroidCopy>;
 type Status = { tone: "busy" | "done" | "error"; text: string };
-const reasonCopy = (error: unknown, fallback: "pullError" | "syncBackError") =>
+const busyCopy = { pull: "pulling", syncBack: "syncingBack", ankiSync: "ankiSyncing" } as const;
+const errorCopy = {
+  pull: "pullError",
+  syncBack: "syncBackError",
+  ankiSync: "ankiSyncError",
+} as const;
+const reasonCopy = (error: unknown, fallback: (typeof errorCopy)[keyof typeof errorCopy]) =>
   error instanceof AnkiDroidError && error.reason !== "failed" ? error.reason : fallback;
 
 /**
- * On a linked deck: that it is linked, and on the phone that linked it, pull and sync back on
- * demand plus the auto sync back after alarm sessions. Elsewhere it is a normal deck (ADR 0001).
+ * On a linked deck: that it is linked, and on the phone that linked it, pull, sync back and Sync
+ * AnkiDroid on demand plus the auto sync back after alarm sessions. Elsewhere it is a normal deck
+ * (ADR 0001).
  */
 export function LinkedDeckPanel({
   ankiDroid,
@@ -48,10 +55,10 @@ export function LinkedDeckPanel({
   const busy = useRef(false);
   const owned = phone.data !== undefined && deck.fields.linkedBy?.value === phone.data;
 
-  async function run(kind: "pull" | "syncBack") {
+  async function run(kind: "pull" | "syncBack" | "ankiSync") {
     if (busy.current) return;
     busy.current = true;
-    setStatus({ tone: "busy", text: t(kind === "pull" ? "pulling" : "syncingBack") });
+    setStatus({ tone: "busy", text: t(busyCopy[kind]) });
     const provider = ankiDroidProvider(ankiDroid);
     try {
       if (kind === "pull") {
@@ -59,6 +66,16 @@ export function LinkedDeckPanel({
           localData((data) => data.pullAnkiDroid(provider, deck.id)),
         );
         setStatus({ tone: "done", text: summary(t, "pulled", pulled) });
+      } else if (kind === "ankiSync") {
+        const asked = await Effect.runPromise(
+          localData((data) => data.requestAnkiDroidSync(provider)),
+        );
+        setStatus({
+          tone: "done",
+          text: asked.requested
+            ? `${summary(t, "sentBack", asked)} ${t("ankiSyncAsked")}`
+            : t("ankiSyncWait", { minutes: String(Math.ceil(asked.waitMs / 60_000)) }),
+        });
       } else {
         const sent = await Effect.runPromise(localData((data) => data.syncBackAnkiDroid(provider)));
         setStatus({ tone: "done", text: summary(t, "sentBack", sent) });
@@ -66,7 +83,7 @@ export function LinkedDeckPanel({
     } catch (error) {
       setStatus({
         tone: "error",
-        text: t(reasonCopy(error, kind === "pull" ? "pullError" : "syncBackError")),
+        text: t(reasonCopy(error, errorCopy[kind])),
       });
     }
     await Promise.all(
@@ -109,6 +126,7 @@ export function LinkedDeckPanel({
           )}
           <Button label={t("pull")} disabled={working} onPress={() => void run("pull")} />
           <Button label={t("syncBack")} disabled={working} onPress={() => void run("syncBack")} />
+          <Button label={t("ankiSync")} disabled={working} onPress={() => void run("ankiSync")} />
           {status && (
             <Text
               accessibilityRole={status.tone === "error" ? "alert" : undefined}

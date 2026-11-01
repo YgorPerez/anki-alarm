@@ -30,6 +30,7 @@ export const androidAnkiDroid: AnkiDroidApi = {
     provider<AnkiDroidCard | null>(() => native.answer(noteId, ord, ease, timeTakenMs)),
   suspend: ({ noteId, ord }) => provider<AnkiDroidCard | null>(() => native.suspend(noteId, ord)),
   bury: ({ noteId, ord }) => provider<AnkiDroidCard | null>(() => native.bury(noteId, ord)),
+  requestSync: Effect.asVoid(provider<null>(() => native.requestSync())),
   importMedia: Effect.tryPromise({
     try: pickAndImportApkgMedia,
     catch: (error) => new Error(String(error)),

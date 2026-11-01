@@ -17,6 +17,7 @@ class AnkiDroidReader(private val resolver: ContentResolver, authority: String =
     const val PACKAGE = "com.ichi2.anki"
     const val AUTHORITY = "$PACKAGE.flashcards"
     const val PERMISSION = "$PACKAGE.permission.READ_WRITE_DATABASE"
+    const val SYNC_ACTION = "$PACKAGE.DO_SYNC"
     private val DECK_COLUMNS = arrayOf("deck_id", "deck_name", "options", "deck_dyn")
     private val CARD_COLUMNS = arrayOf(
       "_id", "note_id", "ord", "deck_id", "original_deck_id", "reps", "lapses", "type", "queue",

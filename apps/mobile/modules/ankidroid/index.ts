@@ -13,5 +13,7 @@ interface NativeAnkiDroid {
   answer: (noteId: number, ord: number, ease: number, timeTakenMs: number) => Promise<string>;
   /** Buries a card; resolves with it as read back (`AnkiDroidCard`), or "null" when it's gone. */
   bury: (noteId: number, ord: number) => Promise<string>;
+  /** Starts AnkiDroid's `DO_SYNC` Activity; resolves with "null". It reports no sync result. */
+  requestSync: () => Promise<string>;
 }
 export default requireNativeModule<NativeAnkiDroid>("AnkiDroid");
