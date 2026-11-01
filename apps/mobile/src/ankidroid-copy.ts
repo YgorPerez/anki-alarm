@@ -42,6 +42,11 @@ const messages = {
     held: "{held} revisões esperam: o cartão está suspenso ou enterrado no AnkiDroid.",
     syncBackError:
       "Não foi possível enviar ao AnkiDroid. As revisões que faltaram vão na próxima vez.",
+    ankiSync: "Sincronizar AnkiDroid",
+    ankiSyncing: "Enviando revisões e chamando o AnkiDroid…",
+    ankiSyncAsked: "Pedimos ao AnkiDroid que sincronize com o AnkiWeb. O resultado aparece nele.",
+    ankiSyncWait: "O AnkiDroid foi chamado há pouco. Tente de novo em {minutes} min.",
+    ankiSyncError: "Não foi possível chamar o AnkiDroid. Tente novamente.",
     syncBackNote:
       "O AnkiDroid registra cada revisão na hora do envio, com o tempo de resposta limitado pelo baralho dele.",
     pending: "{count} revisões pendentes para o AnkiDroid.",
@@ -93,6 +98,11 @@ const messages = {
     sentBack: "{sent} reviews sent to AnkiDroid.",
     held: "{held} reviews are waiting: the card is suspended or buried in AnkiDroid.",
     syncBackError: "Couldn't send to AnkiDroid. The reviews left go next time.",
+    ankiSync: "Sync AnkiDroid",
+    ankiSyncing: "Sending reviews and calling AnkiDroid…",
+    ankiSyncAsked: "AnkiDroid was asked to sync with AnkiWeb. The result shows there.",
+    ankiSyncWait: "AnkiDroid was called a moment ago. Try again in {minutes} min.",
+    ankiSyncError: "Couldn't reach AnkiDroid. Try again.",
     syncBackNote:
       "AnkiDroid records each review at the time it's sent, with the answer time capped by its deck.",
     pending: "{count} pending answers for AnkiDroid.",

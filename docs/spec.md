@@ -194,8 +194,10 @@ AnkiDroid decks become the app's own decks. The app schedules them with FSRS lik
 - The deck page shows pending answers and why they wait. A failure that needs the user (no
   permission, AnkiDroid missing or too old) also shows a global card. Auto sync back never fails
   silently.
-- **Sync AnkiDroid** (a button, never automatic) asks AnkiDroid to sync with AnkiWeb through its
-  `DO_SYNC` intent, because the app can't reach AnkiWeb itself.
+- **Sync AnkiDroid** (a button, never automatic) sends pending answers, then asks AnkiDroid to sync
+  with AnkiWeb through its `DO_SYNC` intent, because the app can't reach AnkiWeb itself. If sending
+  fails it doesn't ask. Within 5 minutes of the last request a tap does neither and says how long
+  to wait, across restarts. AnkiDroid reports no result, so the app says only that it asked.
 - A linked deck's options are the app's own after linking and pull never overwrites them. **Bring
   from AnkiDroid** copies them on request, FSRS parameters included. The API can't write options, so
   changes here don't reach AnkiDroid.
