@@ -212,6 +212,11 @@ test("study answers survive reopen and outbox failure rolls back the review", as
       durationMs: 1400,
       origin: "phone",
       at: 1700000000000,
+      options: {
+        desiredRetention: 0.9,
+        learningSteps: [1, 10],
+        fsrsParameters: state.presets[0]!.fields.fsrsParameters.value,
+      },
     });
     expect(review.id).toMatch(/^[\da-f-]{14}7/);
     const reopened = await open();

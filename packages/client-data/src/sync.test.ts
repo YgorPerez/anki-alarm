@@ -2,6 +2,7 @@
 import { DatabaseSync } from "node:sqlite";
 import {
   answerUndo,
+  cardMemory,
   isBuried,
   newAlarm,
   popUndo,
@@ -592,4 +593,53 @@ test("flag and mark sync independently from card moves and note field edits", as
       state.decks.find((d) => d.fields.name.value === "Moved")!.id,
     );
   }
+});
+
+test("phone and web converge after offline answers under different scheduling options", async () => {
+  const server = memorySyncServer();
+  const api = await connect(server);
+  const phone = await device("phone");
+  const web = await device("web");
+  const state = await run(
+    phone.data.changeCollection((c) => {
+      const deck = c.createDeck("Words");
+      c.addBasicNote(deck.id, "one", "um");
+    }),
+  );
+  const cardId = state.cards[0]!.id;
+  const presetId = state.presets[0]!.id;
+  await run(phone.data.adoptAccount("user-1"));
+  await run(web.data.adoptAccount("user-1"));
+  await run(phone.data.sync(api.client));
+  await run(web.data.sync(api.client));
+  phone.clock.now = 2000;
+  await run(
+    phone.data.changeCollection((c) =>
+      c.updatePreset(presetId, { desiredRetention: 0.99, learningSteps: [30] }),
+    ),
+  );
+  await run(phone.data.answerCard(cardId, 1, 100));
+  web.clock.now = 3000;
+  await run(web.data.answerCard(cardId, 1, 100));
+  const phoneBefore = cardMemory(
+    await run(phone.data.collection),
+    await run(phone.data.reviewLog),
+    cardId,
+    3000,
+  );
+  expect(phoneBefore?.due.getTime()).toBe(2000 + 30 * 60_000);
+  await run(phone.data.sync(api.client));
+  await run(web.data.sync(api.client));
+  await run(phone.data.sync(api.client));
+  const phoneLog = await run(phone.data.reviewLog);
+  const webLog = await run(web.data.reviewLog);
+  expect(new Map(phoneLog.map((e) => [e.id, e]))).toEqual(new Map(webLog.map((e) => [e.id, e])));
+  expect(phoneLog).toMatchObject([
+    { origin: "phone", options: { desiredRetention: 0.99, learningSteps: [30] } },
+    { origin: "web", options: { desiredRetention: 0.9, learningSteps: [1, 10] } },
+  ]);
+  const here = cardMemory(await run(phone.data.collection), phoneLog, cardId, 3000);
+  const there = cardMemory(await run(web.data.collection), webLog, cardId, 3000);
+  expect(here).toEqual(there);
+  expect(here?.due.getTime()).toBe(3000 + 60_000);
 });

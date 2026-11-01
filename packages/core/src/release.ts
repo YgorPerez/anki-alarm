@@ -40,7 +40,7 @@ export function newerApk(releases: readonly Release[], installedVersionCode: num
 }
 
 // 2: alarm journal events sync (#60); a client on 1 would fail to decode them.
-export const SYNC_PROTOCOL = 2;
+export const SYNC_PROTOCOL = 3;
 
 export function releaseArtifact(fingerprint: string, latestApkFingerprint?: string) {
   return fingerprint === latestApkFingerprint ? "ota" : "apk";

@@ -4,12 +4,27 @@ import type { Card, CollectionState, Deck, Preset } from "./collection.ts";
 export type { MemoryState, Grade };
 /** FSRS card states: New, Learning, Review, Relearning. */
 export { State as CardState };
+/** Scheduling inputs only, copied so later preset edits cannot change an answer. */
+export type SchedulingOptions = {
+  desiredRetention: number;
+  learningSteps: number[];
+  fsrsParameters: number[];
+};
+export function schedulingOptions(preset: Preset): SchedulingOptions {
+  return {
+    desiredRetention: preset.fields.desiredRetention.value,
+    learningSteps: [...preset.fields.learningSteps.value],
+    fsrsParameters: [...preset.fields.fsrsParameters.value],
+  };
+}
 type Entry = { id: string; cardId: string; at: number };
 export type LogEntry = Entry &
   (
     | {
         kind: "review";
         grade: Grade;
+        /** Absent only on legacy entries, frozen by the upgrade migration. */
+        options?: SchedulingOptions;
         durationMs: number;
         origin: "phone" | "web" | "alarm" | "import";
         /**
@@ -50,14 +65,17 @@ export function replayEntries(
 ): MemoryState {
   const entries = [...cardLog].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
   const voided = new Set(entries.filter((e) => e.kind === "void").map((e) => e.targetId));
-  const scheduler = schedulerFor(preset);
   let state = createEmptyCard(new Date(now));
   for (const entry of entries) {
     if (voided.has(entry.id)) continue;
     visit?.(entry, state);
     switch (entry.kind) {
       case "review":
-        state = scheduler.next(state, new Date(entry.at), entry.grade).card;
+        state = schedulerFor(entry.options ?? schedulingOptions(preset)).next(
+          state,
+          new Date(entry.at),
+          entry.grade,
+        ).card;
         break;
       case "reset":
         state = createEmptyCard(new Date(entry.at));
@@ -80,12 +98,12 @@ export function replayEntries(
   }
   return state;
 }
-function schedulerFor(preset: Preset) {
+function schedulerFor(options: SchedulingOptions) {
   return fsrs({
-    request_retention: preset.fields.desiredRetention.value,
-    w: preset.fields.fsrsParameters.value,
+    request_retention: options.desiredRetention,
+    w: options.fsrsParameters,
     enable_fuzz: false,
-    learning_steps: preset.fields.learningSteps.value.map((n) => `${n}m` as const),
+    learning_steps: options.learningSteps.map((n) => `${n}m` as const),
   });
 }
 
@@ -101,7 +119,7 @@ export function nextIntervals(
   const preset = deck && deckPreset(collection, deck);
   if (!preset) return undefined;
   const memory = replayCard(cardId, log, preset, now);
-  const choices = schedulerFor(preset).repeat(memory, new Date(now));
+  const choices = schedulerFor(schedulingOptions(preset)).repeat(memory, new Date(now));
   const seconds = (grade: Grade) => (choices[grade].card.due.getTime() - now) / 1000;
   return { 1: seconds(1), 2: seconds(2), 3: seconds(3), 4: seconds(4) };
 }

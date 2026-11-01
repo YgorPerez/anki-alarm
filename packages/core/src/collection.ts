@@ -13,7 +13,7 @@ import {
 import { cardId, importId, uuid7 } from "./ids.ts";
 import { isLanguageTag } from "./locale.ts";
 import { editedNoteType, editedValues, noteTypeProblems, type NoteTypeEdit } from "./note-types.ts";
-import { dueInDays, studyDayStart, type LogEntry } from "./study.ts";
+import { deckPreset, schedulingOptions, dueInDays, studyDayStart, type LogEntry } from "./study.ts";
 
 /** FSRS-6's default weights, which every new preset starts from. */
 export const DEFAULT_FSRS_PARAMETERS: readonly number[] = default_w;
@@ -952,15 +952,19 @@ export class Collection {
       const card = cards.get(r.cardId);
       if (!card || ours.take(card, r)) continue;
       const base = { id: importId("review", `${r.cardId}:${r.id}`), cardId: card, at: r.at };
-      if (r.kind === "review")
+      if (r.kind === "review") {
+        const record = index.cards.get(card)!;
+        const deck = index.decks.get(record.fields.deckId.value)!;
+        const preset = deckPreset(this.state, deck)!;
         log.push({
           ...base,
           kind: "review",
           grade: r.grade,
           durationMs: r.durationMs,
           origin: "import",
+          options: schedulingOptions(preset),
         });
-      else if (r.kind === "reset") log.push({ ...base, kind: "reset" });
+      } else if (r.kind === "reset") log.push({ ...base, kind: "reset" });
       else log.push({ ...base, kind: "setDueDate", due: dueAfter(r.at, r.interval) });
     }
     return { log, notes: noteCount, cards: cards.size };
