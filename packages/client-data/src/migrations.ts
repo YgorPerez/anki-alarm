@@ -82,6 +82,17 @@ const migrations = [
     id: 11,
     database: "collection.db",
     statements: [
+      // The Worker froze its copies on its own, and this device's cursor is past them. A device with
+      // an account sends and reads everything once, so the merge picks one copy everywhere.
+      ...["syncCursor:0", "syncFullUpload:1"].map((meta) => {
+        const [id, value] = meta.split(":");
+        return `INSERT OR REPLACE INTO metadata (id, value)
+        SELECT '${id}', '${value}'
+        WHERE EXISTS (SELECT 1 FROM metadata WHERE id = 'syncAccount')
+          AND EXISTS (SELECT 1 FROM review_log WHERE json_extract(body, '$.kind') = 'review'
+            AND json_extract(body, '$.options') IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM schema_migrations WHERE id = 11)`;
+      }),
       `WITH options AS (
         SELECT c.id AS card_id, json_object(
           'desiredRetention', COALESCE(json_extract(d.body, '$.fields.desiredRetention.value'), json_extract(p.body, '$.fields.desiredRetention.value')),

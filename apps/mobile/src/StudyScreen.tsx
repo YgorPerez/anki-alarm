@@ -1,7 +1,7 @@
 import { autoAdvanceStep, deckPreset } from "@app/core";
 import { StudyAudio } from "./StudyAudio.tsx";
 import { useAutoAdvance } from "./use-auto-advance.ts";
-import { useStudyTimer } from "./use-study-timer.ts";
+import { useStudyTimer } from "@app/editing-ui/use-study-timer";
 import { autoSyncBack } from "./ankidroid-sync-query.ts";
 import type { AnkiDroidApi } from "./ankidroid.ts";
 import { COLLECTION_QUERY_KEY } from "./collection-query.ts";

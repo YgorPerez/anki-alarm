@@ -15,6 +15,15 @@ import { easyDayInterval, type EasyDays } from "./easy-days.ts";
 export type { MemoryState, Grade };
 /** FSRS card states: New, Learning, Review, Relearning. */
 export { State as CardState };
+/** Anki's defaults for the lapse and interval options. */
+export const DEFAULT_RELEARNING_STEPS: readonly number[] = [10];
+export const DEFAULT_LEECH_THRESHOLD = 8;
+export const DEFAULT_MAXIMUM_INTERVAL = 36500;
+/** Anki's rule: at the threshold, and every half threshold (rounded up) after it; 0 turns it off. */
+export function leechThresholdMet(lapses: number, threshold: number): boolean {
+  if (threshold <= 0 || lapses < threshold) return false;
+  return (lapses - threshold) % Math.max(1, Math.ceil(threshold / 2)) === 0;
+}
 /** Scheduling inputs only, copied so later preset edits cannot change an answer. */
 export type SchedulingOptions = {
   desiredRetention: number;
@@ -35,9 +44,9 @@ function fsrsOptions(preset: Preset): SchedulingOptions {
     desiredRetention: preset.fields.desiredRetention.value,
     learningSteps: [...preset.fields.learningSteps.value],
     fsrsParameters: [...preset.fields.fsrsParameters.value],
-    relearningSteps: [...(preset.fields.relearningSteps?.value ?? [10])],
-    maximumInterval: preset.fields.maximumInterval?.value ?? 36500,
-    leechThreshold: preset.fields.leechThreshold?.value ?? 8,
+    relearningSteps: [...(preset.fields.relearningSteps?.value ?? DEFAULT_RELEARNING_STEPS)],
+    maximumInterval: preset.fields.maximumInterval?.value ?? DEFAULT_MAXIMUM_INTERVAL,
+    leechThreshold: preset.fields.leechThreshold?.value ?? DEFAULT_LEECH_THRESHOLD,
     leechAction: preset.fields.leechAction?.value ?? "tagOnly",
   };
 }
@@ -59,6 +68,8 @@ export type LogEntry = Entry &
         options?: SchedulingOptions;
         /** Previous sibling buries, for undo; the actual buries are synced card fields. */
         siblingBuries?: { cardId: string; until: number | null }[];
+        /** What this answer's leech action changed, for undo; the changes are synced fields. */
+        leech?: { tagged: boolean; suspended: boolean };
         durationMs: number;
         origin: "phone" | "web" | "alarm" | "import";
         /**
@@ -137,8 +148,10 @@ function schedulerFor(options: SchedulingOptions) {
     request_retention: options.desiredRetention,
     w: options.fsrsParameters,
     enable_fuzz: false,
-    maximum_interval: options.maximumInterval ?? 36500,
-    relearning_steps: (options.relearningSteps ?? [10]).map((n) => `${n}m` as const),
+    maximum_interval: options.maximumInterval ?? DEFAULT_MAXIMUM_INTERVAL,
+    relearning_steps: (options.relearningSteps ?? DEFAULT_RELEARNING_STEPS).map(
+      (n) => `${n}m` as const,
+    ),
     learning_steps: options.learningSteps.map((n) => `${n}m` as const),
   });
 }
@@ -148,7 +161,7 @@ function answered(options: SchedulingOptions, memory: MemoryState, at: number, g
     : capInterval(
         schedulerFor(options).next(memory, new Date(at), grade).card,
         at,
-        options.maximumInterval ?? 36500,
+        options.maximumInterval ?? DEFAULT_MAXIMUM_INTERVAL,
       );
 }
 /** Each grade's next state; the days Hard, Good and Easy send a card to follow the easy days. */
@@ -156,7 +169,7 @@ function answers(options: SchedulingOptions, memory: MemoryState, at: number) {
   const scheduler = schedulerFor(options);
   const choices = scheduler.repeat(memory, new Date(at));
   const capped = (grade: Grade) =>
-    capInterval(choices[grade].card, at, options.maximumInterval ?? 36500);
+    capInterval(choices[grade].card, at, options.maximumInterval ?? DEFAULT_MAXIMUM_INTERVAL);
   const states: Record<Grade, MemoryState> = {
     1: capped(1),
     2: capped(2),

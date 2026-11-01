@@ -128,8 +128,10 @@ options never moves a card already answered. Caches of the result are fine; the 
 ### Scheduling
 
 - FSRS-6 through `ts-fsrs`, the only scheduler. Options that only mean something under SM-2 aren't
-  offered, and a linked deck whose AnkiDroid preset has FSRS off gets a warning that the two
-  schedules will differ.
+  offered, and a linked deck whose AnkiDroid seems to have FSRS off gets a warning that the two
+  schedules will differ. The API hides that switch, so the warning is a best guess from memory state
+  on reviewed cards, and it says so. It can be wrong right after the switch changes, and with no
+  reviewed cards the app says it can't tell.
 - Per-user parameter optimization is a later feature, once there is enough review history. The
   schema keeps everything the optimizer needs (the full log with grades and times).
 
@@ -190,7 +192,13 @@ AnkiDroid decks become the app's own decks. The app schedules them with FSRS lik
   dropped. A card AnkiDroid reviewed since we last saw it gets its snapshot before our answers go.
   The phone keeps what it sent and the `reps` it last saw locally. When linking finds reviews not
   sent yet (a reinstall, another phone, a deck studied before its link), the app says how many and
-  asks whether to send them; declining marks them as sent.
+  asks whether to send them; declining marks them as sent. The question stays on the deck page until
+  answered, and those reviews don't send before that. On a deck another phone had linked, that phone
+  may have sent some already and the API has no history to check, so the app guesses and prefers not
+  resending: it leaves out a review from before the card's last snapshot, and the oldest reviews, up
+  to how far `reps` rose since that snapshot, that aren't newer than AnkiDroid's last review. A review
+  made in AnkiDroid itself can stand in for one that never arrived, and that one stays out. The
+  question says this is an estimate.
 - The deck page shows pending answers and why they wait. A failure that needs the user (no
   permission, AnkiDroid missing or too old) also shows a global card. Auto sync back never fails
   silently.
@@ -300,13 +308,16 @@ Default. Defaults match Anki's.
   also keeps to its own. Anki keeps those two rules for the whole collection, so `.apkg` import gives
   them to every imported preset and export writes the exported deck's.
 - **New cards:** learning steps, insertion order.
-- **Lapses:** relearning steps, leech threshold, leech action (suspend or tag only).
+- **Lapses:** relearning steps, leech threshold, leech action (suspend or tag only). As in Anki, the
+  action runs on the lapse that reaches the threshold and every half threshold (rounded up) after it.
+  Undoing that answer takes back the tag and suspension it added.
 - **Display order:** new card gathering and sort order, new versus reviews, learning versus reviews,
   review sort order.
 - **FSRS:** desired retention as a slider with an explanation; the 21 parameters under Advanced.
 - **Burying:** new, review and learning siblings.
 - **Audio:** don't play automatically, skip the question when replaying the answer.
-- **Timer:** maximum answer seconds, show the timer, stop it on answer.
+- **Timer:** maximum answer seconds, show the timer, stop it on answer. As in Anki, stopping only
+  freezes the time on screen: the logged time runs to the grade, capped by the maximum.
 - **Auto advance:** seconds for the question and answer, wait for audio, question and answer actions.
 - **Easy days:** minimum, reduced or normal for each weekday.
 - **Advanced:** maximum interval.

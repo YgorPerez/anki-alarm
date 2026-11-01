@@ -1,10 +1,8 @@
 import { AnkiDroidOptions } from "./AnkiDroidOptions.tsx";
 import type { AnkiDroidApi } from "./ankidroid.ts";
 import {
-  ANSWER_ACTIONS,
   DEFAULT_FSRS_PARAMETERS,
   deckLimitTexts,
-  QUESTION_ACTIONS,
   presetOptionTexts,
   presetTexts,
   readPresetTexts,
@@ -17,7 +15,7 @@ import {
   type Preset,
   type PresetOptions,
 } from "@app/core";
-import { displayOrderFields } from "@app/editing-ui";
+import { autoAdvanceActionFields, displayOrderFields } from "@app/editing-ui";
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
 import { RetentionSlider } from "./RetentionSlider.tsx";
@@ -27,14 +25,32 @@ import { editingCopy } from "./editing-copy.ts";
 import { EasyDaysField } from "./EasyDaysField.tsx";
 import { bold, regular } from "./fonts.ts";
 
-const ACTION_LABELS = {
-  showAnswer: "actionShowAnswer",
-  showReminder: "actionShowReminder",
-  bury: "actionBury",
-  again: "actionAgain",
-  good: "actionGood",
-  hard: "actionHard",
-} as const;
+/** A yes-or-no option: the form keeps it as the text "true" or "false". */
+function OptionSwitch({
+  label,
+  field,
+  busy,
+}: {
+  label: string;
+  field: { state: { value: string }; handleChange: (value: string) => void };
+  busy: boolean;
+}) {
+  return (
+    <View className="min-h-12 flex-row items-center justify-between gap-3">
+      <Text style={regular} className="flex-1 text-body text-foreground">
+        {label}
+      </Text>
+      <Switch
+        accessible
+        accessibilityRole="switch"
+        accessibilityLabel={label}
+        value={field.state.value === "true"}
+        onValueChange={(value) => field.handleChange(String(value))}
+        disabled={busy}
+      />
+    </View>
+  );
+}
 
 /** Edits a preset: the daily limits and FSRS options its decks share. */
 export function DeckOptionsEditor({
@@ -177,26 +193,12 @@ export function DeckOptionsEditor({
         )}
       </form.Field>
       <View className="gap-3">
-        <Text style={regular} className="text-label font-bold text-foreground">
+        <Text style={bold} className="text-label text-foreground">
           {t("burying")}
         </Text>
         {(["buryNew", "buryReviews", "buryLearning"] as const).map((key) => (
           <form.Field key={key} name={key}>
-            {(field) => (
-              <View className="min-h-12 flex-row items-center justify-between gap-3">
-                <Text style={regular} className="flex-1 text-body text-foreground">
-                  {t(key)}
-                </Text>
-                <Switch
-                  accessible
-                  accessibilityRole="switch"
-                  accessibilityLabel={t(key)}
-                  value={field.state.value === "true"}
-                  onValueChange={(value) => field.handleChange(String(value))}
-                  disabled={busy}
-                />
-              </View>
-            )}
+            {(field) => <OptionSwitch label={t(key)} field={field} busy={busy} />}
           </form.Field>
         ))}
       </View>
@@ -210,17 +212,7 @@ export function DeckOptionsEditor({
         ] as const
       ).map((key) => (
         <form.Field key={key} name={key}>
-          {(field) => (
-            <View className="min-h-12 flex-row items-center justify-between gap-3">
-              <Text className="shrink text-body text-foreground">{t(key)}</Text>
-              <Switch
-                accessibilityLabel={t(key)}
-                value={field.state.value === "true"}
-                onValueChange={(value) => field.handleChange(String(value))}
-                disabled={busy}
-              />
-            </View>
-          )}
+          {(field) => <OptionSwitch label={t(key)} field={field} busy={busy} />}
         </form.Field>
       ))}
       {deck &&
@@ -285,20 +277,7 @@ export function DeckOptionsEditor({
       )}
       {(["newIgnoreReviewLimit", "applyAllParentLimits"] as const).map((key) => (
         <form.Field key={key} name={key}>
-          {(field) => (
-            <View className="min-h-12 flex-row items-center justify-between gap-3">
-              <Text style={regular} className="flex-1 text-body text-foreground">
-                {t(key)}
-              </Text>
-              <Switch
-                accessibilityRole="switch"
-                accessibilityLabel={t(key)}
-                value={field.state.value === "true"}
-                onValueChange={(value) => field.handleChange(String(value))}
-                disabled={busy}
-              />
-            </View>
-          )}
+          {(field) => <OptionSwitch label={t(key)} field={field} busy={busy} />}
         </form.Field>
       ))}
       <Text style={regular} className="text-body text-muted-foreground">
@@ -321,52 +300,25 @@ export function DeckOptionsEditor({
         </form.Field>
       ))}
       <View className="gap-3">
-        <Text style={regular} className="text-label font-bold text-foreground">
+        <Text style={bold} className="text-label text-foreground">
           {t("autoAdvance")}
         </Text>
         <form.Field name="waitForAudio">
-          {(field) => (
-            <View className="min-h-12 flex-row items-center justify-between gap-3">
-              <Text style={regular} className="flex-1 text-body text-foreground">
-                {t("waitForAudio")}
-              </Text>
-              <Switch
-                accessibilityLabel={t("waitForAudio")}
-                value={field.state.value === "true"}
-                onValueChange={(value) => field.handleChange(String(value))}
+          {(field) => <OptionSwitch label={t("waitForAudio")} field={field} busy={busy} />}
+        </form.Field>
+        {autoAdvanceActionFields(locale).map(({ key, label, choices }) => (
+          <form.Field key={key} name={key}>
+            {(field) => (
+              <Choice<string>
+                label={label}
+                options={choices}
+                value={field.state.value}
+                onChange={field.handleChange}
                 disabled={busy}
               />
-            </View>
-          )}
-        </form.Field>
-        <form.Field name="questionAction">
-          {(field) => (
-            <Choice<string>
-              label={t("questionAction")}
-              options={QUESTION_ACTIONS.map((value) => ({
-                value,
-                label: t(ACTION_LABELS[value]),
-              }))}
-              value={field.state.value}
-              onChange={field.handleChange}
-              disabled={busy}
-            />
-          )}
-        </form.Field>
-        <form.Field name="answerAction">
-          {(field) => (
-            <Choice<string>
-              label={t("answerAction")}
-              options={ANSWER_ACTIONS.map((value) => ({
-                value,
-                label: t(ACTION_LABELS[value]),
-              }))}
-              value={field.state.value}
-              onChange={field.handleChange}
-              disabled={busy}
-            />
-          )}
-        </form.Field>
+            )}
+          </form.Field>
+        ))}
       </View>
       {fields.map((spec) => (
         <form.Field

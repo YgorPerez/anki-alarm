@@ -305,8 +305,12 @@ export function syncEngine({
   const write = (change: SyncChange) =>
     Effect.gen(function* () {
       if (change.kind === "reviewLog") {
+        // A stored entry comes back only when its frozen options lost the merge (ADR 0008).
         yield* query(() =>
-          collectionDb.insert(reviewLog).values({ id: change.entry.id, body: change.entry }),
+          collectionDb
+            .insert(reviewLog)
+            .values({ id: change.entry.id, body: change.entry })
+            .onConflictDoUpdate({ target: reviewLog.id, set: { body: change.entry } }),
         );
       } else if (change.kind === "alarmEvent") {
         yield* query(() =>

@@ -33,6 +33,7 @@ export {
   syncBackBuryPlan,
   syncBackPlan,
   syncBackQueue,
+  linkOfferPlan,
   syncBackSuspensions,
 } from "./ankidroid.ts";
 export type {

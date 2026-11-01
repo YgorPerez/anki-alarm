@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { studyAnswerDuration, type Preset } from "@app/core";
 
-/** One clock for both the displayed and logged time; revealing can freeze it. */
+/**
+ * The study timer, as in Anki: the logged time runs from the question to the grade, capped by the
+ * preset's maximum answer seconds. "Stop on answer" only freezes the time on screen.
+ */
 export function useStudyTimer(started: number | undefined, preset: Preset | undefined) {
   const [stopped, setStopped] = useState<{ started: number | undefined; at: number }>();
   const [now, setNow] = useState(() => performance.now());
@@ -13,9 +16,7 @@ export function useStudyTimer(started: number | undefined, preset: Preset | unde
     return () => clearInterval(timer);
   }, [show, end]);
   const duration = () =>
-    preset && started !== undefined
-      ? studyAnswerDuration(preset, (end ?? performance.now()) - started)
-      : 0;
+    preset && started !== undefined ? studyAnswerDuration(preset, performance.now() - started) : 0;
   const elapsed =
     preset && started !== undefined ? studyAnswerDuration(preset, (end ?? now) - started) : 0;
   const stop = () => {

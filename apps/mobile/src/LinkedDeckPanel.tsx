@@ -49,8 +49,14 @@ export function LinkedDeckPanel({
     queryFn: () => Effect.runPromise(localData((data) => data.autoSyncBack)),
   });
   const syncStatus = useAnkiDroidSyncBackStatus();
-  const pending = syncStatus.data?.pending.filter((a) => a.deckId === deck.id) ?? [];
+  const here = syncStatus.data?.pending.filter((a) => a.deckId === deck.id) ?? [];
+  const pending = here.filter((a) => !a.offer);
   const held = pending.filter((a) => a.held).length;
+  // One offer covers a linked deck and its subdecks: any of their pages can answer it.
+  const offerId =
+    here.find((a) => a.offer)?.offer ??
+    syncStatus.data?.pending.find((a) => a.offer === deck.id)?.offer;
+  const offered = syncStatus.data?.pending.filter((a) => a.offer === offerId).length ?? 0;
   const [status, setStatus] = useState<Status>();
   const busy = useRef(false);
   const owned = phone.data !== undefined && deck.fields.linkedBy?.value === phone.data;
@@ -93,6 +99,18 @@ export function LinkedDeckPanel({
     );
     busy.current = false;
   }
+  async function decide(send: boolean) {
+    if (busy.current || !offerId) return;
+    setStatus(undefined);
+    try {
+      await Effect.runPromise(localData((data) => data.resolveAnkiDroidLinkOffer(offerId, send)));
+    } catch {
+      setStatus({ tone: "error", text: t("offerError") });
+      return;
+    }
+    if (send) await run("syncBack");
+    else await client.invalidateQueries({ queryKey: ANKIDROID_SYNC_QUERY_KEY });
+  }
   async function setAuto(on: boolean) {
     await Effect.runPromise(localData((data) => data.setAutoSyncBack(on))).catch(() => {});
     await client.invalidateQueries({ queryKey: ["autoSyncBack"] });
@@ -111,6 +129,24 @@ export function LinkedDeckPanel({
       )}
       {owned && (
         <>
+          {offered > 0 && (
+            <>
+              <Text style={regular} className="text-body text-foreground">
+                {t("offer", { count: String(offered) })}
+              </Text>
+              <Button
+                label={t("sendOffer")}
+                primary
+                disabled={working}
+                onPress={() => void decide(true)}
+              />
+              <Button
+                label={t("declineOffer")}
+                disabled={working}
+                onPress={() => void decide(false)}
+              />
+            </>
+          )}
           <Text style={regular} className="text-body text-foreground">
             {t("pending", { count: String(pending.length) })}
           </Text>

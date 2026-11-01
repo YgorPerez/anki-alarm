@@ -40,6 +40,8 @@ export function newerApk(releases: readonly Release[], installedVersionCode: num
 }
 
 // 2: alarm journal events sync (#60); a client on 1 would fail to decode them.
+// 3: reviews carry their frozen scheduling options (ADR 0008); a client on 2 would replay them under
+//    its current preset, and two copies of a legacy review now merge instead of only appending.
 export const SYNC_PROTOCOL = 3;
 
 export function releaseArtifact(fingerprint: string, latestApkFingerprint?: string) {

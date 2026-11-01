@@ -1,13 +1,23 @@
 import type { PresetOptions } from "@app/core";
 import { act, cleanup, screen, waitFor } from "@testing-library/react";
-import { expect, test, vi } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import { webRequest } from "#/data/client.ts";
 
 import { renderRoute } from "../../test/render.tsx";
 
 const SOON = 0.01;
-const wait = (ms: number) => act(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+const elapse = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+// Waits that expect nothing to happen pass at once; real time still runs what the tests wait for.
+beforeEach(() => {
+  vi.useFakeTimers({
+    shouldAdvanceTime: true,
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+  });
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 async function study(name: string, options: Partial<PresetOptions>, front = "front") {
   const deckId = (await webRequest("change", { kind: "createDeck", name }))!;
@@ -75,7 +85,7 @@ test("waiting for audio starts the seconds when the side's audio ends", async ()
   try {
     await study("Web audio", { secondsToShowQuestion: SOON }, "[sound:q.mp3]");
     await waitFor(() => expect(playing).toHaveLength(1));
-    await wait(150);
+    await elapse(150);
     screen.getByRole("button", { name: "Show answer" });
     await act(async () => playing[0]!.dispatchEvent(new Event("ended")));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Show answer" })).toBeNull());
@@ -92,7 +102,7 @@ test("leaving study stops it", async () => {
     answerAction: "good",
   });
   cleanup();
-  await new Promise((resolve) => setTimeout(resolve, 800));
+  await elapse(800);
   expect(await reviews()).toEqual([]);
 });
 
@@ -101,7 +111,7 @@ test("a hidden tab holds it until the tab returns", async () => {
   try {
     await study("Web hidden", { secondsToShowQuestion: SOON, waitForAudio: false });
     const reveal = await screen.findByRole("button", { name: "Show answer" });
-    await wait(150);
+    await elapse(150);
     expect(reveal.isConnected).toBe(true);
     visibility.mockReturnValue("visible");
     await act(async () => document.dispatchEvent(new Event("visibilitychange")));

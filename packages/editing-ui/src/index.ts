@@ -2,9 +2,11 @@
 // web. Each app spreads it into its own messages and adds the keys only its screens have. The
 // limits come from Core, so the copy can't drift from the rules it states.
 import {
+  ANSWER_ACTIONS,
   DISPLAY_ORDER_KEYS,
   MAX_DUE_DAYS,
   PRESET_LIMITS,
+  QUESTION_ACTIONS,
   type DisplayOrder,
   type Locale,
   type Messages,
@@ -38,8 +40,11 @@ export const editingMessages = {
     bringAnkiDroid: "Trazer do AnkiDroid",
     bringAnkiDroidHint:
       "Copia para esta predefinição. Confira os valores e toque em Salvar para aplicar aos baralhos que a usam.",
+    cancel: "Cancelar",
+    ankiDroidDeckMissing:
+      "Este baralho não está mais no AnkiDroid, então não há opções para trazer.",
     ankiDroidSm2:
-      "Os cartões revisados indicam que o AnkiDroid não usa FSRS. Os agendamentos vão diferir: este app sempre usa FSRS.",
+      "Os cartões revisados sugerem que o AnkiDroid não usa FSRS. É uma estimativa: a API não informa essa opção. Se for o caso, os agendamentos vão diferir, porque este app sempre usa FSRS.",
     ankiDroidUnknown:
       "Não foi possível verificar se o AnkiDroid usa FSRS. A API não informa essa opção; sem FSRS, os agendamentos vão diferir.",
     preset: "Predefinição",
@@ -152,8 +157,10 @@ export const editingMessages = {
     bringAnkiDroid: "Bring from AnkiDroid",
     bringAnkiDroidHint:
       "Copies into this preset. Check the values and tap Save to apply to every deck using it.",
+    cancel: "Cancel",
+    ankiDroidDeckMissing: "This deck is no longer in AnkiDroid, so there are no options to bring.",
     ankiDroidSm2:
-      "Reviewed cards suggest AnkiDroid is not using FSRS. The schedules will differ: this app always uses FSRS.",
+      "Reviewed cards suggest AnkiDroid is not using FSRS. This is a best guess: the API does not expose the setting. If so, the schedules will differ, because this app always uses FSRS.",
     ankiDroidUnknown:
       "Could not verify whether AnkiDroid uses FSRS. The API does not expose this setting; without FSRS, the schedules will differ.",
     preset: "Preset",
@@ -372,6 +379,25 @@ const displayOrderCopy: Record<Locale, DisplayOrderCopy> = {
       },
     },
   },
+};
+
+const ACTION_LABELS = {
+  showAnswer: "actionShowAnswer",
+  showReminder: "actionShowReminder",
+  bury: "actionBury",
+  again: "actionAgain",
+  good: "actionGood",
+  hard: "actionHard",
+} as const;
+/** The auto advance actions as both deck options screens list them. */
+export const autoAdvanceActionFields = (locale: Locale) => {
+  const t = editingMessages[locale];
+  const choices = (actions: readonly (keyof typeof ACTION_LABELS)[]) =>
+    actions.map((value) => ({ value: value as string, label: t[ACTION_LABELS[value]] }));
+  return [
+    { key: "questionAction", label: t.questionAction, choices: choices(QUESTION_ACTIONS) },
+    { key: "answerAction", label: t.answerAction, choices: choices(ANSWER_ACTIONS) },
+  ] as const;
 };
 
 /** The display order options as both deck options screens list them. */

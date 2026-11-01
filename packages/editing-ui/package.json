@@ -5,7 +5,8 @@
   "description": "What the phone's and the web's editors share: the copy for deck options, notes and card actions, with Core's limits in it.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./use-study-timer": "./src/use-study-timer.ts"
   },
   "scripts": {
     "test": "vp test run"
@@ -14,7 +15,12 @@
     "@app/core": "workspace:*"
   },
   "devDependencies": {
+    "@types/react": "catalog:",
+    "react": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "catalog:"
   }
 }

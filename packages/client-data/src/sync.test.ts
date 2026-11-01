@@ -25,6 +25,7 @@ import {
   memoryMediaFiles,
   type ExecuteSql,
 } from "./index.ts";
+import { migrationStatements } from "./migrations.ts";
 
 /** One device: its own two SQLite databases and clock. */
 async function device(name: string, clock = { now: 1_000 }) {
@@ -60,7 +61,7 @@ async function device(name: string, clock = { now: 1_000 }) {
       ),
     ),
   );
-  return { data, run, clock, files };
+  return { data, run, clock, files, databases };
 }
 const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect);
 
@@ -647,6 +648,71 @@ test("phone and web converge after offline answers under different scheduling op
   const there = cardMemory(await run(web.data.collection), webLog, cardId, 3000);
   expect(here).toEqual(there);
   expect(here?.due.getTime()).toBe(3000 + 60_000);
+});
+
+test("a legacy review frozen differently on a device converges with the server's copy (ADR 0008)", async () => {
+  const server = memorySyncServer();
+  const api = await connect(server);
+  const phone = await device("phone");
+  const web = await device("web");
+  const state = await run(
+    phone.data.changeCollection((c) => {
+      const deck = c.createDeck("Words");
+      c.addBasicNote(deck.id, "one", "um");
+    }),
+  );
+  await run(phone.data.answerCard(state.cards[0]!.id, 3, 100));
+  await run(phone.data.adoptAccount("user-1"));
+  await run(web.data.adoptAccount("user-1"));
+  await run(phone.data.sync(api.client));
+  await run(web.data.sync(api.client));
+  // The server froze this review at 0.9. The phone upgrades with an unsynced preset edit to 0.99.
+  const db = phone.databases.get("collection.db")!;
+  db.exec(`UPDATE review_log SET body = json_remove(body, '$.options');
+    UPDATE presets SET body = json_set(body, '$.fields.desiredRetention.value', 0.99);
+    DELETE FROM schema_migrations WHERE id = 11;`);
+  db.exec(migrationStatements("collection.db").join(";"));
+  expect((await run(phone.data.reviewLog))[0]).toMatchObject({
+    options: { desiredRetention: 0.99 },
+  });
+
+  await run(phone.data.sync(api.client));
+  await run(web.data.sync(api.client));
+  await run(phone.data.sync(api.client));
+  const phoneLog = await run(phone.data.reviewLog);
+  expect(phoneLog).toEqual(await run(web.data.reviewLog));
+  expect(phoneLog).toMatchObject([{ options: { desiredRetention: 0.9 } }]);
+  // Nothing moves any more: the next sync finds no differences.
+  expect(await run(phone.data.sync(api.client))).toMatchObject({ pushed: 0, pulled: 0 });
+});
+
+test("taking over a linked deck doesn't offer what the earlier phone delivered (#113)", async () => {
+  const server = memorySyncServer();
+  const api = await connect(server);
+  const first = await device("phone");
+  const second = await device("second-phone");
+  first.clock.now = 1_760_000_100_000;
+  second.clock.now = 1_760_000_100_000;
+  await run(first.data.linkAnkiDroidDeck(ankiDroid.source));
+  const linked = await run(first.data.collection);
+  const cardId = linked.cards.find((c) => c.anki?.id === 9002)!.id;
+  await run(first.data.answerCard(cardId, 3, 100, "ring-delivered"));
+  first.clock.now += 1000;
+  await run(first.data.answerCard(cardId, 3, 100, "ring-not-delivered"));
+  await run(first.data.adoptAccount("user-1"));
+  await run(second.data.adoptAccount("user-1"));
+  await run(first.data.sync(api.client));
+  await run(second.data.sync(api.client));
+  // The first phone delivered the older answer: one more rep, stamped when it arrived.
+  const source = structuredClone(ankiDroid.source);
+  const card = source.cards.find((c) => c.id === 9002)!;
+  card.reps += 1;
+  card.lastReviewSecs = 1_760_000_100;
+  const deckId = await run(second.data.linkAnkiDroidDeck(source));
+  expect(await run(second.data.ankiDroidLinkOffer(deckId))).toBe(1);
+  const status = await run(second.data.ankiDroidSyncBackStatus);
+  expect(status.pending).toHaveLength(1);
+  expect(status.pending[0]).toMatchObject({ offer: deckId });
 });
 
 test("preset creation, assignment, rename and deletion sync between phone and web", async () => {

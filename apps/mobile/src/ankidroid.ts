@@ -57,7 +57,11 @@ export const ankiDroidProvider = (api: AnkiDroidApi): AnkiDroidProvider => ({
 export const syncBackAfterSession = (api: AnkiDroidApi) =>
   Effect.gen(function* () {
     const on = yield* localData((data) => data.autoSyncBack);
-    if (!on) return 0;
+    if (!on) {
+      // Off stops the sends, so a failure from when they ran no longer needs the user.
+      yield* localData((data) => data.setAnkiDroidSyncBackFailure(null));
+      return 0;
+    }
     const status = yield* localData((data) => data.ankiDroidSyncBackStatus);
     const owned = yield* localData((data) =>
       Effect.map(data.collection, (state) =>

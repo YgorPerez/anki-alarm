@@ -67,7 +67,7 @@ export function PresetPicker({
         disabled={busy || isDefaultPreset(preset)}
         onPress={() =>
           Alert.alert(t("deletePreset"), t("deletePresetConfirm"), [
-            { text: locale === "pt-BR" ? "Cancelar" : "Cancel", style: "cancel" },
+            { text: t("cancel"), style: "cancel" },
             {
               text: t("deletePreset"),
               style: "destructive",

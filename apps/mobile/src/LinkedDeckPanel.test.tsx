@@ -177,6 +177,35 @@ test("background sync respects this phone's toggle and refreshes pending counts"
   changeAppState("active");
 });
 
+test("turning auto sync back off clears the failure card it left", async () => {
+  const anki = memoryAnkiDroid({
+    installed: { ...ready, permission: "denied" },
+    sources: [fixture.source],
+  });
+  await run((data) => data.linkAnkiDroidDeck(fixture.source));
+  await Effect.runPromise(syncBackAfterSession(anki));
+  expect((await run((data) => data.ankiDroidSyncBackStatus)).failure).toBe("permission");
+  await run((data) => data.setAutoSyncBack(false));
+  await Effect.runPromise(syncBackAfterSession(anki));
+  expect((await run((data) => data.ankiDroidSyncBackStatus)).failure).toBeNull();
+  await run((data) => data.setAutoSyncBack(true));
+});
+
+test("Bring from AnkiDroid says so when AnkiDroid no longer has the deck", async () => {
+  await run((data) => data.linkAnkiDroidDeck(fixture.source));
+  const api = memoryAnkiDroid({ installed: ready, sources: [fixture.source] });
+  const read = api.readDeck;
+  await show(api);
+  await press(/Japonês/);
+  await press("Opções do baralho");
+  const source = structuredClone(fixture.source);
+  source.decks = source.decks.filter((d) => d.id !== source.deckId);
+  api.readDeck = () => Effect.succeed(source);
+  await press("Trazer do AnkiDroid");
+  expect(await screen.findByText(/não está mais no AnkiDroid/)).toBeDefined();
+  api.readDeck = read;
+});
+
 test("an unrecorded answer stops sending with a visible reason and keeps later answers pending", async () => {
   const anki = memoryAnkiDroid({ installed: ready, sources: [fixture.source] });
   anki.answer = (answer) =>
@@ -240,7 +269,7 @@ test("deck options brings AnkiDroid values into the form, warns about SM-2, and 
   await show(memoryAnkiDroid({ installed: ready, sources: [source] }));
   await press(/Japonês/);
   await press("Opções do baralho");
-  expect(await screen.findByText(/Os agendamentos vão diferir/)).toBeDefined();
+  expect(await screen.findByText(/É uma estimativa.*os agendamentos vão diferir/)).toBeDefined();
   expect(screen.getByText(/Alterações aqui não chegam ao AnkiDroid/)).toBeDefined();
   await press("Trazer do AnkiDroid");
   await waitFor(() =>

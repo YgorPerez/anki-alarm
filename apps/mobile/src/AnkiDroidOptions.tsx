@@ -41,7 +41,8 @@ export function AnkiDroidOptions({
     retry: false,
     queryFn: () => Effect.runPromise(api.readDeck(deck.anki!.id)),
   });
-  const scheduler = source.data ? ankiDroidScheduler(source.data) : "unknown";
+  const missing = source.data && !source.data.decks.some((d) => d.id === source.data.deckId);
+  const scheduler = source.data && !missing ? ankiDroidScheduler(source.data) : "unknown";
   async function bring() {
     const result = await source.refetch();
     const ad = result.data?.decks.find((d) => d.id === deck.anki?.id);
@@ -72,6 +73,11 @@ export function AnkiDroidOptions({
           {source.isError && (
             <Text accessibilityRole="alert" style={regular} className="text-body text-destructive">
               {ankiDroidCopy(locale)("failed")}
+            </Text>
+          )}
+          {missing && !source.isError && (
+            <Text accessibilityRole="alert" style={regular} className="text-body text-destructive">
+              {t("ankiDroidDeckMissing")}
             </Text>
           )}
         </>

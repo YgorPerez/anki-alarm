@@ -10,7 +10,12 @@ import { displayOrderFromAnki, type DisplayOrder } from "./display-order.ts";
 import { easyDaysFromAnki, type EasyDay } from "./easy-days.ts";
 import { safeMediaName } from "./media.ts";
 import { Message } from "./protobuf.ts";
-import { studyDayStart } from "./study.ts";
+import {
+  DEFAULT_LEECH_THRESHOLD,
+  DEFAULT_MAXIMUM_INTERVAL,
+  DEFAULT_RELEARNING_STEPS,
+  studyDayStart,
+} from "./study.ts";
 
 /**
  * What the app gives Core to read an `.apkg`: the zip's entries, zstd and a read-only SQLite
@@ -410,12 +415,18 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         buryReviews: record(c.rev).bury === true,
         buryLearning: c.buryInterdayLearning === true,
         learningSteps: steps(record(c.new).delays),
-        relearningSteps: record(c.lapse).delays == null ? [10] : steps(record(c.lapse).delays),
+        relearningSteps:
+          record(c.lapse).delays == null
+            ? [...DEFAULT_RELEARNING_STEPS]
+            : steps(record(c.lapse).delays),
         insertionOrder: record(c.new).order === 0 ? ("random" as const) : ("sequential" as const),
-        leechThreshold: record(c.lapse).leechFails == null ? 8 : int(record(c.lapse).leechFails),
+        leechThreshold:
+          record(c.lapse).leechFails == null
+            ? DEFAULT_LEECH_THRESHOLD
+            : int(record(c.lapse).leechFails),
         leechAction:
           record(c.lapse).leechAction === 0 ? ("suspend" as const) : ("tagOnly" as const),
-        maximumInterval: int(record(c.rev).maxIvl) || 36500,
+        maximumInterval: int(record(c.rev).maxIvl) || DEFAULT_MAXIMUM_INTERVAL,
         fsrsParameters: fsrs6(steps(c.fsrsParams6)),
         easyDays: easyDaysFromAnki(steps(c.easyDaysPercentages)),
         isDefault: typeof c.ankiAlarmDefault === "boolean" ? c.ankiAlarmDefault : undefined,
@@ -517,7 +528,7 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
         insertionOrder: c.number(20) === 1 ? ("random" as const) : ("sequential" as const),
         leechThreshold: c.number(22) ?? 0,
         leechAction: c.number(21) === 1 ? ("tagOnly" as const) : ("suspend" as const),
-        maximumInterval: c.number(16) || 36500,
+        maximumInterval: c.number(16) || DEFAULT_MAXIMUM_INTERVAL,
         fsrsParameters: fsrs6(c.floats(6)),
         easyDays: easyDaysFromAnki(c.floats(4)),
         dontPlayAutomatically: c.number(23) === 1,
