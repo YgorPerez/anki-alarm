@@ -52,6 +52,17 @@ export interface SyncBackSummary {
   /** Cards buried in the app that this sync back buried in AnkiDroid. */
   buried: number;
 }
+export type SyncBackFailure =
+  | "permission"
+  | "missing"
+  | "outdated"
+  | "unavailable"
+  | "failed"
+  | "notRecorded";
+export interface SyncBackStatus {
+  pending: { entryId: string; deckId: string; held: boolean }[];
+  failure: SyncBackFailure | null;
+}
 export interface PullSummary extends SyncBackSummary {
   added: number;
   edited: number;
@@ -120,6 +131,41 @@ export function ankiDroidEngine(deps: Deps) {
       db.delete(ankiDroidSent).where(inArray(ankiDroidSent.id, [...batch])),
     );
 
+  const saveMetadata = (id: string, value: string) =>
+    deps.write(
+      Effect.asVoid(
+        query(() =>
+          db
+            .insert(metadata)
+            .values({ id, value })
+            .onConflictDoUpdate({ target: metadata.id, set: { value } }),
+        ),
+      ),
+    );
+  const setFailure = (failure: SyncBackFailure | null) =>
+    saveMetadata("ankiDroidSyncBackFailure", failure ?? "");
+  const status = deps.read(
+    Effect.gen(function* () {
+      const state = yield* deps.readCollection;
+      const log = yield* deps.readLog;
+      const sent = yield* readSent;
+      const rows = yield* query(() => db.select().from(metadata));
+      const held = new Set((rows.find((r) => r.id === "ankiDroidHeld")?.value ?? "").split(","));
+      // These values are written only by setFailure.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      const failure = (rows.find((r) => r.id === "ankiDroidSyncBackFailure")?.value ||
+        null) as SyncBackFailure | null;
+      return {
+        pending: syncBackQueue(state, log, deps.deviceId, sent).map((a) => ({
+          entryId: a.entryId,
+          deckId: a.deckId,
+          held: held.has(a.entryId),
+        })),
+        failure,
+      };
+    }),
+  );
+
   /** Links or pulls one AnkiDroid deck, with snapshots, seen reps and the take-over baseline. */
   const link = (source: AnkiDroidSource) =>
     deps
@@ -177,6 +223,7 @@ export function ankiDroidEngine(deps: Deps) {
       const noteIds = [...queue, ...buries].map((a) => a.noteId);
       const cards = yield* provider.cards([...new Set(noteIds)]);
       const plan = syncBackPlan(state, log, queue, cards, seen, deps.now());
+      yield* saveMetadata("ankiDroidHeld", plan.held.map((a) => a.entryId).join(","));
       const buryPlan = syncBackBuryPlan(buries, cards);
       const reps = new Map(cards.map((c) => [key(c), c.reps]));
       const added = yield* deps.write(
@@ -238,6 +285,18 @@ export function ankiDroidEngine(deps: Deps) {
       >();
       running = done;
       return syncBackOnce(provider).pipe(
+        Effect.tap(() => setFailure(null)),
+        Effect.tapError((error) =>
+          setFailure(
+            error instanceof WritebackNotRecorded
+              ? "notRecorded"
+              : "reason" in error && error.reason === "permission"
+                ? "permission"
+                : "reason" in error && error.reason === "unavailable"
+                  ? "unavailable"
+                  : "failed",
+          ),
+        ),
         Effect.onExit((exit) => {
           running = undefined;
           return Deferred.done(done, exit);
@@ -280,5 +339,5 @@ export function ankiDroidEngine(deps: Deps) {
         }),
       ),
     );
-  return { link, syncBack, pull, autoSyncBack, setAutoSyncBack };
+  return { link, syncBack, pull, autoSyncBack, setAutoSyncBack, status, setFailure };
 }

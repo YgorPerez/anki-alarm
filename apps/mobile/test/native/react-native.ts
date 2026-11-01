@@ -109,10 +109,21 @@ export const ToastAndroid = {
   },
 };
 
-// The app stays in the foreground during a test.
+const appStateListeners = new Set<(state: string) => void>();
+export function changeAppState(state: string) {
+  AppState.currentState = state;
+  for (const listener of appStateListeners) listener(state);
+}
 export const AppState = {
   currentState: "active",
-  addEventListener: () => ({ remove: () => {} }),
+  addEventListener: (_event: string, listener: (state: string) => void) => {
+    appStateListeners.add(listener);
+    return {
+      remove: () => {
+        appStateListeners.delete(listener);
+      },
+    };
+  },
 };
 
 export const useColorScheme = () => "light";

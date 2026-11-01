@@ -50,17 +50,32 @@ export const ankiDroidProvider = (api: AnkiDroidApi): AnkiDroidProvider => ({
   bury: api.bury,
 });
 
-/**
- * After an alarm session: sync back, when it's on and AnkiDroid can take answers. Resolves with
- * the number of answers sent; failures wait for the next run.
- */
+/** Automatic sync back, shared by study, backgrounding and alarm sessions. */
 export const syncBackAfterSession = (api: AnkiDroidApi) =>
   Effect.gen(function* () {
     const on = yield* localData((data) => data.autoSyncBack);
-    if (!on || ankiDroidAccess(yield* api.status) !== "ready") return 0;
-    const summary = yield* localData((data) => data.syncBackAnkiDroid(ankiDroidProvider(api)));
+    if (!on) return 0;
+    const status = yield* localData((data) => data.ankiDroidSyncBackStatus);
+    const owned = yield* localData((data) =>
+      Effect.map(data.collection, (state) =>
+        state.decks.some((d) => d.anki && d.fields.linkedBy?.value === data.deviceId),
+      ),
+    );
+    if (!owned && !status.pending.length) return 0;
+    const access = ankiDroidAccess(yield* api.status);
+    if (access !== "ready") {
+      yield* localData((data) => data.setAnkiDroidSyncBackFailure(access));
+      return 0;
+    }
+    const summary = yield* localData((data) => data.syncBackAnkiDroid(ankiDroidProvider(api))).pipe(
+      Effect.catch(() => Effect.succeed({ sent: 0 })),
+    );
     return summary.sent;
-  });
+  }).pipe(
+    Effect.catch(() =>
+      localData((data) => data.setAnkiDroidSyncBackFailure("failed")).pipe(Effect.as(0)),
+    ),
+  );
 
 export function memoryAnkiDroid(options: {
   installed: { versionCode: number; permission: "granted" | "denied" } | null;
