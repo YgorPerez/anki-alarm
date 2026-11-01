@@ -309,6 +309,15 @@ Default. Defaults match Anki's.
 - **Easy days:** minimum, reduced or normal for each weekday.
 - **Advanced:** maximum interval.
 
+Easy days follow Anki's FSRS rule within what a fuzz-free, one-card replay can know. An answer that
+would land on a minimum or reduced day moves to the nearest better day in Anki's fuzz range for that
+interval (a normal day beats a reduced one, a reduced one beats a minimum one; the earlier day wins a
+tie). It never moves below Anki's minimum for a card under review, grades stay in order, and
+intervals above 90 days stay put, as in Anki. Anki also weighs how many reviews each day already has;
+replay can't, since it reads one card's log, so every day counts as equally loaded. A review records
+the week and its study day's weekday only when some day isn't normal, so a device in another time
+zone replays it the same.
+
 An alarm session and an awake check use only the options that schedule (steps, retention, parameters,
 maximum interval, easy days, leeches). Timer, auto advance, display order and burying don't apply, and
 audio follows the alarm's own read-aloud setting: auto advance must never pass an alarm unanswered.

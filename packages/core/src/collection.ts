@@ -12,6 +12,7 @@ import {
 } from "./ankidroid.ts";
 import { cardId, importId, uuid7 } from "./ids.ts";
 import { isLanguageTag } from "./locale.ts";
+import { EASY_DAYS, NORMAL_WEEK, type EasyDay } from "./easy-days.ts";
 import { editedNoteType, editedValues, noteTypeProblems, type NoteTypeEdit } from "./note-types.ts";
 import {
   deckPreset,
@@ -75,6 +76,8 @@ export type Preset = RecordFields<{
   isDefault?: boolean;
   /** FSRS-6's 21 weights. */
   fsrsParameters: number[];
+  /** Each weekday, Monday first. */
+  easyDays: EasyDay[];
   dontPlayAutomatically: boolean;
   skipQuestionWhenReplayingAnswer: boolean;
   maximumAnswerSeconds: number;
@@ -107,6 +110,7 @@ const presetKeys = [
   "leechAction",
   "maximumInterval",
   "fsrsParameters",
+  "easyDays",
   "buryNew",
   "buryReviews",
   "buryLearning",
@@ -147,6 +151,7 @@ export const validOption: { [K in keyof PresetOptions]: (value: PresetOptions[K]
   maximumInterval: (v) => Number.isSafeInteger(v) && v >= 1 && v <= 36500,
   fsrsParameters: (v) =>
     Array.isArray(v) && v.length === PRESET_LIMITS.fsrsParameters && v.every(Number.isFinite),
+  easyDays: (v) => Array.isArray(v) && v.length === 7 && v.every((d) => EASY_DAYS.includes(d)),
 };
 export interface Template {
   name: string;
@@ -260,8 +265,8 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
  * Reads stored records in the current shape, upgrading what earlier versions saved with the
  * records' own clocks, so the upgrade itself is not an edit: Basic notes kept `front` and `back` as
  * properties and a `deckId` the cards now own; note types had one front and back template; presets
- * had no `fsrsParameters`, decks no `desiredRetention`, notes no `tags`, cards no `suspended` or
- * `buriedUntil`. Current records pass through unchanged.
+ * had no `fsrsParameters` or `easyDays`, decks no `desiredRetention`, notes no `tags`, cards no
+ * `suspended` or `buriedUntil`. Current records pass through unchanged.
  */
 export function parseCollection(stored: StoredCollection): CollectionState {
   // Each record is brought to its current shape below.
@@ -281,6 +286,7 @@ export function parseCollection(stored: StoredCollection): CollectionState {
       value: [...DEFAULT_FSRS_PARAMETERS],
       hlc: preset.fields.name.hlc,
     };
+    preset.fields.easyDays ??= { value: [...NORMAL_WEEK], hlc: preset.fields.name.hlc };
   }
   for (const preset of state.presets) {
     for (const [key, value] of Object.entries(AUDIO_TIMER_DEFAULTS)) {
@@ -449,6 +455,7 @@ export class Collection {
         leechAction: "tagOnly" as const,
         maximumInterval: 36500,
         fsrsParameters: [...DEFAULT_FSRS_PARAMETERS],
+        easyDays: [...NORMAL_WEEK],
       });
       this.state.presets.push(preset);
     }
@@ -461,7 +468,7 @@ export class Collection {
     const deck = this.state.decks.find((d) => d.id === card?.fields.deckId.value);
     const preset = deck && deckPreset(this.state, deck);
     if (!card || !preset) throw new Error("Card missing");
-    const options = entry.options ?? schedulingOptions(preset);
+    const options = entry.options ?? schedulingOptions(preset, entry.at);
     const threshold = options.leechThreshold ?? 8;
     const memory = cardMemory(this.state, [...log, entry], card.id, entry.at)!;
     if (threshold === 0 || memory.lapses < threshold) return;
@@ -675,6 +682,7 @@ export class Collection {
       fsrsParameters: factory
         ? [...DEFAULT_FSRS_PARAMETERS]
         : copy(source.fields.fsrsParameters.value),
+      easyDays: factory ? [...NORMAL_WEEK] : copy(source.fields.easyDays.value),
       buryNew: factory ? false : source.fields.buryNew.value,
       buryReviews: factory ? false : source.fields.buryReviews.value,
       buryLearning: factory ? false : source.fields.buryLearning.value,
@@ -883,6 +891,7 @@ export class Collection {
               maximumInterval: 36500,
               ...options,
               fsrsParameters: [...DEFAULT_FSRS_PARAMETERS],
+              easyDays: [...NORMAL_WEEK],
             },
             presetId,
           ),
@@ -1107,6 +1116,7 @@ export class Collection {
         leechAction: p.leechAction ?? ("tagOnly" as const),
         maximumInterval: p.maximumInterval ?? 36500,
         fsrsParameters: [...weights],
+        easyDays: p.easyDays ?? [...NORMAL_WEEK],
         ...(p.appId && p.isDefault !== undefined ? { isDefault: p.isDefault } : {}),
       };
       if (merge("presets", this.state.presets, index.presets, { id, values, mtime, rest }))
@@ -1209,7 +1219,7 @@ export class Collection {
           grade: r.grade,
           durationMs: r.durationMs,
           origin: "import",
-          options: schedulingOptions(preset),
+          options: schedulingOptions(preset, r.at),
         });
       } else if (r.kind === "reset") log.push({ ...base, kind: "reset" });
       else log.push({ ...base, kind: "setDueDate", due: dueAfter(r.at, r.interval) });

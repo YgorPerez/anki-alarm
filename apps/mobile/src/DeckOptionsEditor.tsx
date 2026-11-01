@@ -13,6 +13,7 @@ import { RetentionSlider } from "./RetentionSlider.tsx";
 import { Switch, Text, View } from "react-native";
 import { Button, Choice, SaveButtons, TextField } from "./controls.tsx";
 import { editingCopy } from "./editing-copy.ts";
+import { EasyDaysField } from "./EasyDaysField.tsx";
 import { regular } from "./fonts.ts";
 
 /** Edits a preset: the daily limits and FSRS options its decks share. */
@@ -232,6 +233,11 @@ export function DeckOptionsEditor({
           }}
         </form.Field>
       ))}
+      <form.Field name="easyDays">
+        {(field) => (
+          <EasyDaysField value={field.state.value} locale={locale} onChange={field.handleChange} />
+        )}
+      </form.Field>
     </View>
   );
 }

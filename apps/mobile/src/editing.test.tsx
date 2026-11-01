@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native/pure";
 import { expect, test } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Effect } from "effect";
@@ -163,6 +163,39 @@ test("deck options save limits, retention and learning steps, and refuse what FS
     preset.fields.buryReviews.value,
     preset.fields.buryLearning.value,
   ]).toEqual([true, true, true]);
+});
+
+test("deck options set each weekday's easy day", async () => {
+  const state = await change((c) => {
+    c.createDeck("Folga");
+  });
+  const presetId = state.decks.find((d) => d.fields.name.value === "Folga")!.fields.presetId.value;
+  await open();
+  await press("button", /Folga/);
+  await press("button", "Opções do baralho");
+  const sunday = screen.getByLabelText("Domingo");
+  expect(
+    within(sunday).getByRole("radio", { name: "Normal" }).props.accessibilityState.checked,
+  ).toBe(true);
+  await fireEvent.press(within(sunday).getByRole("radio", { name: "Mínimo" }));
+  await fireEvent.press(
+    within(screen.getByLabelText("Sábado")).getByRole("radio", {
+      name: "Reduzido",
+    }),
+  );
+  await press("button", "Salvar");
+  await screen.findByRole("button", { name: "Opções do baralho" });
+
+  const preset = (await run((data) => data.collection)).presets.find((p) => p.id === presetId)!;
+  expect(preset.fields.easyDays.value).toEqual([
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "reduced",
+    "minimum",
+  ]);
 });
 
 test("Set due date and Forget append their log entries for a studied card", async () => {

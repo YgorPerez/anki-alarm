@@ -480,7 +480,7 @@ test("intervals use the card's deck retention override and respond to undo", () 
 
 test("preset edits leave answered cards alone and only change later answers", () => {
   const { state, cardId, preset } = fixture();
-  const options = schedulingOptions(preset);
+  const options = schedulingOptions(preset, now);
   const review: LogEntry = {
     kind: "review",
     id: "first",
@@ -502,7 +502,7 @@ test("preset edits leave answered cards alone and only change later answers", ()
     ...review,
     id: "later",
     at: now + 60_000,
-    options: schedulingOptions(preset),
+    options: schedulingOptions(preset, now),
   };
   expect(cardMemory(state, [review, later], cardId, now)?.due.getTime()).toBe(
     later.at + 30 * 60_000,
@@ -519,7 +519,7 @@ test("relearning steps and maximum interval apply only to later alarm answers", 
     grade: 4,
     durationMs: 1,
     origin: "alarm",
-    options: schedulingOptions(preset),
+    options: schedulingOptions(preset, now),
   };
   const before = cardMemory(state, [old], cardId, now);
   const c = new Collection(
@@ -535,7 +535,7 @@ test("relearning steps and maximum interval apply only to later alarm answers", 
     id: "later",
     at,
     grade: 1,
-    options: schedulingOptions(updated.presets[0]!),
+    options: schedulingOptions(updated.presets[0]!, at),
   };
   expect(cardMemory(updated, [old, answer], cardId, at)!.due.getTime()).toBe(at + 180_000);
   expect(nextIntervals(updated, [old], cardId, at)![4]).toBe(2 * 86400);
@@ -596,7 +596,7 @@ test.each(["suspend", "tagOnly"] as const)(
       grade: 3,
       durationMs: 1,
       origin: "alarm",
-      options: schedulingOptions(c.snapshot().presets[0]!),
+      options: schedulingOptions(c.snapshot().presets[0]!, now),
     };
     c.applyReviewEffects(log, answer);
     const after = c.snapshot();

@@ -415,3 +415,53 @@ test("current Anki protobuf presets import all three sibling burying options", a
   for (const preset of source.presets)
     expect([preset.buryNew, preset.buryReviews, preset.buryLearning]).toEqual([true, true, true]);
 });
+
+const float32 = (values: number[]) => new Uint8Array(new Float32Array(values).buffer);
+test("the current format brings a preset's easy days, Monday first", async () => {
+  // Field 4, seven packed floats: what Anki 26.09 writes for its all-normal default.
+  const normal = [0x22, 0x1c, ...float32([1, 1, 1, 1, 1, 1, 1])];
+  const week = [0x22, 0x1c, ...float32([1, 1, 1, 1, 1, 0.5, 0])];
+  const base = host(fixture("latest.apkg"));
+  const { package: source } = await readApkg({
+    ...base,
+    openSqlite: async (bytes) => {
+      const db = await base.openSqlite(bytes);
+      return {
+        ...db,
+        all: async (query) => {
+          const rows = await db.all(query);
+          if (!query.includes("deck_config")) return rows;
+          for (const row of rows) {
+            const { config } = row;
+            if (!(config instanceof Uint8Array)) throw new Error("No config blob");
+            const copy = Buffer.from(config);
+            const at = copy.indexOf(Buffer.from(normal));
+            expect(at).toBeGreaterThanOrEqual(0);
+            copy.set(week, at);
+            row["config"] = copy;
+          }
+          return rows;
+        },
+      };
+    },
+  });
+  const collection = new Collection(environment());
+  collection.importAnki(source);
+  expect(collection.snapshot().presets[0]!.fields.easyDays.value).toEqual([
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "reduced",
+    "minimum",
+  ]);
+});
+
+test("packages without easy days import an all-normal week", async () => {
+  const collection = new Collection(environment());
+  collection.importAnki((await read("legacy1.apkg")).package);
+  expect(new Set(collection.snapshot().presets[0]!.fields.easyDays.value)).toEqual(
+    new Set(["normal"]),
+  );
+});

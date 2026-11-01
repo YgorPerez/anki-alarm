@@ -1,4 +1,5 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh copies are sorted. */
+import { easyDaysFromAnki, type EasyDay } from "./easy-days.ts";
 import { safeMediaName } from "./media.ts";
 import { Message } from "./protobuf.ts";
 
@@ -62,6 +63,8 @@ export interface AnkiPackage {
     maximumInterval?: number;
     /** FSRS-6 weights; absent or empty means the defaults. */
     fsrsParameters?: number[];
+    /** Absent means every day is normal. */
+    easyDays?: EasyDay[];
     dontPlayAutomatically?: boolean;
     skipQuestionWhenReplayingAnswer?: boolean;
     maximumAnswerSeconds?: number;
@@ -370,6 +373,7 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
           record(c.lapse).leechAction === 0 ? ("suspend" as const) : ("tagOnly" as const),
         maximumInterval: int(record(c.rev).maxIvl) || 36500,
         fsrsParameters: fsrs6(steps(c.fsrsParams6)),
+        easyDays: easyDaysFromAnki(steps(c.easyDaysPercentages)),
         isDefault: typeof c.ankiAlarmDefault === "boolean" ? c.ankiAlarmDefault : undefined,
         dontPlayAutomatically: c.autoplay === false,
         skipQuestionWhenReplayingAnswer: c.replayq === false,
@@ -446,6 +450,7 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
         leechAction: c.number(21) === 1 ? ("tagOnly" as const) : ("suspend" as const),
         maximumInterval: c.number(16) || 36500,
         fsrsParameters: fsrs6(c.floats(6)),
+        easyDays: easyDaysFromAnki(c.floats(4)),
         dontPlayAutomatically: c.number(23) === 1,
         skipQuestionWhenReplayingAnswer: c.number(26) === 1,
         maximumAnswerSeconds: c.number(24) ?? 0,

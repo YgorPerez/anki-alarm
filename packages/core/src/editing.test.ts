@@ -238,8 +238,10 @@ test("deck options forms read what the user types with Core's rules", () => {
     leechAction: "tagOnly",
     maximumInterval: 36500,
     fsrsParameters: preset.fields.fsrsParameters.value,
+    easyDays: ["normal", "normal", "normal", "normal", "normal", "normal", "normal"],
   });
   expect(presetTexts(preset, "en").desiredRetention).toBe("0.9");
+  expect(texts.easyDays).toBe("normal normal normal normal normal normal normal");
   expect(readPresetTexts({ ...texts, learningSteps: "", name: " Mine " })).toMatchObject({
     name: "Mine",
     learningSteps: [],
@@ -255,6 +257,8 @@ test("deck options forms read what the user types with Core's rules", () => {
     ["maximumInterval", "0"],
     ["maximumInterval", "36501"],
     ["fsrsParameters", "1, 2"],
+    ["easyDays", "normal normal"],
+    ["easyDays", "normal normal normal normal normal normal sometimes"],
     ["name", " "],
   ] as const) {
     expect(validPresetText[key](text)).toBe(false);

@@ -1,4 +1,5 @@
 import { validOption, type Preset, type PresetOptions } from "./collection.ts";
+import { EASY_DAYS, type EasyDay } from "./easy-days.ts";
 import type { Locale } from "./locale.ts";
 
 /** Deck options as a form holds them: the text the user types for each one. */
@@ -15,6 +16,7 @@ const list = (text: string, separator: RegExp) => {
   const values = parts.map(Number);
   return parts.every((p) => p !== "") && values.every(Number.isFinite) ? values : undefined;
 };
+const isEasyDay = (text: string): text is EasyDay => EASY_DAYS.some((day) => day === text);
 const boolean = (text: string) => (text === "true" ? true : text === "false" ? false : undefined);
 const read = {
   buryNew: boolean,
@@ -36,6 +38,10 @@ const read = {
   leechAction: (text: string) => (text === "suspend" || text === "tagOnly" ? text : undefined),
   maximumInterval: integer,
   fsrsParameters: (text: string) => list(text, /[\s,;]+/),
+  easyDays: (text: string) => {
+    const days = text.split(" ");
+    return days.every(isEasyDay) ? days : undefined;
+  },
 } satisfies { [K in keyof PresetOptions]: (text: string) => PresetOptions[K] | undefined };
 const KEYS = [
   "dontPlayAutomatically",
@@ -55,6 +61,7 @@ const KEYS = [
   "leechAction",
   "maximumInterval",
   "fsrsParameters",
+  "easyDays",
   "buryNew",
   "buryReviews",
   "buryLearning",
@@ -86,6 +93,7 @@ export const validPresetText: Record<keyof PresetOptions, (text: string) => bool
   leechAction: (text) => ok(read.leechAction(text), validOption.leechAction),
   maximumInterval: (text) => ok(read.maximumInterval(text), validOption.maximumInterval),
   fsrsParameters: (text) => ok(read.fsrsParameters(text), validOption.fsrsParameters),
+  easyDays: (text) => ok(read.easyDays(text), validOption.easyDays),
 };
 
 /** A preset's options as text, with the locale's decimal comma. */
@@ -112,6 +120,7 @@ export function presetTexts(preset: Preset, locale: Locale): PresetTexts {
     leechAction: f.leechAction.value,
     maximumInterval: String(f.maximumInterval.value),
     fsrsParameters: f.fsrsParameters.value.join(", "),
+    easyDays: f.easyDays.value.join(" "),
   };
 }
 
@@ -140,5 +149,6 @@ export function readPresetTexts(texts: PresetTexts): PresetOptions | undefined {
     leechAction: read.leechAction(texts.leechAction)!,
     maximumInterval: read.maximumInterval(texts.maximumInterval)!,
     fsrsParameters: read.fsrsParameters(texts.fsrsParameters)!,
+    easyDays: read.easyDays(texts.easyDays)!,
   };
 }

@@ -8,6 +8,22 @@ const { maxPerDay, minRetention, maxRetention, fsrsParameters } = PRESET_LIMITS;
 const retention = (value: number, comma: boolean) =>
   comma ? value.toFixed(2).replace(".", ",") : value.toFixed(2);
 
+/** Each weekday's message, Monday first, as a preset's `easyDays` lists them. */
+export const WEEKDAY_MESSAGES = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
+export const EASY_DAY_MESSAGES = {
+  minimum: "easyDayMinimum",
+  reduced: "easyDayReduced",
+  normal: "easyDayNormal",
+} as const;
+
 export const editingMessages = {
   "pt-BR": {
     preset: "Predefinição",
@@ -55,6 +71,19 @@ export const editingMessages = {
     fsrsParameters: "Parâmetros do FSRS",
     fsrsParametersHint: `${fsrsParameters} números separados por vírgula, com ponto decimal.`,
     defaultParameters: "Usar os parâmetros padrão",
+    easyDays: "Dias fáceis",
+    easyDaysHint:
+      "As próximas respostas evitam os dias mínimos e reduzidos, em intervalos de até 90 dias. Cartões já respondidos não mudam.",
+    easyDayMinimum: "Mínimo",
+    easyDayReduced: "Reduzido",
+    easyDayNormal: "Normal",
+    monday: "Segunda-feira",
+    tuesday: "Terça-feira",
+    wednesday: "Quarta-feira",
+    thursday: "Quinta-feira",
+    friday: "Sexta-feira",
+    saturday: "Sábado",
+    sunday: "Domingo",
     invalidLimit: `Use um número inteiro de 0 a ${maxPerDay}.`,
     invalidRetention: `Use um valor de ${retention(minRetention, true)} a ${retention(maxRetention, true)}.`,
     invalidSteps: "Use minutos maiores que zero, separados por espaço.",
@@ -122,6 +151,19 @@ export const editingMessages = {
     fsrsParameters: "FSRS parameters",
     fsrsParametersHint: `${fsrsParameters} numbers separated by commas, with a decimal point.`,
     defaultParameters: "Use the default parameters",
+    easyDays: "Easy days",
+    easyDaysHint:
+      "Later answers avoid minimum and reduced days, for intervals up to 90 days. Cards already answered stay put.",
+    easyDayMinimum: "Minimum",
+    easyDayReduced: "Reduced",
+    easyDayNormal: "Normal",
+    monday: "Monday",
+    tuesday: "Tuesday",
+    wednesday: "Wednesday",
+    thursday: "Thursday",
+    friday: "Friday",
+    saturday: "Saturday",
+    sunday: "Sunday",
     invalidLimit: `Use a whole number from 0 to ${maxPerDay}.`,
     invalidRetention: `Use a value from ${retention(minRetention, false)} to ${retention(maxRetention, false)}.`,
     invalidSteps: "Use minutes above zero, separated by spaces.",
