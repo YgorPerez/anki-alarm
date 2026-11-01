@@ -45,6 +45,7 @@ import {
   type WritebackNotRecorded,
   type DeckNotLinked,
   type PullSummary,
+  type AnkiDroidSyncRequest,
   type SyncBackSummary,
   type SyncBackStatus,
   type SyncBackFailure,
@@ -68,6 +69,7 @@ export {
   DeckNotLinked,
   type AnkiDroidProvider,
   type PullSummary,
+  type AnkiDroidSyncRequest,
   type SyncBackSummary,
   type SyncBackStatus,
   type SyncBackFailure,
@@ -172,6 +174,13 @@ interface Data extends Engine {
     provider: AnkiDroidProvider,
     deckId: string,
   ) => Effect.Effect<PullSummary, Rejectable | WritebackNotRecorded | DeckNotLinked | Error>;
+  /**
+   * Sync AnkiDroid: sends pending answers, then asks AnkiDroid to sync with AnkiWeb. Too soon after
+   * the last request it does neither and says how long to wait.
+   */
+  requestAnkiDroidSync: (
+    provider: AnkiDroidProvider,
+  ) => Effect.Effect<AnkiDroidSyncRequest, StorageFailed | WritebackNotRecorded | Error>;
   /** Whether sync back runs automatically; on unless turned off. This phone only. */
   autoSyncBack: Effect.Effect<boolean, StorageFailed>;
   setAutoSyncBack: (on: boolean) => Effect.Effect<void, StorageFailed>;
@@ -427,6 +436,7 @@ const open = (driver: SQLiteConnection, media: MediaFiles) =>
       ankiDroidSyncBackStatus: ankiDroid.status,
       setAnkiDroidSyncBackFailure: ankiDroid.setFailure,
       pullAnkiDroid: ankiDroid.pull,
+      requestAnkiDroidSync: ankiDroid.requestSync,
       autoSyncBack: ankiDroid.autoSyncBack,
       setAutoSyncBack: ankiDroid.setAutoSyncBack,
       changeCollection: (command) => local(store.change(command)),

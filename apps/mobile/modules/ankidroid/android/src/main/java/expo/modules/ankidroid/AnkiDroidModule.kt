@@ -86,6 +86,18 @@ class AnkiDroidModule : Module() {
         AnkiDroidReader(context.contentResolver).bury(noteId.toLong(), ord)?.toString() ?: "null"
       }
     }
+
+    /**
+     * Asks AnkiDroid to sync with AnkiWeb. `DO_SYNC` is an exported Activity's intent, not a
+     * broadcast. From our Activity, AnkiDroid's translucent handler stays in our task and closes.
+     */
+    AsyncFunction("requestSync") { promise: Promise ->
+      provider(promise) {
+        requireNotNull(appContext.currentActivity) { "No activity to start AnkiDroid from" }
+          .startActivity(Intent(AnkiDroidReader.SYNC_ACTION).setPackage(AnkiDroidReader.PACKAGE))
+        "null"
+      }
+    }
   }
 
   private fun granted() = context.checkSelfPermission(AnkiDroidReader.PERMISSION) == PackageManager.PERMISSION_GRANTED
