@@ -105,6 +105,18 @@ export function DeckOptionsEditor({
           locale={locale}
           busy={busy}
           onBring={(options) => {
+            for (const key of [
+              "buryNew",
+              "buryReviews",
+              "buryLearning",
+              "dontPlayAutomatically",
+              "skipQuestionWhenReplayingAnswer",
+              "maximumAnswerSeconds",
+              "showTimer",
+              "stopTimerOnAnswer",
+            ] as const) {
+              form.setFieldValue(key, String(options[key]));
+            }
             form.setFieldValue("newPerDay", String(options.newPerDay));
             form.setFieldValue("reviewsPerDay", String(options.reviewsPerDay));
             form.setFieldValue(

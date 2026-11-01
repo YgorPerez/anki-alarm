@@ -204,7 +204,14 @@ test("deck options brings AnkiDroid values into the form, warns about SM-2, and 
   source.decks.forEach((deck) => {
     deck.options = JSON.stringify({
       ...JSON.parse(deck.options),
-      new: { perDay: 42, delays: [3, 15] },
+      new: { perDay: 42, delays: [3, 15], bury: true },
+      rev: { perDay: 177, bury: true },
+      buryInterdayLearning: true,
+      autoplay: false,
+      replayq: false,
+      maxTaken: 45,
+      timer: 1,
+      stopTimerOnAnswer: true,
       fsrsParams6: [
         0.4, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 0.796, 1.4835,
         0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658, 0.1542,
@@ -234,6 +241,15 @@ test("deck options brings AnkiDroid values into the form, warns about SM-2, and 
     const after = await run((data) => data.collection);
     expect(after.presets[0]!.fields.newPerDay.value).toBe(42);
     expect(after.presets[0]!.fields.fsrsParameters.value[0]).toBe(0.4);
+    const fields = after.presets[0]!.fields;
+    expect(fields.buryNew.value).toBe(true);
+    expect(fields.buryReviews.value).toBe(true);
+    expect(fields.buryLearning.value).toBe(true);
+    expect(fields.dontPlayAutomatically.value).toBe(true);
+    expect(fields.skipQuestionWhenReplayingAnswer.value).toBe(true);
+    expect(fields.maximumAnswerSeconds.value).toBe(45);
+    expect(fields.showTimer.value).toBe(true);
+    expect(fields.stopTimerOnAnswer.value).toBe(true);
   });
 });
 

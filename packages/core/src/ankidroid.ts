@@ -1,5 +1,5 @@
 import { default_w, State } from "ts-fsrs";
-import type { Card, CollectionState } from "./collection.ts";
+import type { Card, CollectionState, PresetOptions } from "./collection.ts";
 import { importId } from "./ids.ts";
 import { isBuried, type LogEntry } from "./study.ts";
 
@@ -111,18 +111,10 @@ export function linkedAnkiDroidDecks(source: AnkiDroidSource): AnkiDroidDeck[] {
   );
 }
 
-export interface ImportedPreset {
+export interface ImportedPreset extends PresetOptions {
   ankiId: number;
-  buryNew: boolean;
-  buryReviews: boolean;
-  buryLearning: boolean;
-  name: string;
-  newPerDay: number;
-  reviewsPerDay: number;
-  desiredRetention: number;
-  learningSteps: number[];
-  fsrsParameters: number[];
 }
+
 const number = (value: unknown, fallback: number) =>
   typeof value === "number" && Number.isFinite(value) ? value : fallback;
 /** Reads a deck's schema-11 options JSON; missing or broken keys take the app's defaults. */
@@ -141,6 +133,11 @@ export function presetFromOptions(json: string): ImportedPreset {
   const delays = section("new")["delays"];
   return {
     ankiId: number(raw["id"], 1),
+    dontPlayAutomatically: raw["autoplay"] === false,
+    skipQuestionWhenReplayingAnswer: raw["replayq"] === false,
+    maximumAnswerSeconds: number(raw["maxTaken"], 60),
+    showTimer: raw["timer"] === 1,
+    stopTimerOnAnswer: raw["stopTimerOnAnswer"] === true,
     buryNew: section("new")["bury"] === true,
     buryReviews: section("rev")["bury"] === true,
     buryLearning: raw["buryInterdayLearning"] === true,
