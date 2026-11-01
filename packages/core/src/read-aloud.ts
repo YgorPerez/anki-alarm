@@ -1,4 +1,4 @@
-import type { CollectionState, Note, NoteType } from "./collection.ts";
+import type { CollectionState, Note, NoteType, Preset } from "./collection.ts";
 import { plain, renderSide } from "./template.ts";
 
 /** The language a deck reads aloud in when neither it nor a parent deck has one. */
@@ -60,4 +60,20 @@ export function readAloudFor({ language, ...card }: ReadAloudInput): ReadAloud |
     .replace(/\s+/g, " ")
     .trim();
   return clips.length || text ? { clips, text, language } : null;
+}
+
+const clips = (html: string) => [...html.matchAll(/\[sound:([^\]]+)\]/g)].map((m) => plain(m[1]!));
+
+/** Audio played on a study side; an explicit replay may include the question. */
+export function studyAudio(
+  input: Omit<ReadAloudInput, "language">,
+  side: "front" | "back",
+  preset: Preset,
+  replay: boolean,
+): string[] {
+  if (!replay && preset.fields.dontPlayAutomatically.value) return [];
+  const answer = clips(renderSide({ ...input, excludeQuestionAudio: true }, side));
+  return side === "back" && replay && !preset.fields.skipQuestionWhenReplayingAnswer.value
+    ? [...clips(renderSide(input, "front")), ...answer]
+    : answer;
 }

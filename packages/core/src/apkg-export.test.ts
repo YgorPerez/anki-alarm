@@ -412,3 +412,22 @@ test("all seven flags and the marked tag survive an apkg round-trip", async () =
   ]);
   expect(restored.snapshot().notes.every((n) => n.fields.tags.value.includes("marked"))).toBe(true);
 });
+
+test("apkg round trip carries audio and timer options", async () => {
+  const { collection, log, english } = await studied();
+  collection.updatePreset(english.fields.presetId.value, {
+    dontPlayAutomatically: true,
+    skipQuestionWhenReplayingAnswer: true,
+    maximumAnswerSeconds: 17,
+    showTimer: true,
+    stopTimerOnAnswer: true,
+  });
+  const { package: source } = await exported(collection.snapshot(), log, "Inglês");
+  const copy = new Collection(environment("copy"));
+  copy.importAnki(source);
+  const preset = copy.snapshot().presets.find((p) => p.fields.maximumAnswerSeconds.value === 17);
+  expect(preset?.fields.dontPlayAutomatically.value).toBe(true);
+  expect(preset?.fields.skipQuestionWhenReplayingAnswer.value).toBe(true);
+  expect(preset?.fields.showTimer.value).toBe(true);
+  expect(preset?.fields.stopTimerOnAnswer.value).toBe(true);
+});

@@ -197,6 +197,7 @@ test("study answers survive reopen and outbox failure rolls back the review", as
       data.changeCollection((c) => {
         const d = c.createDeck("Words");
         c.addBasicNote(d.id, "house", "casa");
+        c.updatePreset(d.fields.presetId.value, { maximumAnswerSeconds: 1 });
       }),
     );
     const cardId = state.cards[0]!.id;
@@ -209,7 +210,7 @@ test("study answers survive reopen and outbox failure rolls back the review", as
       kind: "review",
       cardId,
       grade: 3,
-      durationMs: 1400,
+      durationMs: 1000,
       origin: "phone",
       at: 1700000000000,
       options: {
@@ -230,8 +231,14 @@ test("study answers survive reopen and outbox failure rolls back the review", as
     await expect(Effect.runPromise(reopened.answerCard(cardId, 3, 900))).rejects.toThrow(
       /not available/,
     );
-    const alarm = await Effect.runPromise(reopened.answerCard(cardId, 1, 900, "ring-1"));
-    expect(alarm).toMatchObject({ kind: "review", origin: "alarm", ringId: "ring-1", grade: 1 });
+    const alarm = await Effect.runPromise(reopened.answerCard(cardId, 1, 9000, "ring-1"));
+    expect(alarm).toMatchObject({
+      kind: "review",
+      origin: "alarm",
+      ringId: "ring-1",
+      grade: 1,
+      durationMs: 9000,
+    });
     await expect(
       Effect.runPromise(reopened.answerCard("deleted", 3, 900, "ring-1")),
     ).rejects.toThrow(/not available/);

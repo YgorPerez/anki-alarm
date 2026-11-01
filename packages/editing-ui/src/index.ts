@@ -10,6 +10,13 @@ const retention = (value: number, comma: boolean) =>
 
 export const editingMessages = {
   "pt-BR": {
+    dontPlayAutomatically: "Não reproduzir automaticamente",
+    skipQuestionWhenReplayingAnswer: "Pular a pergunta ao repetir a resposta",
+    maximumAnswerSeconds: "Tempo máximo de resposta (segundos)",
+    showTimer: "Mostrar cronômetro",
+    stopTimerOnAnswer: "Parar ao mostrar a resposta",
+    replayAudio: "Repetir áudio",
+    answerTimer: "Tempo de resposta",
     deckOptions: "Opções do baralho",
     advanced: "Avançado",
     discardOptions: "Descartar as alterações não salvas?",
@@ -46,6 +53,14 @@ export const editingMessages = {
       "Esquecer e Definir vencimento ficam só no app: o AnkiDroid não recebe essas mudanças. A próxima revisão deste cartão no AnkiDroid as substitui.",
   },
   en: {
+    dontPlayAutomatically: "Don't play automatically",
+    skipQuestionWhenReplayingAnswer: "Skip question when replaying answer",
+    maximumAnswerSeconds: "Maximum answer seconds",
+    showTimer: "Show timer",
+    stopTimerOnAnswer: "Stop timer on answer",
+    replayAudio: "Replay audio",
+    answerTimer: "Answer time",
+
     deckOptions: "Deck options",
     advanced: "Advanced",
     discardOptions: "Discard unsaved changes?",

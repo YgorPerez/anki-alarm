@@ -219,6 +219,11 @@ test("deck options forms read what the user types with Core's rules", () => {
   const texts = presetTexts(preset, "pt-BR");
   expect(texts).toMatchObject({ newPerDay: "20", desiredRetention: "0,9", learningSteps: "1 10" });
   expect(readPresetTexts(texts)).toEqual({
+    dontPlayAutomatically: false,
+    skipQuestionWhenReplayingAnswer: false,
+    maximumAnswerSeconds: 60,
+    showTimer: false,
+    stopTimerOnAnswer: false,
     name: "Default",
     newPerDay: 20,
     reviewsPerDay: 200,

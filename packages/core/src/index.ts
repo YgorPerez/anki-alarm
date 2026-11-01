@@ -228,3 +228,7 @@ export {
 export type { QuickAlarmOptions } from "./quick-alarm.ts";
 
 export type { SchedulingOptions } from "./study.ts";
+
+export { studyAnswerDuration } from "./study.ts";
+
+export { studyAudio } from "./read-aloud.ts";

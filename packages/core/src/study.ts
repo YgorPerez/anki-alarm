@@ -356,3 +356,11 @@ export function nextStudyCard(
   const type = collection.noteTypes.find((t) => t.id === note?.fields.noteTypeId.value);
   return item && note && type ? { card: item.card, note, type } : undefined;
 }
+
+/** Time recorded by normal study, capped by the card’s preset. */
+export function studyAnswerDuration(preset: Preset, elapsedMs: number): number {
+  return Math.min(
+    Math.max(0, Math.round(elapsedMs)),
+    preset.fields.maximumAnswerSeconds.value * 1000,
+  );
+}

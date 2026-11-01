@@ -41,6 +41,13 @@ export type Deck = RecordFields<{
   language?: string;
 }> &
   AnkiIdentity;
+const AUDIO_TIMER_DEFAULTS = {
+  dontPlayAutomatically: false,
+  skipQuestionWhenReplayingAnswer: false,
+  maximumAnswerSeconds: 60,
+  showTimer: false,
+  stopTimerOnAnswer: false,
+};
 export type Preset = RecordFields<{
   name: string;
   newPerDay: number;
@@ -50,12 +57,23 @@ export type Preset = RecordFields<{
   learningSteps: number[];
   /** FSRS-6's 21 weights. */
   fsrsParameters: number[];
+  dontPlayAutomatically: boolean;
+  skipQuestionWhenReplayingAnswer: boolean;
+  maximumAnswerSeconds: number;
+  showTimer: boolean;
+  stopTimerOnAnswer: boolean;
 }> &
   AnkiIdentity;
 export type PresetOptions = {
   [K in keyof Preset["fields"]]: Preset["fields"][K]["value"];
 };
 const presetKeys = [
+  "dontPlayAutomatically",
+  "skipQuestionWhenReplayingAnswer",
+  "maximumAnswerSeconds",
+  "showTimer",
+  "stopTimerOnAnswer",
+
   "name",
   "newPerDay",
   "reviewsPerDay",
@@ -75,6 +93,11 @@ export const PRESET_LIMITS = {
 } as const;
 /** The rule `updatePreset` applies to each option, for forms to check as the user types. */
 export const validOption: { [K in keyof PresetOptions]: (value: PresetOptions[K]) => boolean } = {
+  dontPlayAutomatically: (v) => typeof v === "boolean",
+  skipQuestionWhenReplayingAnswer: (v) => typeof v === "boolean",
+  maximumAnswerSeconds: (v) => Number.isSafeInteger(v) && v >= 0 && v <= 9999,
+  showTimer: (v) => typeof v === "boolean",
+  stopTimerOnAnswer: (v) => typeof v === "boolean",
   name: (v) => typeof v === "string" && Boolean(v.trim()),
   newPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
   reviewsPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
@@ -213,6 +236,12 @@ export function parseCollection(stored: StoredCollection): CollectionState {
       value: [...DEFAULT_FSRS_PARAMETERS],
       hlc: preset.fields.name.hlc,
     };
+  for (const preset of state.presets) {
+    for (const [key, value] of Object.entries(AUDIO_TIMER_DEFAULTS)) {
+      if (!(key in preset.fields))
+        Object.assign(preset.fields, { [key]: { value, hlc: preset.fields.name.hlc } });
+    }
+  }
   for (const card of state.cards) {
     card.fields.suspended ??= { value: false, hlc: card.fields.ordinal.hlc };
     card.fields.buriedUntil ??= { value: null, hlc: card.fields.ordinal.hlc };
@@ -345,6 +374,7 @@ export class Collection {
     let preset = this.state.presets.find((p) => !p.anki);
     if (!preset) {
       preset = this.record({
+        ...AUDIO_TIMER_DEFAULTS,
         name: "Default",
         newPerDay: 20,
         reviewsPerDay: 200,
@@ -654,7 +684,10 @@ export class Collection {
       steps.set(id, options.learningSteps);
       if (!this.state.presets.some((p) => p.id === presetId))
         this.state.presets.push({
-          ...this.record({ ...options, fsrsParameters: [...DEFAULT_FSRS_PARAMETERS] }, presetId),
+          ...this.record(
+            { ...AUDIO_TIMER_DEFAULTS, ...options, fsrsParameters: [...DEFAULT_FSRS_PARAMETERS] },
+            presetId,
+          ),
           anki: { id: ankiId },
         });
       const deck = this.state.decks.find((d) => d.id === id);
@@ -855,6 +888,13 @@ export class Collection {
       const { name, newPerDay, reviewsPerDay, desiredRetention, learningSteps, mtime } = p;
       const weights = p.fsrsParameters?.length === 21 ? p.fsrsParameters : DEFAULT_FSRS_PARAMETERS;
       const values = {
+        dontPlayAutomatically:
+          p.dontPlayAutomatically ?? AUDIO_TIMER_DEFAULTS.dontPlayAutomatically,
+        skipQuestionWhenReplayingAnswer:
+          p.skipQuestionWhenReplayingAnswer ?? AUDIO_TIMER_DEFAULTS.skipQuestionWhenReplayingAnswer,
+        maximumAnswerSeconds: p.maximumAnswerSeconds ?? AUDIO_TIMER_DEFAULTS.maximumAnswerSeconds,
+        showTimer: p.showTimer ?? AUDIO_TIMER_DEFAULTS.showTimer,
+        stopTimerOnAnswer: p.stopTimerOnAnswer ?? AUDIO_TIMER_DEFAULTS.stopTimerOnAnswer,
         name,
         newPerDay,
         reviewsPerDay,

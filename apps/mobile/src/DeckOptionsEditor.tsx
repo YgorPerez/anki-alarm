@@ -10,7 +10,7 @@ import {
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
 import { RetentionSlider } from "./RetentionSlider.tsx";
-import { Text, View } from "react-native";
+import { Switch, Text, View } from "react-native";
 import { Button, SaveButtons, TextField } from "./controls.tsx";
 import { editingCopy } from "./editing-copy.ts";
 import { regular } from "./fonts.ts";
@@ -47,6 +47,12 @@ export function DeckOptionsEditor({
     },
   });
   const fields = [
+    {
+      key: "maximumAnswerSeconds",
+      label: t("maximumAnswerSeconds"),
+      error: t("invalidLimit"),
+      numeric: true,
+    },
     { key: "name", label: t("presetName"), error: t("invalidName") },
     { key: "newPerDay", label: t("newPerDay"), error: t("invalidLimit"), numeric: true },
     { key: "reviewsPerDay", label: t("reviewsPerDay"), error: t("invalidLimit"), numeric: true },
@@ -95,6 +101,28 @@ export function DeckOptionsEditor({
           />
         )}
       </form.Field>
+
+      {(
+        [
+          "dontPlayAutomatically",
+          "skipQuestionWhenReplayingAnswer",
+          "showTimer",
+          "stopTimerOnAnswer",
+        ] as const
+      ).map((key) => (
+        <form.Field key={key} name={key}>
+          {(field) => (
+            <View className="min-h-12 flex-row items-center justify-between gap-3">
+              <Text className="shrink text-body text-foreground">{t(key)}</Text>
+              <Switch
+                accessibilityLabel={t(key)}
+                value={field.state.value === "true"}
+                onValueChange={(value) => field.handleChange(String(value))}
+              />
+            </View>
+          )}
+        </form.Field>
+      ))}
       {fields.map((spec) => (
         <form.Field
           key={spec.key}

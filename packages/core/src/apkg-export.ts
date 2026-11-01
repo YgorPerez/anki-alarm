@@ -586,6 +586,11 @@ function presetJson(preset: Preset, anki: { id: number; appId?: string }) {
     lapse: { ...DCONF.lapse, delays: RELEARNING_STEPS },
     fsrsParams6: f.fsrsParameters.value,
     desiredRetention: f.desiredRetention.value,
+    autoplay: !f.dontPlayAutomatically.value,
+    replayq: !f.skipQuestionWhenReplayingAnswer.value,
+    maxTaken: f.maximumAnswerSeconds.value,
+    timer: f.showTimer.value ? 1 : 0,
+    stopTimerOnAnswer: f.stopTimerOnAnswer.value,
   };
 }
 
