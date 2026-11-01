@@ -42,8 +42,7 @@ replaying its review log entries, never stored as the truth.
 **Origin.** Where a review happened: phone, web, alarm session, or imported (from `.apkg` or
 AnkiDroid).
 
-**Preset.** A named set of options that many decks share: daily new and review limits, desired
-retention, FSRS parameters and learning steps.
+**Preset.** A named set of deck options that many decks share. See Deck options in the spec.
 _Avoid_: deck options (that's the screen), options group
 
 **Pull.** Bringing new notes, edits and AnkiDroid's newer card states into a linked deck. Always

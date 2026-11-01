@@ -100,8 +100,8 @@ The app keeps Anki's model so imported decks look and behave as they do in Anki:
 - A **note type** has fields, one or more **card templates** (front and back) and CSS. Cloze note
   types make one card per cloze number.
 - A **note** holds field values. Each template (or cloze number) gives one **card**.
-- A **deck** holds cards and has **deck options**: daily new and review limits, desired retention,
-  FSRS parameters, learning steps.
+- A **deck** holds cards and uses a **preset** for its **deck options** (see Deck options under
+  Study).
 - Media files (images, audio) are referenced from fields by file name.
 
 Core renders a card side from its template, fields and CSS to an HTML document. The phone shows it
@@ -121,12 +121,15 @@ presets have no day-boundary field), so it expires without a write. `.apkg` impo
 the study day after the card's last change; export writes a buried card in queue -3.
 
 A card's **memory state** (stability, difficulty, due date, learning step) is not stored as truth.
-Core rebuilds it by replaying the card's reviews in answer-time order through FSRS with the deck's
-options. Caches of the result are fine; the log is what syncs.
+Core rebuilds it by replaying the card's reviews in answer-time order through FSRS, each under the
+scheduling options it was answered with ([ADR 0008](adr/0008-options-apply-forward.md)), so changing
+options never moves a card already answered. Caches of the result are fine; the log is what syncs.
 
 ### Scheduling
 
-- FSRS-6 through `ts-fsrs`, with its default parameters.
+- FSRS-6 through `ts-fsrs`, the only scheduler. Options that only mean something under SM-2 aren't
+  offered, and a linked deck whose AnkiDroid preset has FSRS off gets a warning that the two
+  schedules will differ.
 - Per-user parameter optimization is a later feature, once there is enough review history. The
   schema keeps everything the optimizer needs (the full log with grades and times).
 
@@ -177,16 +180,25 @@ AnkiDroid decks become the app's own decks. The app schedules them with FSRS lik
   For each linked card AnkiDroid reviewed since the phone
   last saw it (its `reps` went up), the app appends a snapshot timed at that review, and replay
   adopts it.
-- **Sync back** (on demand from the deck, plus an auto sync after each alarm session, on by default
-  and turned off per phone): every review of a linked card not sent yet, from any origin, goes to
+- **Sync back** (on demand from the deck, plus an auto sync when normal study ends, when the app goes
+  to the background and after each alarm session, on by default and turned off per phone): every review of a linked card not sent yet, from any origin, goes to
   AnkiDroid in answer-time order as an answer with the same grade and time taken, so AnkiDroid
   reschedules with its own scheduler and keeps a real history. AnkiDroid stamps each answer with
   the time of the sync and caps the time taken at its deck's limit. Each answer is checked by
   reading the card back, since the API reports success either way. Answers for cards suspended or
   buried in AnkiDroid wait (answering would unsuspend them); answers for cards AnkiDroid deleted are
   dropped. A card AnkiDroid reviewed since we last saw it gets its snapshot before our answers go.
-  The phone keeps what it sent and the `reps` it last saw locally; a phone that takes over a linked
-  deck doesn't resend the reviews from before.
+  The phone keeps what it sent and the `reps` it last saw locally. When linking finds reviews not
+  sent yet (a reinstall, another phone, a deck studied before its link), the app says how many and
+  asks whether to send them; declining marks them as sent.
+- The deck page shows pending answers and why they wait. A failure that needs the user (no
+  permission, AnkiDroid missing or too old) also shows a global card. Auto sync back never fails
+  silently.
+- **Sync AnkiDroid** (a button, never automatic) asks AnkiDroid to sync with AnkiWeb through its
+  `DO_SYNC` intent, because the app can't reach AnkiWeb itself.
+- A linked deck's options are the app's own after linking and pull never overwrites them. **Bring
+  from AnkiDroid** copies them on request, FSRS parameters included. The API can't write options, so
+  changes here don't reach AnkiDroid.
 - Buries go with sync back too, after the card's answers (an answer would unbury it): each linked
   card still buried in the app is buried in AnkiDroid once, checked by reading its queue back. A
   card already out of AnkiDroid's queue, or gone from it, needs nothing. A bury that ended before
@@ -270,6 +282,37 @@ session** is a special mode of it on the phone.
   browser finds buried cards with `is:buried`.
 - The phone has a full editor: notes, decks, deck options. Editing note types (templates and CSS)
   is web only.
+
+### Deck options
+
+A settings button in the deck's header opens the **deck options** screen, on the phone and the web.
+It also holds the deck's `.apkg` export. At the top are the preset picker ("used by N decks") and
+Save; leaving with unsaved changes asks first. Presets can be created, duplicated, renamed and
+deleted. Deleting one moves its decks to Default, which can't be deleted, and new decks start on
+Default. Defaults match Anki's.
+
+- **Daily limits:** new cards and reviews per day, each set for the preset, this deck or today only
+  ("today" ends at the next study day); new cards ignore the review limit; limits start from the
+  parent deck. By default the studied deck's limits apply; with that last option on, each subdeck
+  also keeps to its own.
+- **New cards:** learning steps, insertion order.
+- **Lapses:** relearning steps, leech threshold, leech action (suspend or tag only).
+- **Display order:** new card gathering and sort order, new versus reviews, learning versus reviews,
+  review sort order.
+- **FSRS:** desired retention as a slider with an explanation; the 21 parameters under Advanced.
+- **Burying:** new, review and learning siblings.
+- **Audio:** don't play automatically, skip the question when replaying the answer.
+- **Timer:** maximum answer seconds, show the timer, stop it on answer.
+- **Auto advance:** seconds for the question and answer, wait for audio, question and answer actions.
+- **Easy days:** minimum, reduced or normal for each weekday.
+- **Advanced:** maximum interval.
+
+An alarm session and an awake check use only the options that schedule (steps, retention, parameters,
+maximum interval, easy days, leeches). Timer, auto advance, display order and burying don't apply, and
+audio follows the alarm's own read-aloud setting: auto advance must never pass an alarm unanswered.
+
+`.apkg` import and export carry these options where Anki has them. Options the app doesn't offer are
+written with Anki's defaults.
 
 ## Alarms
 
@@ -461,6 +504,7 @@ A count-dependent position would move the thumb's target and leave the phone's b
 
 - iOS.
 - FSRS parameter optimization.
+- SM-2, and Anki's custom scheduling JavaScript.
 - Editing note types on the phone.
 - AnkiWeb sync.
 - Play Store release.
