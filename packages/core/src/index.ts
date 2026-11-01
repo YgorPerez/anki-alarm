@@ -228,3 +228,5 @@ export {
 export type { QuickAlarmOptions } from "./quick-alarm.ts";
 
 export type { SchedulingOptions } from "./study.ts";
+
+export { isDefaultPreset } from "./collection.ts";

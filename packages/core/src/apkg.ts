@@ -43,6 +43,7 @@ export interface AnkiPackage {
     desiredRetention: number | null;
   }[];
   presets: {
+    isDefault?: boolean | undefined;
     id: number;
     appId?: string | undefined;
     name: string;
@@ -347,6 +348,7 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         desiredRetention: retention(c.desiredRetention, 0.9),
         learningSteps: steps(record(c.new).delays),
         fsrsParameters: fsrs6(steps(c.fsrsParams6)),
+        isDefault: typeof c.ankiAlarmDefault === "boolean" ? c.ankiAlarmDefault : undefined,
       })),
   };
 }

@@ -412,3 +412,20 @@ test("all seven flags and the marked tag survive an apkg round-trip", async () =
   ]);
   expect(restored.snapshot().notes.every((n) => n.fields.tags.value.includes("marked"))).toBe(true);
 });
+
+test("an exported custom preset stays deletable and new decks use Default after import", async () => {
+  const collection = new Collection(environment());
+  const deck = collection.createDeck("Custom preset");
+  collection.addBasicNote(deck.id, "front", "back");
+  const preset = collection.createPreset("Intensive");
+  collection.setDeckPreset(deck.id, preset.id);
+  const { package: source } = await exported(collection.snapshot(), [], "Custom preset");
+  const fresh = new Collection(environment("phone-b"));
+  fresh.importAnki(source);
+  const next = fresh.createDeck("New");
+  expect(next.fields.presetId.value).not.toBe(preset.id);
+  fresh.deletePreset(preset.id);
+  expect(fresh.snapshot().decks.find((d) => d.id === deck.id)!.fields.presetId.value).toBe(
+    next.fields.presetId.value,
+  );
+});

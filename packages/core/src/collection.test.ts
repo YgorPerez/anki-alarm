@@ -164,3 +164,49 @@ test("a suspension from one device merges with another device's move of the same
     expect(merged.fields.deckId.value).toBe(other.id);
   }
 });
+
+test("presets can be created, assigned, duplicated and renamed without sharing options", () => {
+  const c = new Collection(environment());
+  const deck = c.createDeck("Words");
+  const custom = c.createPreset("  Intensive  ");
+  c.updatePreset(custom.id, { learningSteps: [2, 15], newPerDay: 5 });
+  c.setDeckPreset(deck.id, custom.id);
+  const duplicate = c.duplicatePreset(custom.id, "Copy");
+  c.updatePreset(duplicate.id, { name: "Renamed", learningSteps: [3] });
+  expect(c.snapshot().decks[0]!.fields.presetId.value).toBe(custom.id);
+  expect(c.snapshot().presets.find((p) => p.id === custom.id)!.fields.learningSteps.value).toEqual([
+    2, 15,
+  ]);
+  expect(duplicate.fields.newPerDay.value).toBe(5);
+  expect(c.snapshot().presets.find((p) => p.id === duplicate.id)!.fields.name.value).toBe(
+    "Renamed",
+  );
+  const next = c.createDeck("New");
+  expect(next.fields.presetId.value).toBe(deck.fields.presetId.value);
+});
+
+test("deleting a preset moves all its decks to Default and rejects invalid commands atomically", () => {
+  const c = new Collection(environment());
+  const first = c.createDeck("First");
+  const second = c.createDeck("Second");
+  const preset = c.createPreset("Temporary");
+  c.setDeckPreset(first.id, preset.id);
+  c.setDeckPreset(second.id, preset.id);
+  c.deletePreset(preset.id);
+  expect(c.snapshot().decks.map((d) => d.fields.presetId.value)).toEqual([
+    first.fields.presetId.value,
+    first.fields.presetId.value,
+  ]);
+  expect(c.snapshot().presets.some((p) => p.id === preset.id)).toBe(false);
+  expect(c.snapshot().tombstones).toContainEqual(
+    expect.objectContaining({ kind: "presets", id: preset.id }),
+  );
+  const before = c.snapshot();
+  expect(() => c.deletePreset(first.fields.presetId.value)).toThrow("Cannot delete preset");
+  expect(() => c.setDeckPreset(first.id, "missing")).toThrow("Invalid preset");
+  expect(() => c.createPreset(" ")).toThrow("Invalid preset name");
+  expect(() => c.duplicatePreset("missing", "Copy")).toThrow("Invalid preset");
+  expect(c.snapshot()).toEqual(before);
+  const restored = new Collection(environment(), before);
+  expect(restored.createDeck("Later").fields.presetId.value).toBe(first.fields.presetId.value);
+});
