@@ -1,3 +1,4 @@
+import { studyAnswerDuration } from "@app/core";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import { eq, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Semaphore } from "effect";
@@ -391,7 +392,7 @@ const open = (driver: SQLiteConnection, media: MediaFiles) =>
             kind: "review",
             cardId,
             grade,
-            durationMs,
+            durationMs: ringId === undefined ? studyAnswerDuration(preset, durationMs) : durationMs,
             ...(ringId === undefined
               ? { origin: driver.origin ?? "phone" }
               : { origin: "alarm" as const, ringId }),

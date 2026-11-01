@@ -49,6 +49,13 @@ export type Deck = RecordFields<{
   language?: string;
 }> &
   AnkiIdentity;
+const AUDIO_TIMER_DEFAULTS = {
+  dontPlayAutomatically: false,
+  skipQuestionWhenReplayingAnswer: false,
+  maximumAnswerSeconds: 60,
+  showTimer: false,
+  stopTimerOnAnswer: false,
+};
 export type Preset = RecordFields<{
   name: string;
   buryNew: boolean;
@@ -63,6 +70,11 @@ export type Preset = RecordFields<{
   isDefault?: boolean;
   /** FSRS-6's 21 weights. */
   fsrsParameters: number[];
+  dontPlayAutomatically: boolean;
+  skipQuestionWhenReplayingAnswer: boolean;
+  maximumAnswerSeconds: number;
+  showTimer: boolean;
+  stopTimerOnAnswer: boolean;
 }> &
   AnkiIdentity;
 /** Legacy app presets and explicitly marked defaults cannot be deleted. */
@@ -73,6 +85,12 @@ export type PresetOptions = {
   [K in Exclude<keyof Preset["fields"], "isDefault">]: Preset["fields"][K]["value"];
 };
 const presetKeys = [
+  "dontPlayAutomatically",
+  "skipQuestionWhenReplayingAnswer",
+  "maximumAnswerSeconds",
+  "showTimer",
+  "stopTimerOnAnswer",
+
   "name",
   "newPerDay",
   "reviewsPerDay",
@@ -98,6 +116,11 @@ export const validOption: { [K in keyof PresetOptions]: (value: PresetOptions[K]
   buryNew: (v) => typeof v === "boolean",
   buryReviews: (v) => typeof v === "boolean",
   buryLearning: (v) => typeof v === "boolean",
+  dontPlayAutomatically: (v) => typeof v === "boolean",
+  skipQuestionWhenReplayingAnswer: (v) => typeof v === "boolean",
+  maximumAnswerSeconds: (v) => Number.isSafeInteger(v) && v >= 0 && v <= 9999,
+  showTimer: (v) => typeof v === "boolean",
+  stopTimerOnAnswer: (v) => typeof v === "boolean",
   name: (v) => typeof v === "string" && Boolean(v.trim()),
   newPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
   reviewsPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
@@ -238,6 +261,12 @@ export function parseCollection(stored: StoredCollection): CollectionState {
       value: [...DEFAULT_FSRS_PARAMETERS],
       hlc: preset.fields.name.hlc,
     };
+  }
+  for (const preset of state.presets) {
+    for (const [key, value] of Object.entries(AUDIO_TIMER_DEFAULTS)) {
+      if (!(key in preset.fields))
+        Object.assign(preset.fields, { [key]: { value, hlc: preset.fields.name.hlc } });
+    }
   }
   // A preset deletion also beats assignments made offline after the deleting device last synced.
   // Keep the redirect derived from the tombstone, so a late deck field cannot resurrect its use.
@@ -385,6 +414,7 @@ export class Collection {
     if (!preset) {
       preset = this.record({
         isDefault: true,
+        ...AUDIO_TIMER_DEFAULTS,
         name: "Default",
         buryNew: false,
         buryReviews: false,
@@ -602,6 +632,19 @@ export class Collection {
       buryNew: factory ? false : source.fields.buryNew.value,
       buryReviews: factory ? false : source.fields.buryReviews.value,
       buryLearning: factory ? false : source.fields.buryLearning.value,
+      dontPlayAutomatically: factory
+        ? AUDIO_TIMER_DEFAULTS.dontPlayAutomatically
+        : source.fields.dontPlayAutomatically.value,
+      skipQuestionWhenReplayingAnswer: factory
+        ? AUDIO_TIMER_DEFAULTS.skipQuestionWhenReplayingAnswer
+        : source.fields.skipQuestionWhenReplayingAnswer.value,
+      maximumAnswerSeconds: factory
+        ? AUDIO_TIMER_DEFAULTS.maximumAnswerSeconds
+        : source.fields.maximumAnswerSeconds.value,
+      showTimer: factory ? AUDIO_TIMER_DEFAULTS.showTimer : source.fields.showTimer.value,
+      stopTimerOnAnswer: factory
+        ? AUDIO_TIMER_DEFAULTS.stopTimerOnAnswer
+        : source.fields.stopTimerOnAnswer.value,
       isDefault: false,
     });
     this.state.presets.push(preset);
@@ -784,7 +827,10 @@ export class Collection {
       steps.set(id, options.learningSteps);
       if (!this.state.presets.some((p) => p.id === presetId))
         this.state.presets.push({
-          ...this.record({ ...options, fsrsParameters: [...DEFAULT_FSRS_PARAMETERS] }, presetId),
+          ...this.record(
+            { ...AUDIO_TIMER_DEFAULTS, ...options, fsrsParameters: [...DEFAULT_FSRS_PARAMETERS] },
+            presetId,
+          ),
           anki: { id: ankiId },
         });
       const deck = this.state.decks.find((d) => d.id === id);
@@ -985,6 +1031,13 @@ export class Collection {
       const { name, newPerDay, reviewsPerDay, desiredRetention, learningSteps, mtime } = p;
       const weights = p.fsrsParameters?.length === 21 ? p.fsrsParameters : DEFAULT_FSRS_PARAMETERS;
       const values = {
+        dontPlayAutomatically:
+          p.dontPlayAutomatically ?? AUDIO_TIMER_DEFAULTS.dontPlayAutomatically,
+        skipQuestionWhenReplayingAnswer:
+          p.skipQuestionWhenReplayingAnswer ?? AUDIO_TIMER_DEFAULTS.skipQuestionWhenReplayingAnswer,
+        maximumAnswerSeconds: p.maximumAnswerSeconds ?? AUDIO_TIMER_DEFAULTS.maximumAnswerSeconds,
+        showTimer: p.showTimer ?? AUDIO_TIMER_DEFAULTS.showTimer,
+        stopTimerOnAnswer: p.stopTimerOnAnswer ?? AUDIO_TIMER_DEFAULTS.stopTimerOnAnswer,
         name,
         newPerDay,
         reviewsPerDay,

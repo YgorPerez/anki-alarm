@@ -1,3 +1,7 @@
+import { deckPreset } from "@app/core";
+import { StudyAudio } from "#/ui/study-audio.tsx";
+import { useStudyTimer } from "#/ui/use-study-timer.ts";
+import { editingCopy } from "#/editing-copy.ts";
 import { nextStudyCard, type Grade, type LogEntry } from "@app/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -58,6 +62,20 @@ function Study() {
             {...(deckName === undefined ? {} : { deckName })}
             className="min-h-80 flex-1"
           />
+          {session.timer.show && (
+            <p role="timer" aria-label={editingCopy(lang)("answerTimer")}>
+              {session.timer.seconds}s
+            </p>
+          )}
+          {session.preset && (
+            <StudyAudio
+              key={`${card.id}-${revealed}`}
+              input={{ note, type, ordinal: card.fields.ordinal.value }}
+              side={revealed ? "back" : "front"}
+              preset={session.preset}
+              locale={lang}
+            />
+          )}
           <AnswerControls t={t} session={session} />
         </>
       ) : (
@@ -150,6 +168,9 @@ function useStudySession(deckId: string) {
     nextStudyCard(query.data.collection, query.data.log, deckId, query.data.now, state.undone);
   const cardId = next?.card.id;
   const revealed = Boolean(cardId && state.revealedId === cardId);
+  const ownDeck = query.data?.collection.decks.find((d) => d.id === next?.card.fields.deckId.value);
+  const preset = ownDeck && query.data ? deckPreset(query.data.collection, ownDeck) : undefined;
+  const timer = useStudyTimer(query.data?.started, preset);
   /** One write at a time; then the card's front, and the session read again. */
   const write = async (operation: () => Promise<Partial<SessionState>>) => {
     if (lock.current) return;
@@ -166,23 +187,22 @@ function useStudySession(deckId: string) {
   };
   return {
     query,
+    preset,
+    timer,
     card: next?.card,
     note: next?.note,
     type: next?.type,
     busy: state.status === "saving",
     error: state.status === "failed",
     revealed,
-    reveal: () => setState((s) => ({ ...s, revealedId: cardId })),
+    reveal: () => {
+      timer.stop();
+      setState((s) => ({ ...s, revealedId: cardId }));
+    },
     answer: (grade: Grade) =>
       write(async () => {
         if (!cardId || !revealed) return {};
-        const started = query.data?.started ?? performance.now();
-        const entry = await webRequest(
-          "answerCard",
-          cardId,
-          grade,
-          Math.max(0, Math.round(performance.now() - started)),
-        );
+        const entry = await webRequest("answerCard", cardId, grade, timer.duration());
         return { answers: [...state.answers, entry], undone: undefined };
       }),
     canUndo: state.answers.length > 0,

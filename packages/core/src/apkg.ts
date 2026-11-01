@@ -57,6 +57,11 @@ export interface AnkiPackage {
     learningSteps: number[];
     /** FSRS-6 weights; absent or empty means the defaults. */
     fsrsParameters?: number[];
+    dontPlayAutomatically?: boolean;
+    skipQuestionWhenReplayingAnswer?: boolean;
+    maximumAnswerSeconds?: number;
+    showTimer?: boolean;
+    stopTimerOnAnswer?: boolean;
   }[];
   notes: {
     id: number;
@@ -355,6 +360,11 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         learningSteps: steps(record(c.new).delays),
         fsrsParameters: fsrs6(steps(c.fsrsParams6)),
         isDefault: typeof c.ankiAlarmDefault === "boolean" ? c.ankiAlarmDefault : undefined,
+        dontPlayAutomatically: c.autoplay === false,
+        skipQuestionWhenReplayingAnswer: c.replayq === false,
+        maximumAnswerSeconds: typeof c.maxTaken === "number" ? c.maxTaken : 60,
+        showTimer: c.timer === 1,
+        stopTimerOnAnswer: c.stopTimerOnAnswer === true,
       })),
   };
 }
@@ -420,6 +430,11 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
         buryLearning: c.number(29) === 1,
         learningSteps: c.floats(1),
         fsrsParameters: fsrs6(c.floats(6)),
+        dontPlayAutomatically: c.number(23) === 1,
+        skipQuestionWhenReplayingAnswer: c.number(26) === 1,
+        maximumAnswerSeconds: c.number(24) ?? 0,
+        showTimer: c.number(25) === 1,
+        stopTimerOnAnswer: c.number(38) === 1,
       };
     }),
   };
