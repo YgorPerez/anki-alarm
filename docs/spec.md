@@ -296,7 +296,8 @@ Default. Defaults match Anki's.
 - **Daily limits:** new cards and reviews per day, each set for the preset, this deck or today only
   ("today" ends at the next study day); new cards ignore the review limit; limits start from the
   parent deck. By default the studied deck's limits apply; with that last option on, each subdeck
-  also keeps to its own.
+  also keeps to its own. Anki keeps those two rules for the whole collection, so `.apkg` import gives
+  them to every imported preset and export writes the exported deck's.
 - **New cards:** learning steps, insertion order.
 - **Lapses:** relearning steps, leech threshold, leech action (suspend or tag only).
 - **Display order:** new card gathering and sort order, new versus reviews, learning versus reviews,

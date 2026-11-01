@@ -1,8 +1,13 @@
 import {
   DEFAULT_FSRS_PARAMETERS,
+  deckLimitTexts,
   presetTexts,
   readPresetTexts,
+  scopedLimit,
+  studyDayStart,
   validPresetText,
+  type Deck,
+  type LimitScope,
   type Locale,
   type Preset,
   type PresetOptions,
@@ -10,7 +15,7 @@ import {
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
 import { RetentionSlider } from "./RetentionSlider.tsx";
-import { Switch, Text, View } from "react-native";
+import { Pressable, Switch, Text, View } from "react-native";
 import { Button, SaveButtons, TextField } from "./controls.tsx";
 import { editingCopy } from "./editing-copy.ts";
 import { regular } from "./fonts.ts";
@@ -18,6 +23,7 @@ import { regular } from "./fonts.ts";
 /** Edits a preset: the daily limits and FSRS options its decks share. */
 export function DeckOptionsEditor({
   preset,
+  deck,
   deckCount,
   locale,
   busy,
@@ -27,15 +33,24 @@ export function DeckOptionsEditor({
 }: {
   onDirtyChange?: (dirty: boolean) => void;
   preset: Preset;
+  /** The deck whose options these are: its limits can be set for it alone. */
+  deck?: Deck;
   deckCount: number;
   locale: Locale;
   busy: boolean;
-  onSave: (options: PresetOptions) => void;
+  onSave: (
+    options: PresetOptions,
+    limits?: { deckId: string; new: LimitScope; review: LimitScope },
+  ) => void;
   onCancel: () => void;
 }) {
   const t = editingCopy(locale);
   const [advanced, setAdvanced] = useState(false);
-  const defaultValues = presetTexts(preset, locale);
+  const [today] = useState(() => studyDayStart(Date.now()));
+  const defaultValues = {
+    ...presetTexts(preset, locale),
+    ...deckLimitTexts(deck, preset, today),
+  };
   const form = useForm({
     listeners: {
       onChange: ({ formApi }) => onDirtyChange?.(!formApi.state.isDefaultValue),
@@ -43,7 +58,10 @@ export function DeckOptionsEditor({
     defaultValues,
     onSubmit: ({ value }) => {
       const options = readPresetTexts(value);
-      if (options) onSave(options);
+      if (!options) return;
+      if (deck)
+        onSave(options, { deckId: deck.id, new: value.newScope, review: value.reviewScope });
+      else onSave(options);
     },
   });
   const fields = [
@@ -148,6 +166,87 @@ export function DeckOptionsEditor({
           )}
         </form.Field>
       ))}
+      {deck &&
+        (
+          [
+            ["newScope", "newPerDay", "new", "newLimitScope"],
+            ["reviewScope", "reviewsPerDay", "review", "reviewLimitScope"],
+          ] as const
+        ).map(([name, limit, kind, label]) => (
+          <form.Field key={name} name={name}>
+            {(field) => (
+              <View className="gap-2" accessibilityRole="radiogroup" accessibilityLabel={t(label)}>
+                <Text style={regular} className="text-body text-foreground">
+                  {t(label)}
+                </Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {(
+                    [
+                      ["preset", "limitPreset"],
+                      ["deck", "limitDeck"],
+                      ["today", "limitToday"],
+                    ] as const
+                  ).map(([scope, scopeLabel]) => (
+                    <Pressable
+                      key={scope}
+                      accessibilityRole="radio"
+                      accessibilityLabel={t(scopeLabel)}
+                      accessibilityState={{ checked: field.state.value === scope, disabled: busy }}
+                      disabled={busy}
+                      className={`min-h-12 justify-center rounded-pill px-5 py-3 ${
+                        field.state.value === scope ? "bg-primary" : "bg-surface"
+                      }`}
+                      onPress={() => {
+                        form.setFieldValue(
+                          limit,
+                          String(scopedLimit(deck, preset, kind, scope, today)),
+                        );
+                        field.handleChange(scope);
+                      }}
+                    >
+                      <Text
+                        style={regular}
+                        className={
+                          field.state.value === scope
+                            ? "text-body text-primary-foreground"
+                            : "text-body text-foreground"
+                        }
+                      >
+                        {t(scopeLabel)}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
+          </form.Field>
+        ))}
+      {deck && (
+        <Text style={regular} className="text-body text-muted-foreground">
+          {t("limitTodayHint")}
+        </Text>
+      )}
+      {(["newIgnoreReviewLimit", "applyAllParentLimits"] as const).map((key) => (
+        <form.Field key={key} name={key}>
+          {(field) => (
+            <View className="min-h-12 flex-row items-center justify-between gap-3">
+              <Text style={regular} className="flex-1 text-body text-foreground">
+                {t(key)}
+              </Text>
+              <Switch
+                accessibilityRole="switch"
+                accessibilityLabel={t(key)}
+                value={field.state.value === "true"}
+                onValueChange={(value) => field.handleChange(String(value))}
+                disabled={busy}
+              />
+            </View>
+          )}
+        </form.Field>
+      ))}
+      <Text style={regular} className="text-body text-muted-foreground">
+        {t("applyAllParentLimitsHint")}
+      </Text>
       {fields.map((spec) => (
         <form.Field
           key={spec.key}

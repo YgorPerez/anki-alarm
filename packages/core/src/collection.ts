@@ -1,6 +1,7 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh arrays are sorted. */
 import { default_w } from "ts-fsrs";
 import type { AnkiPackage } from "./apkg.ts";
+import type { LimitKind, LimitScope } from "./daily-limits.ts";
 import {
   linkedAnkiDroidDecks,
   presetFromOptions,
@@ -47,8 +48,15 @@ export type Deck = RecordFields<{
   linkedBy?: string;
   /** The BCP 47 tag read aloud speaks this deck's cards in. Absent: its parent's, or pt-BR. */
   language?: string;
+  /** This deck's own daily limits; null or absent follows the preset. */
+  newLimit?: number | null;
+  reviewLimit?: number | null;
+  /** Today-only limits; `day` is the start of the study day they were set on. */
+  newLimitToday?: { limit: number; day: number } | null;
+  reviewLimitToday?: { limit: number; day: number } | null;
 }> &
   AnkiIdentity;
+const LIMIT_RULE_DEFAULTS = { newIgnoreReviewLimit: false, applyAllParentLimits: false };
 const AUDIO_TIMER_DEFAULTS = {
   dontPlayAutomatically: false,
   skipQuestionWhenReplayingAnswer: false,
@@ -63,6 +71,9 @@ export type Preset = RecordFields<{
   buryLearning: boolean;
   newPerDay: number;
   reviewsPerDay: number;
+  newIgnoreReviewLimit: boolean;
+  /** Limits start from the top parent deck, and each subdeck also keeps to its own. */
+  applyAllParentLimits: boolean;
   desiredRetention: number;
   /** Minutes. */
   learningSteps: number[];
@@ -94,6 +105,8 @@ const presetKeys = [
   "name",
   "newPerDay",
   "reviewsPerDay",
+  "newIgnoreReviewLimit",
+  "applyAllParentLimits",
   "desiredRetention",
   "learningSteps",
   "fsrsParameters",
@@ -124,6 +137,8 @@ export const validOption: { [K in keyof PresetOptions]: (value: PresetOptions[K]
   name: (v) => typeof v === "string" && Boolean(v.trim()),
   newPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
   reviewsPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
+  newIgnoreReviewLimit: (v) => typeof v === "boolean",
+  applyAllParentLimits: (v) => typeof v === "boolean",
   desiredRetention: (v) =>
     Number.isFinite(v) && v >= PRESET_LIMITS.minRetention && v <= PRESET_LIMITS.maxRetention,
   learningSteps: (v) =>
@@ -263,7 +278,10 @@ export function parseCollection(stored: StoredCollection): CollectionState {
     };
   }
   for (const preset of state.presets) {
-    for (const [key, value] of Object.entries(AUDIO_TIMER_DEFAULTS)) {
+    for (const [key, value] of Object.entries({
+      ...AUDIO_TIMER_DEFAULTS,
+      ...LIMIT_RULE_DEFAULTS,
+    })) {
       if (!(key in preset.fields))
         Object.assign(preset.fields, { [key]: { value, hlc: preset.fields.name.hlc } });
     }
@@ -415,6 +433,7 @@ export class Collection {
       preset = this.record({
         isDefault: true,
         ...AUDIO_TIMER_DEFAULTS,
+        ...LIMIT_RULE_DEFAULTS,
         name: "Default",
         buryNew: false,
         buryReviews: false,
@@ -432,7 +451,15 @@ export class Collection {
   createDeck(name: string): Deck {
     if (!name.trim()) throw new Error("Deck name is required");
     const preset = this.defaultPreset();
-    const deck = this.record({ name: name.trim(), presetId: preset.id, desiredRetention: null });
+    const deck = this.record({
+      name: name.trim(),
+      presetId: preset.id,
+      desiredRetention: null,
+      newLimit: null,
+      reviewLimit: null,
+      newLimitToday: null,
+      reviewLimitToday: null,
+    });
     this.state.decks.push(deck);
     return copy(deck);
   }
@@ -624,6 +651,12 @@ export class Collection {
       name: name.trim(),
       newPerDay: factory ? 20 : source.fields.newPerDay.value,
       reviewsPerDay: factory ? 200 : source.fields.reviewsPerDay.value,
+      newIgnoreReviewLimit: factory
+        ? LIMIT_RULE_DEFAULTS.newIgnoreReviewLimit
+        : source.fields.newIgnoreReviewLimit.value,
+      applyAllParentLimits: factory
+        ? LIMIT_RULE_DEFAULTS.applyAllParentLimits
+        : source.fields.applyAllParentLimits.value,
       desiredRetention: factory ? 0.9 : source.fields.desiredRetention.value,
       learningSteps: factory ? [1, 10] : copy(source.fields.learningSteps.value),
       fsrsParameters: factory
@@ -656,6 +689,28 @@ export class Collection {
       throw new Error("Invalid preset");
     if (deck.fields.presetId.value !== presetId)
       deck.fields.presetId = { value: presetId, hlc: this.tick() };
+  }
+  /**
+   * Sets a deck's daily limit at a scope. This deck replaces any today override; the preset writes
+   * the shared limit and drops both of this deck's overrides.
+   */
+  setDeckLimit(deckId: string, kind: LimitKind, scope: LimitScope, limit: number) {
+    const deck = this.state.decks.find((d) => d.id === deckId);
+    if (!deck || !validOption.newPerDay(limit)) throw new Error("Invalid daily limit");
+    const stamp = (key: `${LimitKind}Limit` | `${LimitKind}LimitToday`, value: unknown) => {
+      if (!same(deck.fields[key]?.value ?? null, value))
+        Object.assign(deck.fields, { [key]: { value, hlc: this.tick() } });
+    };
+    if (scope === "today") {
+      stamp(`${kind}LimitToday`, { limit, day: studyDayStart(this.env.now()) });
+      return;
+    }
+    stamp(`${kind}LimitToday`, null);
+    stamp(`${kind}Limit`, scope === "deck" ? limit : null);
+    if (scope === "preset")
+      this.updatePreset(deck.fields.presetId.value, {
+        [kind === "new" ? "newPerDay" : "reviewsPerDay"]: limit,
+      });
   }
   deletePreset(id: string) {
     const preset = this.state.presets.find((p) => p.id === id);
@@ -828,7 +883,12 @@ export class Collection {
       if (!this.state.presets.some((p) => p.id === presetId))
         this.state.presets.push({
           ...this.record(
-            { ...AUDIO_TIMER_DEFAULTS, ...options, fsrsParameters: [...DEFAULT_FSRS_PARAMETERS] },
+            {
+              ...AUDIO_TIMER_DEFAULTS,
+              ...LIMIT_RULE_DEFAULTS,
+              ...options,
+              fsrsParameters: [...DEFAULT_FSRS_PARAMETERS],
+            },
             presetId,
           ),
           anki: { id: ankiId },
@@ -1041,6 +1101,8 @@ export class Collection {
         name,
         newPerDay,
         reviewsPerDay,
+        newIgnoreReviewLimit: p.newIgnoreReviewLimit ?? LIMIT_RULE_DEFAULTS.newIgnoreReviewLimit,
+        applyAllParentLimits: p.applyAllParentLimits ?? LIMIT_RULE_DEFAULTS.applyAllParentLimits,
         desiredRetention,
         learningSteps,
         buryNew: p.buryNew ?? false,
@@ -1057,7 +1119,15 @@ export class Collection {
       if (!usedDecks.has(d.id)) continue;
       const { id, rest } = identity(d.appId, importId("deck", d.id, d.name), { id: d.id });
       const presetId = presets.get(d.presetId) ?? this.defaultPreset().id;
-      const values = { name: d.name, presetId, desiredRetention: d.desiredRetention };
+      const values = {
+        name: d.name,
+        presetId,
+        desiredRetention: d.desiredRetention,
+        newLimit: d.newLimit ?? null,
+        reviewLimit: d.reviewLimit ?? null,
+        newLimitToday: d.newLimitToday ?? null,
+        reviewLimitToday: d.reviewLimitToday ?? null,
+      };
       if (merge("decks", this.state.decks, index.decks, { id, values, mtime: d.mtime, rest }))
         decks.set(d.id, id);
     }

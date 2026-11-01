@@ -124,6 +124,8 @@ export type {
   ReliabilityKind,
   ReliabilityStep,
 } from "./reliability.ts";
+export { deckLimitTexts, LIMIT_SCOPES, scopedLimit } from "./daily-limits.ts";
+export type { LimitKind, LimitScope } from "./daily-limits.ts";
 export {
   deckPreset,
   schedulingOptions,
@@ -131,6 +133,7 @@ export {
   nextIntervals,
   studyQueue,
   studyCounts,
+  canStudyCard,
   nextStudyCard,
   studyDayStart,
   isBuried,

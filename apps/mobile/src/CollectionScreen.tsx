@@ -13,6 +13,7 @@ import {
   type Collection,
   type CollectionState,
   type Deck,
+  type LimitScope,
   type Locale,
   type LogEntry,
   type Note,
@@ -308,9 +309,15 @@ export function CollectionScreen({
             if (optionsDirty.current) confirmDiscard(t, apply);
             else apply();
           }}
-          onSave={(options) =>
+          onSave={(options, limits) =>
             void change(
-              (c) => c.updatePreset(preset.id, options),
+              (c) =>
+                runCommand(c, {
+                  kind: "updatePreset",
+                  id: preset.id,
+                  patch: options,
+                  ...(limits ? { limits } : {}),
+                }),
               () => setForm(undefined),
             )
           }
@@ -413,7 +420,10 @@ function DeckOptionsScreen({
   busy: boolean;
   onDirtyChange: (dirty: boolean) => void;
   onCancel: () => void;
-  onSave: (options: PresetOptions) => void;
+  onSave: (
+    options: PresetOptions,
+    limits?: { deckId: string; new: LimitScope; review: LimitScope },
+  ) => void;
 }) {
   return (
     <>
@@ -430,6 +440,7 @@ function DeckOptionsScreen({
       <DeckOptionsEditor
         key={`${preset.id}-${preset.fields.name.value}`}
         preset={preset}
+        {...(deck ? { deck } : {})}
         deckCount={state.decks.filter((d) => d.fields.presetId.value === preset.id).length}
         locale={locale}
         busy={busy}

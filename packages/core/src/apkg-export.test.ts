@@ -13,6 +13,7 @@ import {
   Collection,
   readApkg,
   replayCard,
+  studyDayStart,
   uuid7,
   writeApkg,
   CardState,
@@ -411,6 +412,39 @@ test("all seven flags and the marked tag survive an apkg round-trip", async () =
     1, 2, 3, 4, 5, 6, 7,
   ]);
   expect(restored.snapshot().notes.every((n) => n.fields.tags.value.includes("marked"))).toBe(true);
+});
+
+test("deck limits, today overrides and limit rules survive an apkg round trip", async () => {
+  const c = new Collection(environment());
+  const deck = c.createDeck("Limits");
+  c.addBasicNote(deck.id, "front", "back");
+  c.setDeckLimit(deck.id, "new", "deck", 5);
+  c.setDeckLimit(deck.id, "new", "today", 2);
+  c.setDeckLimit(deck.id, "review", "deck", 50);
+  c.updatePreset(deck.fields.presetId.value, {
+    newIgnoreReviewLimit: true,
+    applyAllParentLimits: true,
+  });
+  const today = studyDayStart(NOW);
+  const { package: source, zip } = await exported(c.snapshot(), [], "Limits");
+  // Anki's own config keys, so Anki reads the rules too.
+  const [col] = rows(zip, "SELECT conf FROM col");
+  expect(JSON.parse(String(col!.conf))).toMatchObject({
+    newCardsIgnoreReviewLimit: true,
+    applyAllParentLimits: true,
+  });
+  const restored = new Collection(environment("other"));
+  restored.importAnki(source);
+  const result = restored.snapshot();
+  const fields = result.decks.find((d) => d.id === deck.id)!.fields;
+  expect(fields.newLimit?.value).toBe(5);
+  expect(fields.reviewLimit?.value).toBe(50);
+  expect(fields.newLimitToday?.value).toEqual({ limit: 2, day: today });
+  expect(fields.reviewLimitToday?.value).toBeNull();
+  expect(result.presets.find((p) => p.id === fields.presetId.value)?.fields).toMatchObject({
+    newIgnoreReviewLimit: { value: true },
+    applyAllParentLimits: { value: true },
+  });
 });
 
 test("an exported custom preset stays deletable and new decks use Default after import", async () => {

@@ -1,6 +1,7 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh copies are sorted. */
 import { safeMediaName } from "./media.ts";
 import { Message } from "./protobuf.ts";
+import { studyDayStart } from "./study.ts";
 
 /**
  * What the app gives Core to read an `.apkg`: the zip's entries, zstd and a read-only SQLite
@@ -41,8 +42,16 @@ export interface AnkiPackage {
     mtime: number;
     presetId: number;
     desiredRetention: number | null;
+    newLimit?: number | null;
+    reviewLimit?: number | null;
+    /** `day` is the start of the study day the limit was set on. */
+    newLimitToday?: { limit: number; day: number } | null;
+    reviewLimitToday?: { limit: number; day: number } | null;
   }[];
   presets: {
+    /** Anki keeps these two for the whole collection, so every preset reads the same. */
+    newIgnoreReviewLimit?: boolean;
+    applyAllParentLimits?: boolean;
     isDefault?: boolean | undefined;
     id: number;
     appId?: string | undefined;
@@ -299,10 +308,24 @@ async function readCollection(db: AnkiDatabase): Promise<Omit<AnkiPackage, "vers
 
 type Config = Pick<AnkiPackage, "noteTypes" | "decks" | "presets"> & { schedulerVersion: number };
 
+/** The start of a study day from Anki's day number, days since the collection's creation. */
+function ankiDay(creationSeconds: number, day: number): number {
+  const date = new Date(creationSeconds * 1000);
+  date.setDate(date.getDate() + day);
+  return studyDayStart(date.getTime());
+}
+
 /** Schema 11: note types, decks and presets are JSON in the `col` row. */
 async function readJson(db: AnkiDatabase): Promise<Config> {
-  const [col] = await db.all("SELECT conf, models, decks, dconf FROM col");
+  const [col] = await db.all("SELECT conf, models, decks, dconf, crt FROM col");
   if (!col) throw new Error("Corrupt collection");
+  const conf = record(json(col.conf));
+  const today = (value: unknown) => {
+    const { limit, today: day } = record(value);
+    return limit == null || day == null
+      ? null
+      : { limit: int(limit), day: ankiDay(int(col.crt), int(day)) };
+  };
   return {
     schedulerVersion: int(record(json(col.conf)).schedVer) || 1,
     noteTypes: Object.values(record(json(col.models))).map((model) => {
@@ -341,6 +364,10 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         name: text(d.name),
         mtime: int(d.mod) * 1000,
         presetId: int(d.conf) || 1,
+        newLimit: d.newLimit == null ? null : int(d.newLimit),
+        reviewLimit: d.reviewLimit == null ? null : int(d.reviewLimit),
+        newLimitToday: today(d.newLimitToday),
+        reviewLimitToday: today(d.reviewLimitToday),
         desiredRetention:
           d.desiredRetention == null ? null : retention(int(d.desiredRetention) / 100, 0.9),
       })),
@@ -353,6 +380,8 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         mtime: int(c.mod) * 1000,
         newPerDay: int(record(c.new).perDay),
         reviewsPerDay: int(record(c.rev).perDay),
+        newIgnoreReviewLimit: conf.newCardsIgnoreReviewLimit === true,
+        applyAllParentLimits: conf.applyAllParentLimits === true,
         desiredRetention: retention(c.desiredRetention, 0.9),
         buryNew: record(c.new).bury === true,
         buryReviews: record(c.rev).bury === true,
@@ -374,6 +403,18 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
   const fields = await db.all("SELECT ntid, ord, name, config FROM fields");
   const templates = await db.all("SELECT ntid, ord, name, config FROM templates");
   const [schedVer] = await db.all("SELECT val FROM config WHERE KEY = 'schedVer'");
+  const [created] = await db.all("SELECT crt FROM col");
+  const rules = await db.all(
+    "SELECT key, val FROM config WHERE key IN ('newCardsIgnoreReviewLimit', 'applyAllParentLimits')",
+  );
+  const rule = (key: string) => {
+    const row = rules.find((r) => r.key === key);
+    return !!row && text(row.val) === "true";
+  };
+  const today = (limit: Message | undefined) =>
+    limit
+      ? { limit: limit.number(1) ?? 0, day: ankiDay(int(created?.crt), limit.number(2) ?? 0) }
+      : null;
   return {
     schedulerVersion: schedVer ? Number(text(schedVer.val)) || 2 : 2,
     noteTypes: (await db.all("SELECT id, name, mtime_secs, config FROM notetypes")).map((r) => {
@@ -411,6 +452,10 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
           name: text(r.name).split("\x1f").join("::"),
           mtime: int(r.mtime_secs) * 1000,
           presetId: normal.number(1) || 1,
+          newLimit: normal.number(7) ?? null,
+          reviewLimit: normal.number(6) ?? null,
+          newLimitToday: today(normal.message(9)),
+          reviewLimitToday: today(normal.message(8)),
           desiredRetention: override === undefined ? null : retention(override, 0.9),
         },
       ];
@@ -424,6 +469,8 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
         mtime: int(r.mtime_secs) * 1000,
         newPerDay: c.number(9) ?? 0,
         reviewsPerDay: c.number(10) ?? 0,
+        newIgnoreReviewLimit: rule("newCardsIgnoreReviewLimit"),
+        applyAllParentLimits: rule("applyAllParentLimits"),
         desiredRetention: retention(c.float(37), 0.9),
         buryNew: c.number(27) === 1,
         buryReviews: c.number(28) === 1,

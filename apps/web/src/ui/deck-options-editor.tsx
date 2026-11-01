@@ -1,9 +1,15 @@
 import {
   DEFAULT_FSRS_PARAMETERS,
+  deckLimitTexts,
+  LIMIT_SCOPES,
   PRESET_LIMITS,
   presetTexts,
   readPresetTexts,
+  scopedLimit,
+  studyDayStart,
   validPresetText,
+  type Deck,
+  type LimitScope,
   type Locale,
   type Preset,
   type PresetOptions,
@@ -31,6 +37,7 @@ const OPTIONS: [OptionKey, EditingKey, EditingKey, EditingKey | null, "line" | "
 /** Edits a preset: the daily limits and FSRS options its decks share. */
 export function DeckOptionsEditor({
   preset,
+  deck,
   deckCount,
   locale,
   onDirtyChange,
@@ -38,25 +45,40 @@ export function DeckOptionsEditor({
 }: {
   onDirtyChange?: (dirty: boolean) => void;
   preset: Preset;
+  /** The deck whose options these are: its limits can be set for it alone. */
+  deck?: Deck;
   deckCount: number;
   locale: Locale;
   /** Rejects when the save failed. */
-  onSave: (options: PresetOptions) => Promise<void>;
+  onSave: (
+    options: PresetOptions,
+    limits?: { deckId: string; new: LimitScope; review: LimitScope },
+  ) => Promise<void>;
 }) {
   const t = editingCopy(locale);
+  const [today] = useState(() => studyDayStart(Date.now()));
   const [advanced, setAdvanced] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const form = useForm({
     listeners: {
       onChange: ({ formApi }) => onDirtyChange?.(!formApi.state.isDefaultValue),
     },
-    defaultValues: presetTexts(preset, locale),
+    defaultValues: {
+      ...presetTexts(preset, locale),
+      ...deckLimitTexts(deck, preset, today),
+    },
     onSubmit: async ({ value, formApi }) => {
       const options = readPresetTexts(value);
       if (!options) return;
       setStatus("saving");
       try {
-        await onSave(options);
+        if (deck)
+          await onSave(options, {
+            deckId: deck.id,
+            new: value.newScope,
+            review: value.reviewScope,
+          });
+        else await onSave(options);
         formApi.reset(value);
         onDirtyChange?.(false);
         setStatus("saved");
@@ -156,6 +178,59 @@ export function DeckOptionsEditor({
           )}
         </form.Field>
       ))}
+      {deck && (
+        <div className="flex flex-col gap-3">
+          {(
+            [
+              ["newScope", "newPerDay", "new", "newLimitScope"],
+              ["reviewScope", "reviewsPerDay", "review", "reviewLimitScope"],
+            ] as const
+          ).map(([name, limit, kind, label]) => (
+            <form.Field key={name} name={name}>
+              {(field) => (
+                <label className="flex flex-col gap-1 text-body">
+                  {t(label)}
+                  <select
+                    className="min-h-12 rounded-lg border border-border bg-background px-3 text-body text-foreground"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => {
+                      const scope = LIMIT_SCOPES.find((s) => s === event.target.value) ?? "preset";
+                      form.setFieldValue(
+                        limit,
+                        String(scopedLimit(deck, preset, kind, scope, today)),
+                      );
+                      field.handleChange(scope);
+                    }}
+                  >
+                    <option value="preset">{t("limitPreset")}</option>
+                    <option value="deck">{t("limitDeck")}</option>
+                    <option value="today">{t("limitToday")}</option>
+                  </select>
+                </label>
+              )}
+            </form.Field>
+          ))}
+          <p className="text-body text-muted-foreground">{t("limitTodayHint")}</p>
+        </div>
+      )}
+      {(["newIgnoreReviewLimit", "applyAllParentLimits"] as const).map((key) => (
+        <form.Field key={key} name={key}>
+          {(field) => (
+            <label className="flex min-h-12 items-center gap-3 text-body">
+              <input
+                type="checkbox"
+                checked={field.state.value === "true"}
+                onBlur={field.handleBlur}
+                onChange={(event) => field.handleChange(String(event.target.checked))}
+                className="size-5 accent-primary"
+              />
+              {t(key)}
+            </label>
+          )}
+        </form.Field>
+      ))}
+      <p className="text-body text-muted-foreground">{t("applyAllParentLimitsHint")}</p>
       <div className="grid gap-5 sm:grid-cols-2">
         {OPTIONS.map(([key, label, error, hint, control]) => (
           <form.Field
