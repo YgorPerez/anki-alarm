@@ -402,21 +402,11 @@ test("current Anki protobuf presets import all three sibling burying options", a
         all: async (query) => {
           const rows = await db.all(query);
           if (!query.includes("FROM deck_config")) return rows;
-          return rows.map((row) => ({
-            ...row,
-            config: new Uint8Array([
-              ...(row.config as Uint8Array),
-              216,
-              1,
-              1,
-              224,
-              1,
-              1,
-              232,
-              1,
-              1,
-            ]),
-          }));
+          return rows.map((row) => {
+            if (!(row.config instanceof Uint8Array)) throw new Error("Expected protobuf bytes");
+            row.config = new Uint8Array([...row.config, 216, 1, 1, 224, 1, 1, 232, 1, 1]);
+            return row;
+          });
         },
       };
     },
