@@ -166,3 +166,71 @@ test("deck options protect unsaved changes and leave freely after saving", async
     confirm.mockRestore();
   }
 });
+
+test("deck options manage presets and return deleted presets' decks to Default", async () => {
+  const id = await webRequest("change", { kind: "createDeck", name: "Presets" });
+  const { user } = await renderRoute(`/deck?deck=${id}&options=true&lang=en`);
+  expect(await screen.findByText(/Used by \d+ decks/)).toBeDefined();
+  await user.type(screen.getByLabelText("Name for preset"), "Intensive");
+  await user.click(screen.getByRole("button", { name: "Create preset" }));
+  await waitFor(() =>
+    expect(screen.getByLabelText("Preset")).toHaveProperty("value", expect.any(String)),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("option", { name: "Intensive" })).toHaveProperty("selected", true),
+  );
+  await user.type(screen.getByLabelText("Name for preset"), "Copy");
+  await user.click(screen.getByRole("button", { name: "Duplicate preset" }));
+  await waitFor(() =>
+    expect(screen.getByRole("option", { name: "Copy" })).toHaveProperty("selected", true),
+  );
+  await user.type(screen.getByLabelText("Name for preset"), "Renamed");
+  await user.click(screen.getByRole("button", { name: "Rename preset" }));
+  await screen.findByRole("option", { name: "Renamed" });
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+  await user.click(screen.getByRole("button", { name: "Delete preset" }));
+  await waitFor(() => expect(screen.queryByRole("option", { name: "Renamed" })).toBeNull());
+  expect(screen.getByRole("button", { name: "Delete preset" })).toHaveProperty("disabled", true);
+  await user.selectOptions(
+    screen.getByLabelText("Preset"),
+    screen.getByRole("option", { name: "Intensive" }),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("option", { name: "Intensive" })).toHaveProperty("selected", true),
+  );
+  confirm.mockRestore();
+});
+
+test("switching presets asks before discarding edited options", async () => {
+  const id = (await webRequest("change", { kind: "createDeck", name: "Switch draft" }))!;
+  const customId = await webRequest("change", {
+    kind: "createPreset",
+    name: "Draft preset",
+    deckId: id,
+  });
+  const { user } = await renderRoute(`/deck?deck=${id}&options=true&lang=en`);
+  const limit = await screen.findByLabelText("New cards per day");
+  await user.clear(limit);
+  await user.type(limit, "17");
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  try {
+    await user.selectOptions(
+      screen.getByLabelText("Preset"),
+      screen.getByRole("option", { name: "Default" }),
+    );
+    expect(confirm).toHaveBeenCalledWith("Discard unsaved changes?");
+    expect(screen.getByLabelText("Preset")).toHaveProperty("value", customId);
+    expect(screen.getByLabelText("New cards per day")).toHaveProperty("value", "17");
+    confirm.mockReturnValue(true);
+    await user.selectOptions(
+      screen.getByLabelText("Preset"),
+      screen.getByRole("option", { name: "Default" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Preset")).not.toHaveProperty("value", customId),
+    );
+    expect(screen.getByLabelText("New cards per day")).not.toHaveProperty("value", "17");
+  } finally {
+    confirm.mockRestore();
+  }
+});

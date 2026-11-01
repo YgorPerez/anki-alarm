@@ -10,6 +10,15 @@ const retention = (value: number, comma: boolean) =>
 
 export const editingMessages = {
   "pt-BR": {
+    preset: "Predefinição",
+    usedByDecks: "Usada por {count} baralhos",
+    presetActionName: "Nome para a predefinição",
+    createPreset: "Criar predefinição",
+    duplicatePreset: "Duplicar predefinição",
+    renamePreset: "Renomear predefinição",
+    deletePreset: "Excluir predefinição",
+    deletePresetConfirm: "Excluir esta predefinição? Seus baralhos passarão a usar Default.",
+    presetFailed: "Não foi possível alterar a predefinição. Tente novamente.",
     deckOptions: "Opções do baralho",
     advanced: "Avançado",
     discardOptions: "Descartar as alterações não salvas?",
@@ -46,6 +55,15 @@ export const editingMessages = {
       "Esquecer e Definir vencimento ficam só no app: o AnkiDroid não recebe essas mudanças. A próxima revisão deste cartão no AnkiDroid as substitui.",
   },
   en: {
+    preset: "Preset",
+    usedByDecks: "Used by {count} decks",
+    presetActionName: "Name for preset",
+    createPreset: "Create preset",
+    duplicatePreset: "Duplicate preset",
+    renamePreset: "Rename preset",
+    deletePreset: "Delete preset",
+    deletePresetConfirm: "Delete this preset? Its decks will use Default.",
+    presetFailed: "Could not change the preset. Try again.",
     deckOptions: "Deck options",
     advanced: "Advanced",
     discardOptions: "Discard unsaved changes?",
