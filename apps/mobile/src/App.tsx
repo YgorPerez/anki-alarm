@@ -35,7 +35,9 @@ import { CollectionScreen } from "./CollectionScreen.tsx";
 import { AnkiDroidScreen } from "./AnkiDroidScreen.tsx";
 import { pickAndImportApkg } from "./apkg.ts";
 import { androidAnkiDroid } from "./ankidroid-android.ts";
-import { syncBackAfterSession } from "./ankidroid.ts";
+import { autoSyncBack } from "./ankidroid-sync-query.ts";
+import { AnkiDroidAutoSync } from "./AnkiDroidAutoSync.tsx";
+import { AnkiDroidSyncBackCard } from "./AnkiDroidSyncBackCard.tsx";
 import { StatsScreen } from "./StatsScreen.tsx";
 
 import { Effect } from "effect";
@@ -161,7 +163,14 @@ export function DecksRoute() {
 export function StudyRoute() {
   const { deckId } = useLocalSearchParams<{ deckId: string }>();
   const router = useRouter();
-  return <StudyScreen deckId={deckId} locale={useUI().locale} onExit={() => router.back()} />;
+  return (
+    <StudyScreen
+      ankiDroid={androidAnkiDroid}
+      deckId={deckId}
+      locale={useUI().locale}
+      onExit={() => router.back()}
+    />
+  );
 }
 /** Links an AnkiDroid deck from Home's empty state; the new deck then shows on Home. */
 export function AnkiDroidRoute() {
@@ -329,7 +338,7 @@ function Home({ children }: { children: ReactNode }) {
         // After each alarm session or awake check: its reviews reach the other devices, and
         // AnkiDroid when auto sync back is on. A failed sync back retries after the next one.
         appSync?.syncNow();
-        void Effect.runPromise(syncBackAfterSession(androidAnkiDroid)).catch(() => {});
+        void autoSyncBack(androidAnkiDroid, client);
       })
       .catch(() => setError(t("alarmError")));
   };
@@ -473,19 +482,25 @@ function Home({ children }: { children: ReactNode }) {
   );
 
   return (
-    <NavigationGate takeover={takeover}>
-      {onboarding ? (
-        reliability(() => setOnboarding(false), true)
-      ) : (
-        <RuntimeProvider
-          alarms={alarmsContent}
-          editor={editor}
-          reliability={(onExit) => reliability(onExit)}
-        >
-          {children}
-        </RuntimeProvider>
-      )}
-    </NavigationGate>
+    <>
+      <AnkiDroidAutoSync ankiDroid={androidAnkiDroid} />
+      <NavigationGate takeover={takeover}>
+        {onboarding ? (
+          reliability(() => setOnboarding(false), true)
+        ) : (
+          <RuntimeProvider
+            alarms={alarmsContent}
+            editor={editor}
+            reliability={(onExit) => reliability(onExit)}
+          >
+            <View className="flex-1">
+              <AnkiDroidSyncBackCard locale={locale} />
+              {children}
+            </View>
+          </RuntimeProvider>
+        )}
+      </NavigationGate>
+    </>
   );
 }
 /** The editor route: a saved alarm by id, or "new" with Core's defaults. Leaving asks before discarding changes. */

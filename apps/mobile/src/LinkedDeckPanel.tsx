@@ -1,3 +1,4 @@
+import { ANKIDROID_SYNC_QUERY_KEY, useAnkiDroidSyncBackStatus } from "./ankidroid-sync-query.ts";
 import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import type { Deck, Locale } from "@app/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -40,6 +41,9 @@ export function LinkedDeckPanel({
     queryKey: ["autoSyncBack"],
     queryFn: () => Effect.runPromise(localData((data) => data.autoSyncBack)),
   });
+  const syncStatus = useAnkiDroidSyncBackStatus();
+  const pending = syncStatus.data?.pending.filter((a) => a.deckId === deck.id) ?? [];
+  const held = pending.filter((a) => a.held).length;
   const [status, setStatus] = useState<Status>();
   const busy = useRef(false);
   const owned = phone.data !== undefined && deck.fields.linkedBy?.value === phone.data;
@@ -66,7 +70,7 @@ export function LinkedDeckPanel({
       });
     }
     await Promise.all(
-      [COLLECTION_QUERY_KEY, ["reviewLog"], ["study"]].map((queryKey) =>
+      [ANKIDROID_SYNC_QUERY_KEY, COLLECTION_QUERY_KEY, ["reviewLog"], ["study"]].map((queryKey) =>
         client.invalidateQueries({ queryKey }),
       ),
     );
@@ -90,6 +94,19 @@ export function LinkedDeckPanel({
       )}
       {owned && (
         <>
+          <Text style={regular} className="text-body text-foreground">
+            {t("pending", { count: String(pending.length) })}
+          </Text>
+          {held > 0 && (
+            <Text style={regular} className="text-body text-attention">
+              {t("held", { held: String(held) })}
+            </Text>
+          )}
+          {pending.length > held && (
+            <Text style={regular} className="text-body text-muted-foreground">
+              {t(syncStatus.data?.failure === "notRecorded" ? "notRecorded" : "waiting")}
+            </Text>
+          )}
           <Button label={t("pull")} disabled={working} onPress={() => void run("pull")} />
           <Button label={t("syncBack")} disabled={working} onPress={() => void run("syncBack")} />
           {status && (
@@ -110,6 +127,9 @@ export function LinkedDeckPanel({
           )}
           <Text style={regular} className="text-label text-muted-foreground">
             {t("syncBackNote")}
+          </Text>
+          <Text style={regular} className="text-label text-muted-foreground">
+            {t("autoDetails")}
           </Text>
           <View className="min-h-12 flex-row items-center justify-between gap-4">
             <Text style={regular} className="flex-1 text-body text-foreground">

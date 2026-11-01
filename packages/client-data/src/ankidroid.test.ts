@@ -385,3 +385,38 @@ test("sync back sends answers before suspension and a pull does not resend impor
     db.close();
   }
 });
+
+test("pending answers expose held cards and a stopped run's reason across restarts", async () => {
+  const { open, close } = openData();
+  const anki = fakeAnkiDroid();
+  try {
+    const data = await open();
+    const deckId = await run(data.linkAnkiDroidDeck(anki.source));
+    const fresh = (await run(data.collection)).cards.find((c) => c.anki?.id === 9001)!;
+    await run(data.answerCard(fresh.id, 3, 5000));
+    expect(await run(data.ankiDroidSyncBackStatus)).toMatchObject({
+      pending: [{ deckId, held: false }],
+      failure: null,
+    });
+    anki.source.cards.find((c) => c.id === 9001)!.queue = -1;
+    await run(data.syncBackAnkiDroid(anki.provider));
+    expect(await run((await open()).ankiDroidSyncBackStatus)).toMatchObject({
+      pending: [{ deckId, held: true }],
+      failure: null,
+    });
+    anki.source.cards.find((c) => c.id === 9001)!.queue = 2;
+    anki.state.ignoreAnswers = true;
+    await expect(run(data.syncBackAnkiDroid(anki.provider))).rejects.toThrow(
+      "AnkiDroid didn't record the answer",
+    );
+    expect(await run((await open()).ankiDroidSyncBackStatus)).toMatchObject({
+      pending: [{ deckId, held: false }],
+      failure: "notRecorded",
+    });
+    anki.state.ignoreAnswers = false;
+    await run(data.syncBackAnkiDroid(anki.provider));
+    expect(await run(data.ankiDroidSyncBackStatus)).toEqual({ pending: [], failure: null });
+  } finally {
+    close();
+  }
+});

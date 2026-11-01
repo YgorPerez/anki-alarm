@@ -44,7 +44,14 @@ const messages = {
       "Não foi possível enviar ao AnkiDroid. As revisões que faltaram vão na próxima vez.",
     syncBackNote:
       "O AnkiDroid registra cada revisão na hora do envio, com o tempo de resposta limitado pelo baralho dele.",
-    auto: "Enviar ao AnkiDroid depois de cada alarme",
+    pending: "{count} revisões pendentes para o AnkiDroid.",
+    waiting: "Ainda não enviadas. Use Enviar revisões ou ative o envio automático.",
+    notRecorded:
+      "O AnkiDroid não registrou uma resposta. O envio parou; as revisões restantes continuam pendentes. Abra o AnkiDroid e tente enviar novamente.",
+    autoStopped: "O envio automático ao AnkiDroid parou.",
+    autoDetails:
+      "Envia ao terminar o estudo, ao sair do app e depois de cada alarme. Só neste celular.",
+    auto: "Enviar ao AnkiDroid automaticamente",
   },
   en: {
     title: "AnkiDroid",
@@ -88,7 +95,14 @@ const messages = {
     syncBackError: "Couldn't send to AnkiDroid. The reviews left go next time.",
     syncBackNote:
       "AnkiDroid records each review at the time it's sent, with the answer time capped by its deck.",
-    auto: "Send to AnkiDroid after each alarm",
+    pending: "{count} pending answers for AnkiDroid.",
+    waiting: "Not sent yet. Use Send reviews or turn on automatic sending.",
+    notRecorded:
+      "AnkiDroid did not record an answer. Sending stopped; the remaining reviews are still pending. Open AnkiDroid and try sending again.",
+    autoStopped: "Automatic sending to AnkiDroid stopped.",
+    autoDetails:
+      "Sends when study ends, when leaving the app and after each alarm. This phone only.",
+    auto: "Send to AnkiDroid automatically",
   },
 } satisfies Messages<string>;
 export const ankiDroidCopy = (locale: Locale) =>

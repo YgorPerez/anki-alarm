@@ -1,3 +1,5 @@
+import { autoSyncBack } from "./ankidroid-sync-query.ts";
+import type { AnkiDroidApi } from "./ankidroid.ts";
 import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
 import { intervalText } from "./interval-text.ts";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
@@ -47,7 +49,9 @@ export function StudyScreen({
   deckId,
   locale,
   onExit,
+  ankiDroid,
 }: {
+  ankiDroid?: AnkiDroidApi;
   deckId: string;
   locale: Locale;
   onExit: () => void;
@@ -57,6 +61,26 @@ export function StudyScreen({
   const dark = useColorScheme() === "dark";
   const study = useStudySession(deckId, onExit);
   const { query, busy, error, canUndo, undo } = study;
+  const client = useQueryClient();
+  const completed = Boolean(query.data && !study.card && !busy);
+  const completedSync = useRef(false);
+  useEffect(() => {
+    if (!completed) {
+      completedSync.current = false;
+      return;
+    }
+    if (ankiDroid && !completedSync.current) {
+      completedSync.current = true;
+      void autoSyncBack(ankiDroid, client);
+    }
+  }, [ankiDroid, client, completed]);
+  // Includes Android Back and a navigator gesture, even when cards remain.
+  useEffect(
+    () => () => {
+      if (ankiDroid) void autoSyncBack(ankiDroid, client);
+    },
+    [ankiDroid, client],
+  );
   const [editing, setEditing] = useState<string>();
   const deckName = query.data?.collection.decks.find((d) => d.id === deckId)?.fields.name.value;
   const frame = { paddingTop: insets.top, paddingBottom: insets.bottom };
