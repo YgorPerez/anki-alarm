@@ -1,4 +1,11 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh copies are sorted. */
+import {
+  ankiAnswerAction,
+  ankiQuestionAction,
+  ankiSeconds,
+  type AnswerAction,
+  type QuestionAction,
+} from "./auto-advance.ts";
 import { safeMediaName } from "./media.ts";
 import { Message } from "./protobuf.ts";
 
@@ -62,6 +69,11 @@ export interface AnkiPackage {
     maximumAnswerSeconds?: number;
     showTimer?: boolean;
     stopTimerOnAnswer?: boolean;
+    secondsToShowQuestion?: number;
+    secondsToShowAnswer?: number;
+    waitForAudio?: boolean;
+    questionAction?: QuestionAction;
+    answerAction?: AnswerAction;
   }[];
   notes: {
     id: number;
@@ -365,6 +377,12 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         maximumAnswerSeconds: typeof c.maxTaken === "number" ? c.maxTaken : 60,
         showTimer: c.timer === 1,
         stopTimerOnAnswer: c.stopTimerOnAnswer === true,
+        secondsToShowQuestion: ankiSeconds(c.secondsToShowQuestion),
+        secondsToShowAnswer: ankiSeconds(c.secondsToShowAnswer),
+        // Older packages don't have it; Anki's default is on.
+        waitForAudio: c.waitForAudio !== false,
+        questionAction: ankiQuestionAction(c.questionAction),
+        answerAction: ankiAnswerAction(c.answerAction),
       })),
   };
 }
@@ -435,6 +453,12 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
         maximumAnswerSeconds: c.number(24) ?? 0,
         showTimer: c.number(25) === 1,
         stopTimerOnAnswer: c.number(38) === 1,
+        // Proto3 leaves zero values out, so absent is 0, off or the first action.
+        secondsToShowQuestion: ankiSeconds(c.float(41)),
+        secondsToShowAnswer: ankiSeconds(c.float(42)),
+        waitForAudio: c.number(44) === 1,
+        questionAction: ankiQuestionAction(c.number(36)),
+        answerAction: ankiAnswerAction(c.number(43)),
       };
     }),
   };

@@ -29,6 +29,8 @@ export interface Operations {
   /** A review from the web, for a card in the deck's study queue now. */
   answerCard: [[cardId: string, grade: Grade, durationMs: number], LogEntry];
   undo: [[entryId: string], LogEntry];
+  /** Auto advance's bury: the card leaves the queue for the day, with no review. */
+  buryCard: [[cardId: string], undefined];
   /** An editing command; resolves with the id of the deck or note it created. */
   change: [[command: CollectionCommand], string | undefined];
   forgetCard: [[cardId: string], LogEntry];
@@ -52,6 +54,7 @@ export const WRITES: ReadonlySet<Kind> = new Set([
   "setTheme",
   "answerCard",
   "undo",
+  "buryCard",
   "change",
   "forgetCard",
   "setDueDate",

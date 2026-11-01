@@ -2,6 +2,15 @@
 import { default_w } from "ts-fsrs";
 import type { AnkiPackage } from "./apkg.ts";
 import {
+  ANSWER_ACTIONS,
+  AUTO_ADVANCE_DEFAULTS,
+  QUESTION_ACTIONS,
+  autoAdvanceOptions,
+  validAutoAdvanceSeconds,
+  type AnswerAction,
+  type QuestionAction,
+} from "./auto-advance.ts";
+import {
   linkedAnkiDroidDecks,
   presetFromOptions,
   seenReps,
@@ -75,6 +84,11 @@ export type Preset = RecordFields<{
   maximumAnswerSeconds: number;
   showTimer: boolean;
   stopTimerOnAnswer: boolean;
+  secondsToShowQuestion: number;
+  secondsToShowAnswer: number;
+  waitForAudio: boolean;
+  questionAction: QuestionAction;
+  answerAction: AnswerAction;
 }> &
   AnkiIdentity;
 /** Legacy app presets and explicitly marked defaults cannot be deleted. */
@@ -85,6 +99,11 @@ export type PresetOptions = {
   [K in Exclude<keyof Preset["fields"], "isDefault">]: Preset["fields"][K]["value"];
 };
 const presetKeys = [
+  "secondsToShowQuestion",
+  "secondsToShowAnswer",
+  "waitForAudio",
+  "questionAction",
+  "answerAction",
   "dontPlayAutomatically",
   "skipQuestionWhenReplayingAnswer",
   "maximumAnswerSeconds",
@@ -121,6 +140,11 @@ export const validOption: { [K in keyof PresetOptions]: (value: PresetOptions[K]
   maximumAnswerSeconds: (v) => Number.isSafeInteger(v) && v >= 0 && v <= 9999,
   showTimer: (v) => typeof v === "boolean",
   stopTimerOnAnswer: (v) => typeof v === "boolean",
+  secondsToShowQuestion: validAutoAdvanceSeconds,
+  secondsToShowAnswer: validAutoAdvanceSeconds,
+  waitForAudio: (v) => typeof v === "boolean",
+  questionAction: (v) => QUESTION_ACTIONS.includes(v),
+  answerAction: (v) => ANSWER_ACTIONS.includes(v),
   name: (v) => typeof v === "string" && Boolean(v.trim()),
   newPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
   reviewsPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
@@ -263,7 +287,10 @@ export function parseCollection(stored: StoredCollection): CollectionState {
     };
   }
   for (const preset of state.presets) {
-    for (const [key, value] of Object.entries(AUDIO_TIMER_DEFAULTS)) {
+    for (const [key, value] of Object.entries({
+      ...AUDIO_TIMER_DEFAULTS,
+      ...AUTO_ADVANCE_DEFAULTS,
+    })) {
       if (!(key in preset.fields))
         Object.assign(preset.fields, { [key]: { value, hlc: preset.fields.name.hlc } });
     }
@@ -415,6 +442,7 @@ export class Collection {
       preset = this.record({
         isDefault: true,
         ...AUDIO_TIMER_DEFAULTS,
+        ...AUTO_ADVANCE_DEFAULTS,
         name: "Default",
         buryNew: false,
         buryReviews: false,
@@ -645,6 +673,7 @@ export class Collection {
       stopTimerOnAnswer: factory
         ? AUDIO_TIMER_DEFAULTS.stopTimerOnAnswer
         : source.fields.stopTimerOnAnswer.value,
+      ...(factory ? AUTO_ADVANCE_DEFAULTS : autoAdvanceOptions(source)),
       isDefault: false,
     });
     this.state.presets.push(preset);
@@ -828,7 +857,12 @@ export class Collection {
       if (!this.state.presets.some((p) => p.id === presetId))
         this.state.presets.push({
           ...this.record(
-            { ...AUDIO_TIMER_DEFAULTS, ...options, fsrsParameters: [...DEFAULT_FSRS_PARAMETERS] },
+            {
+              ...AUDIO_TIMER_DEFAULTS,
+              ...AUTO_ADVANCE_DEFAULTS,
+              ...options,
+              fsrsParameters: [...DEFAULT_FSRS_PARAMETERS],
+            },
             presetId,
           ),
           anki: { id: ankiId },
@@ -1038,6 +1072,12 @@ export class Collection {
         maximumAnswerSeconds: p.maximumAnswerSeconds ?? AUDIO_TIMER_DEFAULTS.maximumAnswerSeconds,
         showTimer: p.showTimer ?? AUDIO_TIMER_DEFAULTS.showTimer,
         stopTimerOnAnswer: p.stopTimerOnAnswer ?? AUDIO_TIMER_DEFAULTS.stopTimerOnAnswer,
+        secondsToShowQuestion:
+          p.secondsToShowQuestion ?? AUTO_ADVANCE_DEFAULTS.secondsToShowQuestion,
+        secondsToShowAnswer: p.secondsToShowAnswer ?? AUTO_ADVANCE_DEFAULTS.secondsToShowAnswer,
+        waitForAudio: p.waitForAudio ?? AUTO_ADVANCE_DEFAULTS.waitForAudio,
+        questionAction: p.questionAction ?? AUTO_ADVANCE_DEFAULTS.questionAction,
+        answerAction: p.answerAction ?? AUTO_ADVANCE_DEFAULTS.answerAction,
         name,
         newPerDay,
         reviewsPerDay,

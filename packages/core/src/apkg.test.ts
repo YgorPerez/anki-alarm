@@ -415,3 +415,60 @@ test("current Anki protobuf presets import all three sibling burying options", a
   for (const preset of source.presets)
     expect([preset.buryNew, preset.buryReviews, preset.buryLearning]).toEqual([true, true, true]);
 });
+
+test("current Anki protobuf presets import auto advance", async () => {
+  const base = host(fixture("latest.apkg"));
+  const { package: source } = await readApkg({
+    ...base,
+    openSqlite: async (bytes) => {
+      const db = await base.openSqlite(bytes);
+      return {
+        ...db,
+        all: async (query) => {
+          const rows = await db.all(query);
+          if (!query.includes("FROM deck_config")) return rows;
+          return rows.map((row) => {
+            if (!(row.config instanceof Uint8Array)) throw new Error("Expected protobuf bytes");
+            // Anki's deck_config.proto: seconds_to_show_question (41) = 2.5,
+            // seconds_to_show_answer (42) = 1.5, question_action (36) = SHOW_REMINDER,
+            // answer_action (43) = ANSWER_HARD, wait_for_audio (44) = true.
+            row.config = new Uint8Array([
+              ...row.config,
+              0xcd,
+              0x02,
+              0x00,
+              0x00,
+              0x20,
+              0x40,
+              0xd5,
+              0x02,
+              0x00,
+              0x00,
+              0xc0,
+              0x3f,
+              0xa0,
+              0x02,
+              0x01,
+              0xd8,
+              0x02,
+              0x03,
+              0xe0,
+              0x02,
+              0x01,
+            ]);
+            return row;
+          });
+        },
+      };
+    },
+  });
+  expect(source.presets.length).toBeGreaterThan(0);
+  for (const preset of source.presets)
+    expect(preset).toMatchObject({
+      secondsToShowQuestion: 2.5,
+      secondsToShowAnswer: 1.5,
+      questionAction: "showReminder",
+      answerAction: "hard",
+      waitForAudio: true,
+    });
+});

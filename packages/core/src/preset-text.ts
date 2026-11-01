@@ -1,3 +1,9 @@
+import {
+  ANSWER_ACTIONS,
+  QUESTION_ACTIONS,
+  type AnswerAction,
+  type QuestionAction,
+} from "./auto-advance.ts";
 import { validOption, type Preset, type PresetOptions } from "./collection.ts";
 import type { Locale } from "./locale.ts";
 
@@ -25,6 +31,11 @@ const read = {
   maximumAnswerSeconds: integer,
   showTimer: boolean,
   stopTimerOnAnswer: boolean,
+  secondsToShowQuestion: decimal,
+  secondsToShowAnswer: decimal,
+  waitForAudio: boolean,
+  questionAction: (text: string) => QUESTION_ACTIONS.find((a): a is QuestionAction => a === text),
+  answerAction: (text: string) => ANSWER_ACTIONS.find((a): a is AnswerAction => a === text),
   name: (text: string) => text.trim(),
   newPerDay: integer,
   reviewsPerDay: integer,
@@ -33,6 +44,11 @@ const read = {
   fsrsParameters: (text: string) => list(text, /[\s,;]+/),
 } satisfies { [K in keyof PresetOptions]: (text: string) => PresetOptions[K] | undefined };
 const KEYS = [
+  "secondsToShowQuestion",
+  "secondsToShowAnswer",
+  "waitForAudio",
+  "questionAction",
+  "answerAction",
   "dontPlayAutomatically",
   "skipQuestionWhenReplayingAnswer",
   "maximumAnswerSeconds",
@@ -65,6 +81,13 @@ export const validPresetText: Record<keyof PresetOptions, (text: string) => bool
     ok(read.maximumAnswerSeconds(text), validOption.maximumAnswerSeconds),
   showTimer: (text) => ok(read.showTimer(text), validOption.showTimer),
   stopTimerOnAnswer: (text) => ok(read.stopTimerOnAnswer(text), validOption.stopTimerOnAnswer),
+  secondsToShowQuestion: (text) =>
+    ok(read.secondsToShowQuestion(text), validOption.secondsToShowQuestion),
+  secondsToShowAnswer: (text) =>
+    ok(read.secondsToShowAnswer(text), validOption.secondsToShowAnswer),
+  waitForAudio: (text) => ok(read.waitForAudio(text), validOption.waitForAudio),
+  questionAction: (text) => ok(read.questionAction(text), validOption.questionAction),
+  answerAction: (text) => ok(read.answerAction(text), validOption.answerAction),
   name: (text) => validOption.name(text),
   newPerDay: (text) => ok(read.newPerDay(text), validOption.newPerDay),
   reviewsPerDay: (text) => ok(read.reviewsPerDay(text), validOption.reviewsPerDay),
@@ -86,6 +109,11 @@ export function presetTexts(preset: Preset, locale: Locale): PresetTexts {
     maximumAnswerSeconds: String(f.maximumAnswerSeconds.value),
     showTimer: String(f.showTimer.value),
     stopTimerOnAnswer: String(f.stopTimerOnAnswer.value),
+    secondsToShowQuestion: decimalText(f.secondsToShowQuestion.value),
+    secondsToShowAnswer: decimalText(f.secondsToShowAnswer.value),
+    waitForAudio: String(f.waitForAudio.value),
+    questionAction: f.questionAction.value,
+    answerAction: f.answerAction.value,
     name: f.name.value,
     newPerDay: String(f.newPerDay.value),
     reviewsPerDay: String(f.reviewsPerDay.value),
@@ -109,6 +137,11 @@ export function readPresetTexts(texts: PresetTexts): PresetOptions | undefined {
     maximumAnswerSeconds: read.maximumAnswerSeconds(texts.maximumAnswerSeconds)!,
     showTimer: read.showTimer(texts.showTimer)!,
     stopTimerOnAnswer: read.stopTimerOnAnswer(texts.stopTimerOnAnswer)!,
+    secondsToShowQuestion: read.secondsToShowQuestion(texts.secondsToShowQuestion)!,
+    secondsToShowAnswer: read.secondsToShowAnswer(texts.secondsToShowAnswer)!,
+    waitForAudio: read.waitForAudio(texts.waitForAudio)!,
+    questionAction: read.questionAction(texts.questionAction)!,
+    answerAction: read.answerAction(texts.answerAction)!,
     name: read.name(texts.name),
     newPerDay: read.newPerDay(texts.newPerDay)!,
     reviewsPerDay: read.reviewsPerDay(texts.reviewsPerDay)!,

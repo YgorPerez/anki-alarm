@@ -474,3 +474,24 @@ test("apkg round trip carries audio and timer options", async () => {
   expect(preset?.fields.showTimer.value).toBe(true);
   expect(preset?.fields.stopTimerOnAnswer.value).toBe(true);
 });
+
+test("apkg round trip carries auto advance options", async () => {
+  const { collection, log, english } = await studied();
+  collection.updatePreset(english.fields.presetId.value, {
+    secondsToShowQuestion: 2.5,
+    secondsToShowAnswer: 4,
+    waitForAudio: false,
+    questionAction: "showReminder",
+    answerAction: "good",
+  });
+  const { package: source } = await exported(collection.snapshot(), log, "Inglês");
+  const copy = new Collection(environment("copy"));
+  copy.importAnki(source);
+  const preset = copy.snapshot().presets.find((p) => p.fields.secondsToShowQuestion.value === 2.5);
+  expect(preset?.fields).toMatchObject({
+    secondsToShowAnswer: { value: 4 },
+    waitForAudio: { value: false },
+    questionAction: { value: "showReminder" },
+    answerAction: { value: "good" },
+  });
+});

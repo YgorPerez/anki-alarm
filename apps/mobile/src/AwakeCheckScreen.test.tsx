@@ -106,6 +106,30 @@ test("one answer, any grade, passes the check and is a normal review", async () 
   ]);
 });
 
+test("the preset's auto advance doesn't pass the check", async () => {
+  const state = await Effect.runPromise(
+    localData((data) =>
+      data.changeCollection((c) => {
+        const deck = c.createDeck("Manhã automática");
+        c.updatePreset(deck.fields.presetId.value, {
+          secondsToShowQuestion: 0.01,
+          secondsToShowAnswer: 0.01,
+          waitForAudio: false,
+          answerAction: "good",
+        });
+        c.addBasicNote(deck.id, "sol", "sun");
+      }),
+    ),
+  );
+  const deckId = state.decks.find((d) => d.fields.name.value === "Manhã automática")!.id;
+  const { native, check } = await shownCheck("ring-auto", deckId);
+  const passed = await show(check, native.layer);
+  await screen.findByLabelText("Frente");
+  await act(() => new Promise<void>((resolve) => setTimeout(resolve, 150)));
+  screen.getByLabelText("Frente");
+  expect(passed()).toBe(0);
+});
+
 test("burying the check's card shows another and doesn't pass the check", async () => {
   const state = await Effect.runPromise(
     localData((data) =>
