@@ -412,3 +412,23 @@ test("all seven flags and the marked tag survive an apkg round-trip", async () =
   ]);
   expect(restored.snapshot().notes.every((n) => n.fields.tags.value.includes("marked"))).toBe(true);
 });
+
+test("apkg round trip preserves new card, lapse and maximum interval options", async () => {
+  const { collection, log, english } = await studied();
+  const preset = collection.snapshot().presets.find((p) => p.id === english.fields.presetId.value)!;
+  collection.updatePreset(preset.id, {
+    relearningSteps: [2, 20],
+    insertionOrder: "random",
+    leechThreshold: 4,
+    leechAction: "suspend",
+    maximumInterval: 90,
+  });
+  const result = await exported(collection.snapshot(), log, "Inglês");
+  expect(result.package.presets.find((p) => p.name === preset.fields.name.value)).toMatchObject({
+    relearningSteps: [2, 20],
+    insertionOrder: "random",
+    leechThreshold: 4,
+    leechAction: "suspend",
+    maximumInterval: 90,
+  });
+});

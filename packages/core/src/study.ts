@@ -9,12 +9,20 @@ export type SchedulingOptions = {
   desiredRetention: number;
   learningSteps: number[];
   fsrsParameters: number[];
+  relearningSteps?: number[];
+  maximumInterval?: number;
+  leechThreshold?: number;
+  leechAction?: "suspend" | "tagOnly";
 };
 export function schedulingOptions(preset: Preset): SchedulingOptions {
   return {
     desiredRetention: preset.fields.desiredRetention.value,
     learningSteps: [...preset.fields.learningSteps.value],
     fsrsParameters: [...preset.fields.fsrsParameters.value],
+    relearningSteps: [...(preset.fields.relearningSteps?.value ?? [10])],
+    maximumInterval: preset.fields.maximumInterval?.value ?? 36500,
+    leechThreshold: preset.fields.leechThreshold?.value ?? 8,
+    leechAction: preset.fields.leechAction?.value ?? "tagOnly",
   };
 }
 type Entry = { id: string; cardId: string; at: number };
@@ -70,13 +78,12 @@ export function replayEntries(
     if (voided.has(entry.id)) continue;
     visit?.(entry, state);
     switch (entry.kind) {
-      case "review":
-        state = schedulerFor(entry.options ?? schedulingOptions(preset)).next(
-          state,
-          new Date(entry.at),
-          entry.grade,
-        ).card;
+      case "review": {
+        const options = entry.options ?? schedulingOptions(preset);
+        state = schedulerFor(options).next(state, new Date(entry.at), entry.grade).card;
+        state = capInterval(state, entry.at, options.maximumInterval ?? 36500);
         break;
+      }
       case "reset":
         state = createEmptyCard(new Date(entry.at));
         break;
@@ -98,11 +105,17 @@ export function replayEntries(
   }
   return state;
 }
+function capInterval(state: MemoryState, at: number, maximum: number): MemoryState {
+  if (state.state !== State.Review || state.scheduled_days <= maximum) return state;
+  return { ...state, scheduled_days: maximum, due: new Date(at + maximum * 86400_000) };
+}
 function schedulerFor(options: SchedulingOptions) {
   return fsrs({
     request_retention: options.desiredRetention,
     w: options.fsrsParameters,
     enable_fuzz: false,
+    maximum_interval: options.maximumInterval ?? 36500,
+    relearning_steps: (options.relearningSteps ?? [10]).map((n) => `${n}m` as const),
     learning_steps: options.learningSteps.map((n) => `${n}m` as const),
   });
 }
@@ -120,7 +133,14 @@ export function nextIntervals(
   if (!preset) return undefined;
   const memory = replayCard(cardId, log, preset, now);
   const choices = schedulerFor(schedulingOptions(preset)).repeat(memory, new Date(now));
-  const seconds = (grade: Grade) => (choices[grade].card.due.getTime() - now) / 1000;
+  const seconds = (grade: Grade) =>
+    (capInterval(
+      choices[grade].card,
+      now,
+      preset.fields.maximumInterval?.value ?? 36500,
+    ).due.getTime() -
+      now) /
+    1000;
   return { 1: seconds(1), 2: seconds(2), 3: seconds(3), 4: seconds(4) };
 }
 
@@ -184,6 +204,20 @@ export function newPosition(card: Card, log: readonly LogEntry[], voided: Readon
       .filter((e) => e.cardId === card.id && e.kind === "reset" && !voided.has(e.id))
       .map((e) => e.at),
   );
+}
+// Stable pseudo-random positions keep a random new queue identical on both clients.
+function insertionPosition(
+  card: Card,
+  log: readonly LogEntry[],
+  voided: ReadonlySet<string>,
+  preset: Preset,
+) {
+  if (preset.fields.insertionOrder?.value !== "random") return newPosition(card, log, voided);
+  const resets = log.filter((e) => e.cardId === card.id && e.kind === "reset" && !voided.has(e.id));
+  if (resets.length) return 2 ** 32 + Math.max(...resets.map((e) => e.at));
+  let hash = 2166136261;
+  for (const char of card.id) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  return hash >>> 0;
 }
 /** Whether the card is buried at `now`: `buryCard` keeps it out of study until the next day. */
 export const isBuried = (card: Card, now: number) => (card.fields.buriedUntil?.value ?? 0) > now;
@@ -284,7 +318,7 @@ function studyCandidates(
     .map((card) => ({
       card,
       memory: replayCard(card.id, entries.get(card.id) ?? [], presetOf(card), now),
-      newPosition: newPosition(card, entries.get(card.id) ?? [], voided),
+      newPosition: insertionPosition(card, entries.get(card.id) ?? [], voided, presetOf(card)),
     }))
     .filter(({ memory }) =>
       memory.state === State.New

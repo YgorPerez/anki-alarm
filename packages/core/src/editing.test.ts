@@ -224,6 +224,11 @@ test("deck options forms read what the user types with Core's rules", () => {
     reviewsPerDay: 200,
     desiredRetention: 0.9,
     learningSteps: [1, 10],
+    relearningSteps: [10],
+    insertionOrder: "sequential",
+    leechThreshold: 8,
+    leechAction: "tagOnly",
+    maximumInterval: 36500,
     fsrsParameters: preset.fields.fsrsParameters.value,
   });
   expect(presetTexts(preset, "en").desiredRetention).toBe("0.9");
@@ -235,6 +240,12 @@ test("deck options forms read what the user types with Core's rules", () => {
     ["newPerDay", "1.5"],
     ["desiredRetention", "0,5"],
     ["learningSteps", "1 x"],
+    ["relearningSteps", "0"],
+    ["leechThreshold", "-1"],
+    ["leechAction", "invalid"],
+    ["insertionOrder", "invalid"],
+    ["maximumInterval", "0"],
+    ["maximumInterval", "36501"],
     ["fsrsParameters", "1, 2"],
     ["name", " "],
   ] as const) {

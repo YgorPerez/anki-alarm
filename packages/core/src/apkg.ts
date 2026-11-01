@@ -51,6 +51,11 @@ export interface AnkiPackage {
     reviewsPerDay: number;
     desiredRetention: number;
     learningSteps: number[];
+    relearningSteps?: number[];
+    insertionOrder?: "sequential" | "random";
+    leechThreshold?: number;
+    leechAction?: "suspend" | "tagOnly";
+    maximumInterval?: number;
     /** FSRS-6 weights; absent or empty means the defaults. */
     fsrsParameters?: number[];
   }[];
@@ -346,6 +351,12 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         reviewsPerDay: int(record(c.rev).perDay),
         desiredRetention: retention(c.desiredRetention, 0.9),
         learningSteps: steps(record(c.new).delays),
+        relearningSteps: record(c.lapse).delays == null ? [10] : steps(record(c.lapse).delays),
+        insertionOrder: record(c.new).order === 0 ? ("random" as const) : ("sequential" as const),
+        leechThreshold: record(c.lapse).leechFails == null ? 8 : int(record(c.lapse).leechFails),
+        leechAction:
+          record(c.lapse).leechAction === 0 ? ("suspend" as const) : ("tagOnly" as const),
+        maximumInterval: int(record(c.rev).maxIvl) || 36500,
         fsrsParameters: fsrs6(steps(c.fsrsParams6)),
       })),
   };
@@ -408,6 +419,11 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
         reviewsPerDay: c.number(10) ?? 0,
         desiredRetention: retention(c.float(37), 0.9),
         learningSteps: c.floats(1),
+        relearningSteps: c.floats(2),
+        insertionOrder: c.number(20) === 1 ? ("random" as const) : ("sequential" as const),
+        leechThreshold: c.number(22) ?? 0,
+        leechAction: c.number(21) === 1 ? ("tagOnly" as const) : ("suspend" as const),
+        maximumInterval: c.number(16) || 36500,
         fsrsParameters: fsrs6(c.floats(6)),
       };
     }),

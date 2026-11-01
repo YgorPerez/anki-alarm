@@ -121,7 +121,6 @@ const ROLLOVER = 4;
 /** SM-2's starting ease, for users who import with FSRS off. */
 const EASE = 2500;
 /** The relearning step ts-fsrs uses: the preset has no relearning steps of its own. */
-const RELEARNING_STEPS = [10];
 const seconds = (ms: number) => Math.floor(ms / 1000);
 const clockOf = (record: { fields: { [key: string]: Field<unknown> }; values?: Field<string>[] }) =>
   seconds(
@@ -454,7 +453,9 @@ function cardRow(
             EASE,
           ];
   const steps =
-    memory.state === CardState.Relearning ? RELEARNING_STEPS : preset.fields.learningSteps.value;
+    memory.state === CardState.Relearning
+      ? preset.fields.relearningSteps.value
+      : preset.fields.learningSteps.value;
   const left = learning ? Math.max(1, steps.length - memory.learning_steps) : 0;
   const weights = preset.fields.fsrsParameters.value;
   const data =
@@ -581,9 +582,19 @@ function presetJson(preset: Preset, anki: { id: number; appId?: string }) {
     mod: clockOf(preset),
     name: f.name.value,
     usn: -1,
-    new: { ...DCONF.new, delays: f.learningSteps.value, perDay: f.newPerDay.value },
-    rev: { ...DCONF.rev, perDay: f.reviewsPerDay.value },
-    lapse: { ...DCONF.lapse, delays: RELEARNING_STEPS },
+    new: {
+      ...DCONF.new,
+      delays: f.learningSteps.value,
+      order: f.insertionOrder.value === "random" ? 0 : 1,
+      perDay: f.newPerDay.value,
+    },
+    rev: { ...DCONF.rev, perDay: f.reviewsPerDay.value, maxIvl: f.maximumInterval.value },
+    lapse: {
+      ...DCONF.lapse,
+      delays: f.relearningSteps.value,
+      leechFails: f.leechThreshold.value,
+      leechAction: f.leechAction.value === "suspend" ? 0 : 1,
+    },
     fsrsParams6: f.fsrsParameters.value,
     desiredRetention: f.desiredRetention.value,
   };

@@ -13,7 +13,14 @@ import {
 import { cardId, importId, uuid7 } from "./ids.ts";
 import { isLanguageTag } from "./locale.ts";
 import { editedNoteType, editedValues, noteTypeProblems, type NoteTypeEdit } from "./note-types.ts";
-import { deckPreset, schedulingOptions, dueInDays, studyDayStart, type LogEntry } from "./study.ts";
+import {
+  cardMemory,
+  deckPreset,
+  schedulingOptions,
+  dueInDays,
+  studyDayStart,
+  type LogEntry,
+} from "./study.ts";
 
 /** FSRS-6's default weights, which every new preset starts from. */
 export const DEFAULT_FSRS_PARAMETERS: readonly number[] = default_w;
@@ -48,6 +55,11 @@ export type Preset = RecordFields<{
   desiredRetention: number;
   /** Minutes. */
   learningSteps: number[];
+  relearningSteps: number[];
+  insertionOrder: "sequential" | "random";
+  leechThreshold: number;
+  leechAction: "suspend" | "tagOnly";
+  maximumInterval: number;
   /** FSRS-6's 21 weights. */
   fsrsParameters: number[];
 }> &
@@ -61,6 +73,11 @@ const presetKeys = [
   "reviewsPerDay",
   "desiredRetention",
   "learningSteps",
+  "relearningSteps",
+  "insertionOrder",
+  "leechThreshold",
+  "leechAction",
+  "maximumInterval",
   "fsrsParameters",
 ] as const satisfies readonly (keyof PresetOptions)[];
 /** The bounds of a preset's options, for the rules below and the copy that states them. */
@@ -84,6 +101,11 @@ export const validOption: { [K in keyof PresetOptions]: (value: PresetOptions[K]
     Array.isArray(v) &&
     v.length <= PRESET_LIMITS.maxLearningSteps &&
     v.every((n) => Number.isFinite(n) && n > 0),
+  relearningSteps: (v) => validOption.learningSteps(v),
+  insertionOrder: (v) => v === "sequential" || v === "random",
+  leechThreshold: (v) => Number.isSafeInteger(v) && v >= 0 && v <= 9999,
+  leechAction: (v) => v === "suspend" || v === "tagOnly",
+  maximumInterval: (v) => Number.isSafeInteger(v) && v >= 1 && v <= 36500,
   fsrsParameters: (v) =>
     Array.isArray(v) && v.length === PRESET_LIMITS.fsrsParameters && v.every(Number.isFinite),
 };
@@ -208,11 +230,17 @@ export function parseCollection(stored: StoredCollection): CollectionState {
   const state = copy(stored) as unknown as CollectionState;
   for (const deck of state.decks)
     deck.fields.desiredRetention ??= { value: null, hlc: deck.fields.name.hlc };
-  for (const preset of state.presets)
+  for (const preset of state.presets) {
+    preset.fields.relearningSteps ??= { value: [10], hlc: preset.fields.name.hlc };
+    preset.fields.insertionOrder ??= { value: "sequential", hlc: preset.fields.name.hlc };
+    preset.fields.leechThreshold ??= { value: 8, hlc: preset.fields.name.hlc };
+    preset.fields.leechAction ??= { value: "tagOnly", hlc: preset.fields.name.hlc };
+    preset.fields.maximumInterval ??= { value: 36500, hlc: preset.fields.name.hlc };
     preset.fields.fsrsParameters ??= {
       value: [...DEFAULT_FSRS_PARAMETERS],
       hlc: preset.fields.name.hlc,
     };
+  }
   for (const card of state.cards) {
     card.fields.suspended ??= { value: false, hlc: card.fields.ordinal.hlc };
     card.fields.buriedUntil ??= { value: null, hlc: card.fields.ordinal.hlc };
@@ -350,11 +378,32 @@ export class Collection {
         reviewsPerDay: 200,
         desiredRetention: 0.9,
         learningSteps: [1, 10],
+        relearningSteps: [10],
+        insertionOrder: "sequential" as const,
+        leechThreshold: 8,
+        leechAction: "tagOnly" as const,
+        maximumInterval: 36500,
         fsrsParameters: [...DEFAULT_FSRS_PARAMETERS],
       });
       this.state.presets.push(preset);
     }
     return preset;
+  }
+  /** Applies the leech action after any answer, in the same transaction as its log entry. */
+  applyReviewEffects(log: readonly LogEntry[], entry: LogEntry) {
+    if (entry.kind !== "review") return;
+    const card = this.state.cards.find((c) => c.id === entry.cardId);
+    const deck = this.state.decks.find((d) => d.id === card?.fields.deckId.value);
+    const preset = deck && deckPreset(this.state, deck);
+    if (!card || !preset) throw new Error("Card missing");
+    const options = entry.options ?? schedulingOptions(preset);
+    const threshold = options.leechThreshold ?? 8;
+    const memory = cardMemory(this.state, [...log, entry], card.id, entry.at)!;
+    if (threshold === 0 || memory.lapses < threshold) return;
+    const note = this.state.notes.find((n) => n.id === card.fields.noteId.value)!;
+    if (!note.fields.tags.value.includes("leech"))
+      note.fields.tags = { value: [...note.fields.tags.value, "leech"], hlc: this.tick() };
+    if (options.leechAction === "suspend") this.setCardsSuspended([card.id], true);
   }
   createDeck(name: string): Deck {
     if (!name.trim()) throw new Error("Deck name is required");
@@ -654,7 +703,18 @@ export class Collection {
       steps.set(id, options.learningSteps);
       if (!this.state.presets.some((p) => p.id === presetId))
         this.state.presets.push({
-          ...this.record({ ...options, fsrsParameters: [...DEFAULT_FSRS_PARAMETERS] }, presetId),
+          ...this.record(
+            {
+              relearningSteps: [10],
+              insertionOrder: "sequential" as const,
+              leechThreshold: 8,
+              leechAction: "tagOnly" as const,
+              maximumInterval: 36500,
+              ...options,
+              fsrsParameters: [...DEFAULT_FSRS_PARAMETERS],
+            },
+            presetId,
+          ),
           anki: { id: ankiId },
         });
       const deck = this.state.decks.find((d) => d.id === id);
@@ -860,6 +920,11 @@ export class Collection {
         reviewsPerDay,
         desiredRetention,
         learningSteps,
+        relearningSteps: p.relearningSteps ?? [10],
+        insertionOrder: p.insertionOrder ?? ("sequential" as const),
+        leechThreshold: p.leechThreshold ?? 8,
+        leechAction: p.leechAction ?? ("tagOnly" as const),
+        maximumInterval: p.maximumInterval ?? 36500,
         fsrsParameters: [...weights],
       };
       if (merge("presets", this.state.presets, index.presets, { id, values, mtime, rest }))

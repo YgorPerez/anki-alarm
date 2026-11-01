@@ -156,12 +156,26 @@ test("deck options protect unsaved changes and leave freely after saving", async
     expect(await screen.findByLabelText("New cards per day")).not.toHaveProperty("value", "7");
     await user.clear(screen.getByLabelText("New cards per day"));
     await user.type(screen.getByLabelText("New cards per day"), "8");
+    await user.clear(screen.getByLabelText("Relearning steps (minutes)"));
+    await user.type(screen.getByLabelText("Relearning steps (minutes)"), "3 20");
+    await user.selectOptions(screen.getByLabelText("Insertion order"), "random");
+    await user.selectOptions(screen.getByLabelText("Leech action"), "suspend");
+    await user.click(screen.getByText("Advanced", { selector: "summary" }));
+    await user.clear(screen.getByLabelText("Maximum interval (days)"));
+    await user.type(screen.getByLabelText("Maximum interval (days)"), "90");
     await user.click(screen.getByRole("button", { name: "Save" }));
     await screen.findByText("Saved.");
     confirm.mockClear();
     await user.click(screen.getByRole("link", { name: "‹ Back" }));
     await screen.findByRole("button", { name: "Deck options" });
     expect(confirm).not.toHaveBeenCalled();
+    const saved = await webRequest("collection");
+    const deck = saved.decks.find((d) => d.id === id)!;
+    const preset = saved.presets.find((p) => p.id === deck.fields.presetId.value)!;
+    expect(preset.fields.relearningSteps.value).toEqual([3, 20]);
+    expect(preset.fields.insertionOrder.value).toBe("random");
+    expect(preset.fields.leechAction.value).toBe("suspend");
+    expect(preset.fields.maximumInterval.value).toBe(90);
   } finally {
     confirm.mockRestore();
   }

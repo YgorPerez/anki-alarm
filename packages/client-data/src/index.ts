@@ -270,27 +270,31 @@ const open = (driver: SQLiteConnection, media: MediaFiles) =>
       ) => LogEntry,
     ) =>
       local(
-        inCollection(
-          Effect.gen(function* () {
-            const state = yield* store.read;
-            const log = yield* readLog;
-            const at = driver.now();
-            const entry = yield* core(() => {
-              const built = build(state, log, { id: uuid7(at, driver.random()), at });
-              checkLogEntry(state, log, built);
-              return built;
-            });
-            yield* query(() =>
-              collectionDb.insert(reviewLog).values({ id: entry.id, body: entry }),
-            );
-            yield* query(() =>
-              collectionDb
-                .insert(outbox)
-                .values({ kind: "reviewLog", recordId: entry.id, body: entry }),
-            );
-            return entry;
-          }),
-        ),
+        Effect.gen(function* () {
+          const state = yield* store.read;
+          const log = yield* readLog;
+          const at = driver.now();
+          const entry = yield* core(() => {
+            const built = build(state, log, { id: uuid7(at, driver.random()), at });
+            checkLogEntry(state, log, built);
+            return built;
+          });
+          yield* store.run(
+            (c) => c.applyReviewEffects(log, entry),
+            () =>
+              Effect.gen(function* () {
+                yield* query(() =>
+                  collectionDb.insert(reviewLog).values({ id: entry.id, body: entry }),
+                );
+                yield* query(() =>
+                  collectionDb
+                    .insert(outbox)
+                    .values({ kind: "reviewLog", recordId: entry.id, body: entry }),
+                );
+              }),
+          );
+          return entry;
+        }),
       );
     /** Appends the entries not yet in the log, with their outbox records; inside a transaction. */
     const appendNew = (log: readonly LogEntry[]) =>

@@ -24,6 +24,8 @@ const OPTIONS: [OptionKey, EditingKey, EditingKey, EditingKey | null, "line" | "
     ["newPerDay", "newPerDay", "invalidLimit", null, "number"],
     ["reviewsPerDay", "reviewsPerDay", "invalidLimit", null, "number"],
     ["learningSteps", "learningSteps", "invalidSteps", "learningStepsHint", "line"],
+    ["relearningSteps", "relearningSteps", "invalidSteps", "relearningStepsHint", "line"],
+    ["leechThreshold", "leechThreshold", "invalidLimit", null, "number"],
     ["fsrsParameters", "fsrsParameters", "invalidParameters", "fsrsParametersHint", "box"],
   ];
 
@@ -115,6 +117,31 @@ export function DeckOptionsEditor({
         )}
       </form.Field>
       <div className="grid gap-5 sm:grid-cols-2">
+        {(["insertionOrder", "leechAction"] as const).map((key) => (
+          <form.Field key={key} name={key}>
+            {(field) => (
+              <Field label={t(key)}>
+                {(props) => (
+                  <select
+                    {...props}
+                    className="min-h-12 rounded-md border border-input bg-background px-3"
+                    value={field.state.value}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                  >
+                    {(key === "insertionOrder"
+                      ? (["sequential", "random"] as const)
+                      : (["suspend", "tagOnly"] as const)
+                    ).map((value) => (
+                      <option key={value} value={value}>
+                        {t(value)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+            )}
+          </form.Field>
+        ))}
         {OPTIONS.map(([key, label, error, hint, control]) => (
           <form.Field
             key={key}
@@ -145,7 +172,31 @@ export function DeckOptionsEditor({
                   <summary className="min-h-12 cursor-pointer text-label font-bold">
                     {t("advanced")}
                   </summary>
-                  {advanced && controlField}
+                  {advanced && (
+                    <>
+                      <form.Field
+                        name="maximumInterval"
+                        validators={{
+                          onChange: ({ value }) =>
+                            validPresetText.maximumInterval(value)
+                              ? undefined
+                              : t("invalidInterval"),
+                        }}
+                      >
+                        {(field) => (
+                          <TextField
+                            label={t("maximumInterval")}
+                            inputMode="numeric"
+                            value={field.state.value}
+                            onChange={field.handleChange}
+                            onBlur={field.handleBlur}
+                            errors={field.state.meta.errors}
+                          />
+                        )}
+                      </form.Field>
+                      {controlField}
+                    </>
+                  )}
                   <Button
                     variant="ghost"
                     size="lg"
