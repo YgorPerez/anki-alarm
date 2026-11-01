@@ -38,12 +38,20 @@ test("a new deck gets options and a note, which the browser finds and edits as y
   expect(screen.getByRole("button", { name: "Salvar" })).toHaveProperty("disabled", true);
   await user.clear(newPerDay);
   await user.type(newPerDay, "5");
+  expect(screen.getByLabelText("Domingo")).toHaveProperty("value", "normal");
+  await user.selectOptions(screen.getByLabelText("Domingo"), "Mínimo");
+  await user.selectOptions(screen.getByLabelText("Sábado"), "Reduzido");
+  await user.selectOptions(screen.getByLabelText("Cartões novos e revisões"), "Antes das revisões");
+  await user.selectOptions(screen.getByLabelText("Ordem das revisões"), "Atraso relativo");
   await user.click(screen.getByRole("button", { name: "Salvar" }));
   expect(await screen.findByText("Salvo.")).toBeDefined();
   // Leaving and coming back shows what was saved.
   await user.click(screen.getByRole("link", { name: "‹ Voltar" }));
   await user.click(await screen.findByRole("button", { name: "Opções do baralho" }));
   expect(await screen.findByLabelText("Cartões novos por dia")).toHaveProperty("value", "5");
+  expect(screen.getByLabelText("Domingo")).toHaveProperty("value", "minimum");
+  expect(screen.getByLabelText("Sábado")).toHaveProperty("value", "reduced");
+  expect(screen.getByLabelText("Sexta-feira")).toHaveProperty("value", "normal");
   for (const name of [
     "Enterrar irmãos novos",
     "Enterrar irmãos de revisão",
@@ -51,6 +59,11 @@ test("a new deck gets options and a note, which the browser finds and edits as y
   ]) {
     expect(screen.getByRole("checkbox", { name })).toHaveProperty("checked", true);
   }
+  expect(screen.getByLabelText("Cartões novos e revisões")).toHaveProperty("value", "before");
+  expect(screen.getByLabelText("Ordem das revisões")).toHaveProperty(
+    "value",
+    "relativeOverdueness",
+  );
 
   await user.click(screen.getByRole("link", { name: "‹ Voltar" }));
   await user.click(screen.getByRole("button", { name: "Adicionar nota" }));
@@ -171,12 +184,26 @@ test("deck options protect unsaved changes and leave freely after saving", async
     expect(await screen.findByLabelText("New cards per day")).not.toHaveProperty("value", "7");
     await user.clear(screen.getByLabelText("New cards per day"));
     await user.type(screen.getByLabelText("New cards per day"), "8");
+    await user.clear(screen.getByLabelText("Relearning steps (minutes)"));
+    await user.type(screen.getByLabelText("Relearning steps (minutes)"), "3 20");
+    await user.selectOptions(screen.getByLabelText("Insertion order"), "random");
+    await user.selectOptions(screen.getByLabelText("Leech action"), "suspend");
+    await user.click(screen.getByText("Advanced", { selector: "summary" }));
+    await user.clear(screen.getByLabelText("Maximum interval (days)"));
+    await user.type(screen.getByLabelText("Maximum interval (days)"), "90");
     await user.click(screen.getByRole("button", { name: "Save" }));
     await screen.findByText("Saved.");
     confirm.mockClear();
     await user.click(screen.getByRole("link", { name: "‹ Back" }));
     await screen.findByRole("button", { name: "Deck options" });
     expect(confirm).not.toHaveBeenCalled();
+    const saved = await webRequest("collection");
+    const deck = saved.decks.find((d) => d.id === id)!;
+    const preset = saved.presets.find((p) => p.id === deck.fields.presetId.value)!;
+    expect(preset.fields.relearningSteps.value).toEqual([3, 20]);
+    expect(preset.fields.insertionOrder.value).toBe("random");
+    expect(preset.fields.leechAction.value).toBe("suspend");
+    expect(preset.fields.maximumInterval.value).toBe(90);
   } finally {
     confirm.mockRestore();
   }
@@ -214,6 +241,37 @@ test("deck options manage presets and return deleted presets' decks to Default",
     expect(screen.getByRole("option", { name: "Intensive" })).toHaveProperty("selected", true),
   );
   confirm.mockRestore();
+});
+
+test("daily limit scopes and rules save with deck options and survive reopening", async () => {
+  const { user } = await renderRoute("/");
+  await user.click(await screen.findByRole("link", { name: "Novo baralho" }));
+  await user.type(await screen.findByLabelText("Nome do baralho"), "Limits");
+  await user.click(screen.getByRole("button", { name: "Criar baralho" }));
+  await user.click(await screen.findByRole("button", { name: "Opções do baralho" }));
+  const sharedLimit = screen.getByLabelText<HTMLInputElement>("Cartões novos por dia").value;
+  const ownLimit = sharedLimit === "3" ? "4" : "3";
+  await user.selectOptions(screen.getByLabelText("Limite de novos vale para"), "deck");
+  await user.clear(screen.getByLabelText("Cartões novos por dia"));
+  await user.type(screen.getByLabelText("Cartões novos por dia"), ownLimit);
+  await user.selectOptions(screen.getByLabelText("Limite de revisões vale para"), "today");
+  await user.click(screen.getByLabelText("Novos ignoram o limite de revisões"));
+  await user.click(screen.getByLabelText("Limites começam no baralho pai"));
+  await user.click(screen.getByRole("button", { name: "Salvar" }));
+  await screen.findByText("Salvo.");
+  await user.click(screen.getByRole("link", { name: "‹ Voltar" }));
+  await user.click(await screen.findByRole("button", { name: "Opções do baralho" }));
+  expect(screen.getByLabelText("Limite de novos vale para")).toHaveProperty("value", "deck");
+  expect(screen.getByLabelText("Limite de revisões vale para")).toHaveProperty("value", "today");
+  expect(screen.getByLabelText("Cartões novos por dia")).toHaveProperty("value", ownLimit);
+  expect(screen.getByLabelText("Novos ignoram o limite de revisões")).toHaveProperty(
+    "checked",
+    true,
+  );
+  expect(screen.getByLabelText("Limites começam no baralho pai")).toHaveProperty("checked", true);
+  // Going back to the preset shows the preset's number, not this deck's.
+  await user.selectOptions(screen.getByLabelText("Limite de novos vale para"), "preset");
+  expect(screen.getByLabelText("Cartões novos por dia")).toHaveProperty("value", sharedLimit);
 });
 
 test("switching presets asks before discarding edited options", async () => {

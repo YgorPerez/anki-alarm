@@ -1,4 +1,5 @@
 import type { Collection, PresetOptions } from "./collection.ts";
+import type { LimitScope } from "./daily-limits.ts";
 import type { NoteTypeEdit } from "./note-types.ts";
 
 /**
@@ -13,7 +14,13 @@ export type CollectionCommand =
   | { kind: "duplicatePreset"; id: string; name: string; deckId: string }
   | { kind: "setDeckPreset"; deckId: string; presetId: string }
   | { kind: "deletePreset"; id: string }
-  | { kind: "updatePreset"; id: string; patch: Partial<PresetOptions> }
+  /** With `limits`, the patch's two daily limits are set at those scopes for that deck. */
+  | {
+      kind: "updatePreset";
+      id: string;
+      patch: Partial<PresetOptions>;
+      limits?: { deckId: string; new: LimitScope; review: LimitScope };
+    }
   /** An empty `noteTypeId` is Basic, made on first use. */
   | { kind: "addNote"; deckId: string; noteTypeId: string; values: string[] }
   /** With `deckId`, the note's cards move there too. */
@@ -64,9 +71,20 @@ export function runCommand(collection: Collection, command: CollectionCommand): 
     case "deletePreset":
       collection.deletePreset(command.id);
       break;
-    case "updatePreset":
-      collection.updatePreset(command.id, command.patch);
+    case "updatePreset": {
+      const { limits } = command;
+      if (!limits) {
+        collection.updatePreset(command.id, command.patch);
+        break;
+      }
+      const { newPerDay, reviewsPerDay, ...rest } = command.patch;
+      collection.updatePreset(command.id, rest);
+      if (newPerDay !== undefined)
+        collection.setDeckLimit(limits.deckId, "new", limits.new, newPerDay);
+      if (reviewsPerDay !== undefined)
+        collection.setDeckLimit(limits.deckId, "review", limits.review, reviewsPerDay);
       break;
+    }
     case "editNote":
       collection.editNote(command.id, command.values);
       if (command.deckId !== undefined) collection.moveNote(command.id, command.deckId);

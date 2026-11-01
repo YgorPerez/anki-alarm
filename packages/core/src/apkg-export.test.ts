@@ -13,6 +13,7 @@ import {
   Collection,
   readApkg,
   replayCard,
+  studyDayStart,
   uuid7,
   writeApkg,
   CardState,
@@ -338,6 +339,39 @@ test("the package is Legacy 2 with Anki's scheduling columns, FSRS state and rev
   expect(graded.every((r) => Number(r.type) <= 2 && r.time === 4200)).toBe(true);
 });
 
+test("the five display order options travel as Anki's numbers and come back", async () => {
+  const { collection, log } = await studied();
+  const before = collection.snapshot();
+  const presetId = before.decks.find((d) => d.id === deckId(before, "Inglês"))!.fields.presetId;
+  collection.updatePreset(presetId.value, {
+    newGatherPriority: "deckThenRandomNotes",
+    newSortOrder: "randomNoteThenTemplate",
+    newMix: "before",
+    interdayLearningMix: "after",
+    reviewOrder: "relativeOverdueness",
+  });
+  const state = collection.snapshot();
+  const { zip, package: source } = await exported(state, log, "Inglês");
+  const [col] = rows(zip, "SELECT dconf FROM col");
+  const dconf = JSON.parse(String(col!.dconf));
+  expect(dconf[Object.keys(dconf)[0]!]).toMatchObject({
+    newGatherPriority: 5,
+    newSortOrder: 3,
+    newMix: 2,
+    interdayLearningMix: 1,
+    reviewOrder: 12,
+  });
+  const other = new Collection(environment("phone-b"));
+  other.importAnki(source);
+  expect(other.snapshot().presets[0]!.fields).toMatchObject({
+    newGatherPriority: { value: "deckThenRandomNotes" },
+    newSortOrder: { value: "randomNoteThenTemplate" },
+    newMix: { value: "before" },
+    interdayLearningMix: { value: "after" },
+    reviewOrder: { value: "relativeOverdueness" },
+  });
+});
+
 test("media are asked for by bare file name only", async () => {
   const collection = new Collection(environment());
   const deck = collection.createDeck("Paths");
@@ -413,6 +447,56 @@ test("all seven flags and the marked tag survive an apkg round-trip", async () =
   expect(restored.snapshot().notes.every((n) => n.fields.tags.value.includes("marked"))).toBe(true);
 });
 
+test("easy days survive an export and import, in Anki's percentages", async () => {
+  const collection = new Collection(environment());
+  const deck = collection.createDeck("Trip");
+  collection.addBasicNote(deck.id, "one", "um");
+  const presetId = collection.snapshot().presets[0]!.id;
+  const week = ["normal", "normal", "normal", "normal", "normal", "reduced", "minimum"] as const;
+  collection.updatePreset(presetId, { easyDays: [...week] });
+  const state = collection.snapshot();
+  const { zip, package: source } = await exported(state, [], "Trip");
+  const [col] = rows(zip, "SELECT dconf FROM col");
+  const dconf = JSON.parse(String(col!.dconf));
+  expect(dconf[Object.keys(dconf)[0]!].easyDaysPercentages).toEqual([1, 1, 1, 1, 1, 0.5, 0]);
+  const fresh = new Collection(environment("phone-b"));
+  fresh.importAnki(source);
+  expect(fresh.snapshot().presets[0]!.fields.easyDays.value).toEqual(week);
+});
+
+test("deck limits, today overrides and limit rules survive an apkg round trip", async () => {
+  const c = new Collection(environment());
+  const deck = c.createDeck("Limits");
+  c.addBasicNote(deck.id, "front", "back");
+  c.setDeckLimit(deck.id, "new", "deck", 5);
+  c.setDeckLimit(deck.id, "new", "today", 2);
+  c.setDeckLimit(deck.id, "review", "deck", 50);
+  c.updatePreset(deck.fields.presetId.value, {
+    newIgnoreReviewLimit: true,
+    applyAllParentLimits: true,
+  });
+  const today = studyDayStart(NOW);
+  const { package: source, zip } = await exported(c.snapshot(), [], "Limits");
+  // Anki's own config keys, so Anki reads the rules too.
+  const [col] = rows(zip, "SELECT conf FROM col");
+  expect(JSON.parse(String(col!.conf))).toMatchObject({
+    newCardsIgnoreReviewLimit: true,
+    applyAllParentLimits: true,
+  });
+  const restored = new Collection(environment("other"));
+  restored.importAnki(source);
+  const result = restored.snapshot();
+  const fields = result.decks.find((d) => d.id === deck.id)!.fields;
+  expect(fields.newLimit?.value).toBe(5);
+  expect(fields.reviewLimit?.value).toBe(50);
+  expect(fields.newLimitToday?.value).toEqual({ limit: 2, day: today });
+  expect(fields.reviewLimitToday?.value).toBeNull();
+  expect(result.presets.find((p) => p.id === fields.presetId.value)?.fields).toMatchObject({
+    newIgnoreReviewLimit: { value: true },
+    applyAllParentLimits: { value: true },
+  });
+});
+
 test("an exported custom preset stays deletable and new decks use Default after import", async () => {
   const collection = new Collection(environment());
   const deck = collection.createDeck("Custom preset");
@@ -473,4 +557,45 @@ test("apkg round trip carries audio and timer options", async () => {
   expect(preset?.fields.skipQuestionWhenReplayingAnswer.value).toBe(true);
   expect(preset?.fields.showTimer.value).toBe(true);
   expect(preset?.fields.stopTimerOnAnswer.value).toBe(true);
+});
+
+test("apkg round trip preserves new card, lapse and maximum interval options", async () => {
+  const { collection, log, english } = await studied();
+  const preset = collection.snapshot().presets.find((p) => p.id === english.fields.presetId.value)!;
+  collection.updatePreset(preset.id, {
+    relearningSteps: [2, 20],
+    insertionOrder: "random",
+    leechThreshold: 4,
+    leechAction: "suspend",
+    maximumInterval: 90,
+  });
+  const result = await exported(collection.snapshot(), log, "Inglês");
+  expect(result.package.presets.find((p) => p.name === preset.fields.name.value)).toMatchObject({
+    relearningSteps: [2, 20],
+    insertionOrder: "random",
+    leechThreshold: 4,
+    leechAction: "suspend",
+    maximumInterval: 90,
+  });
+});
+
+test("apkg round trip carries auto advance options", async () => {
+  const { collection, log, english } = await studied();
+  collection.updatePreset(english.fields.presetId.value, {
+    secondsToShowQuestion: 2.5,
+    secondsToShowAnswer: 4,
+    waitForAudio: false,
+    questionAction: "showReminder",
+    answerAction: "good",
+  });
+  const { package: source } = await exported(collection.snapshot(), log, "Inglês");
+  const copy = new Collection(environment("copy"));
+  copy.importAnki(source);
+  const preset = copy.snapshot().presets.find((p) => p.fields.secondsToShowQuestion.value === 2.5);
+  expect(preset?.fields).toMatchObject({
+    secondsToShowAnswer: { value: 4 },
+    waitForAudio: { value: false },
+    questionAction: { value: "showReminder" },
+    answerAction: { value: "good" },
+  });
 });

@@ -1,6 +1,16 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh arrays are sorted. */
 import { default_w } from "ts-fsrs";
 import type { AnkiPackage } from "./apkg.ts";
+import type { LimitKind, LimitScope } from "./daily-limits.ts";
+import {
+  ANSWER_ACTIONS,
+  AUTO_ADVANCE_DEFAULTS,
+  QUESTION_ACTIONS,
+  autoAdvanceOptions,
+  validAutoAdvanceSeconds,
+  type AnswerAction,
+  type QuestionAction,
+} from "./auto-advance.ts";
 import {
   linkedAnkiDroidDecks,
   presetFromOptions,
@@ -10,8 +20,15 @@ import {
   type AnkiDroidCard,
   type AnkiDroidSource,
 } from "./ankidroid.ts";
+import {
+  DEFAULT_DISPLAY_ORDER,
+  DISPLAY_ORDER_KEYS,
+  validDisplayOrder,
+  type DisplayOrder,
+} from "./display-order.ts";
 import { cardId, importId, uuid7 } from "./ids.ts";
 import { isLanguageTag } from "./locale.ts";
+import { EASY_DAYS, NORMAL_WEEK, type EasyDay } from "./easy-days.ts";
 import { editedNoteType, editedValues, noteTypeProblems, type NoteTypeEdit } from "./note-types.ts";
 import {
   deckPreset,
@@ -47,8 +64,15 @@ export type Deck = RecordFields<{
   linkedBy?: string;
   /** The BCP 47 tag read aloud speaks this deck's cards in. Absent: its parent's, or pt-BR. */
   language?: string;
+  /** This deck's own daily limits; null or absent follows the preset. */
+  newLimit?: number | null;
+  reviewLimit?: number | null;
+  /** Today-only limits; `day` is the start of the study day they were set on. */
+  newLimitToday?: { limit: number; day: number } | null;
+  reviewLimitToday?: { limit: number; day: number } | null;
 }> &
   AnkiIdentity;
+const LIMIT_RULE_DEFAULTS = { newIgnoreReviewLimit: false, applyAllParentLimits: false };
 const AUDIO_TIMER_DEFAULTS = {
   dontPlayAutomatically: false,
   skipQuestionWhenReplayingAnswer: false,
@@ -56,26 +80,43 @@ const AUDIO_TIMER_DEFAULTS = {
   showTimer: false,
   stopTimerOnAnswer: false,
 };
-export type Preset = RecordFields<{
-  name: string;
-  buryNew: boolean;
-  buryReviews: boolean;
-  buryLearning: boolean;
-  newPerDay: number;
-  reviewsPerDay: number;
-  desiredRetention: number;
-  /** Minutes. */
-  learningSteps: number[];
-  /** Absent on legacy app presets, which were all defaults. */
-  isDefault?: boolean;
-  /** FSRS-6's 21 weights. */
-  fsrsParameters: number[];
-  dontPlayAutomatically: boolean;
-  skipQuestionWhenReplayingAnswer: boolean;
-  maximumAnswerSeconds: number;
-  showTimer: boolean;
-  stopTimerOnAnswer: boolean;
-}> &
+export type Preset = RecordFields<
+  {
+    name: string;
+    buryNew: boolean;
+    buryReviews: boolean;
+    buryLearning: boolean;
+    newPerDay: number;
+    reviewsPerDay: number;
+    newIgnoreReviewLimit: boolean;
+    /** Limits start from the top parent deck, and each subdeck also keeps to its own. */
+    applyAllParentLimits: boolean;
+    desiredRetention: number;
+    /** Minutes. */
+    learningSteps: number[];
+    relearningSteps: number[];
+    insertionOrder: "sequential" | "random";
+    leechThreshold: number;
+    leechAction: "suspend" | "tagOnly";
+    maximumInterval: number;
+    /** Absent on legacy app presets, which were all defaults. */
+    isDefault?: boolean;
+    /** FSRS-6's 21 weights. */
+    fsrsParameters: number[];
+    /** Each weekday, Monday first. */
+    easyDays: EasyDay[];
+    dontPlayAutomatically: boolean;
+    skipQuestionWhenReplayingAnswer: boolean;
+    maximumAnswerSeconds: number;
+    showTimer: boolean;
+    stopTimerOnAnswer: boolean;
+    secondsToShowQuestion: number;
+    secondsToShowAnswer: number;
+    waitForAudio: boolean;
+    questionAction: QuestionAction;
+    answerAction: AnswerAction;
+  } & DisplayOrder
+> &
   AnkiIdentity;
 /** Legacy app presets and explicitly marked defaults cannot be deleted. */
 export const isDefaultPreset = (preset: Preset): boolean =>
@@ -85,6 +126,11 @@ export type PresetOptions = {
   [K in Exclude<keyof Preset["fields"], "isDefault">]: Preset["fields"][K]["value"];
 };
 const presetKeys = [
+  "secondsToShowQuestion",
+  "secondsToShowAnswer",
+  "waitForAudio",
+  "questionAction",
+  "answerAction",
   "dontPlayAutomatically",
   "skipQuestionWhenReplayingAnswer",
   "maximumAnswerSeconds",
@@ -94,12 +140,21 @@ const presetKeys = [
   "name",
   "newPerDay",
   "reviewsPerDay",
+  "newIgnoreReviewLimit",
+  "applyAllParentLimits",
   "desiredRetention",
   "learningSteps",
+  "relearningSteps",
+  "insertionOrder",
+  "leechThreshold",
+  "leechAction",
+  "maximumInterval",
   "fsrsParameters",
+  "easyDays",
   "buryNew",
   "buryReviews",
   "buryLearning",
+  ...DISPLAY_ORDER_KEYS,
 ] as const satisfies readonly (keyof PresetOptions)[];
 /** The bounds of a preset's options, for the rules below and the copy that states them. */
 export const PRESET_LIMITS = {
@@ -121,17 +176,35 @@ export const validOption: { [K in keyof PresetOptions]: (value: PresetOptions[K]
   maximumAnswerSeconds: (v) => Number.isSafeInteger(v) && v >= 0 && v <= 9999,
   showTimer: (v) => typeof v === "boolean",
   stopTimerOnAnswer: (v) => typeof v === "boolean",
+  secondsToShowQuestion: validAutoAdvanceSeconds,
+  secondsToShowAnswer: validAutoAdvanceSeconds,
+  waitForAudio: (v) => typeof v === "boolean",
+  questionAction: (v) => QUESTION_ACTIONS.includes(v),
+  answerAction: (v) => ANSWER_ACTIONS.includes(v),
   name: (v) => typeof v === "string" && Boolean(v.trim()),
   newPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
   reviewsPerDay: (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRESET_LIMITS.maxPerDay,
+  newIgnoreReviewLimit: (v) => typeof v === "boolean",
+  applyAllParentLimits: (v) => typeof v === "boolean",
   desiredRetention: (v) =>
     Number.isFinite(v) && v >= PRESET_LIMITS.minRetention && v <= PRESET_LIMITS.maxRetention,
   learningSteps: (v) =>
     Array.isArray(v) &&
     v.length <= PRESET_LIMITS.maxLearningSteps &&
     v.every((n) => Number.isFinite(n) && n > 0),
+  relearningSteps: (v) => validOption.learningSteps(v),
+  insertionOrder: (v) => v === "sequential" || v === "random",
+  leechThreshold: (v) => Number.isSafeInteger(v) && v >= 0 && v <= 9999,
+  leechAction: (v) => v === "suspend" || v === "tagOnly",
+  maximumInterval: (v) => Number.isSafeInteger(v) && v >= 1 && v <= 36500,
   fsrsParameters: (v) =>
     Array.isArray(v) && v.length === PRESET_LIMITS.fsrsParameters && v.every(Number.isFinite),
+  easyDays: (v) => Array.isArray(v) && v.length === 7 && v.every((d) => EASY_DAYS.includes(d)),
+  newGatherPriority: (v) => validDisplayOrder("newGatherPriority", v),
+  newSortOrder: (v) => validDisplayOrder("newSortOrder", v),
+  newMix: (v) => validDisplayOrder("newMix", v),
+  interdayLearningMix: (v) => validDisplayOrder("interdayLearningMix", v),
+  reviewOrder: (v) => validDisplayOrder("reviewOrder", v),
 };
 export interface Template {
   name: string;
@@ -245,8 +318,8 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
  * Reads stored records in the current shape, upgrading what earlier versions saved with the
  * records' own clocks, so the upgrade itself is not an edit: Basic notes kept `front` and `back` as
  * properties and a `deckId` the cards now own; note types had one front and back template; presets
- * had no `fsrsParameters`, decks no `desiredRetention`, notes no `tags`, cards no `suspended` or
- * `buriedUntil`. Current records pass through unchanged.
+ * had no `fsrsParameters`, `easyDays` or display order, decks no `desiredRetention`, notes no
+ * `tags`, cards no `suspended` or `buriedUntil`. Current records pass through unchanged.
  */
 export function parseCollection(stored: StoredCollection): CollectionState {
   // Each record is brought to its current shape below.
@@ -257,13 +330,24 @@ export function parseCollection(stored: StoredCollection): CollectionState {
   for (const preset of state.presets) {
     for (const key of ["buryNew", "buryReviews", "buryLearning"] as const)
       preset.fields[key] ??= { value: false, hlc: preset.fields.name.hlc };
+    preset.fields.relearningSteps ??= { value: [10], hlc: preset.fields.name.hlc };
+    preset.fields.insertionOrder ??= { value: "sequential", hlc: preset.fields.name.hlc };
+    preset.fields.leechThreshold ??= { value: 8, hlc: preset.fields.name.hlc };
+    preset.fields.leechAction ??= { value: "tagOnly", hlc: preset.fields.name.hlc };
+    preset.fields.maximumInterval ??= { value: 36500, hlc: preset.fields.name.hlc };
     preset.fields.fsrsParameters ??= {
       value: [...DEFAULT_FSRS_PARAMETERS],
       hlc: preset.fields.name.hlc,
     };
+    preset.fields.easyDays ??= { value: [...NORMAL_WEEK], hlc: preset.fields.name.hlc };
   }
   for (const preset of state.presets) {
-    for (const [key, value] of Object.entries(AUDIO_TIMER_DEFAULTS)) {
+    for (const [key, value] of Object.entries({
+      ...AUDIO_TIMER_DEFAULTS,
+      ...LIMIT_RULE_DEFAULTS,
+      ...DEFAULT_DISPLAY_ORDER,
+      ...AUTO_ADVANCE_DEFAULTS,
+    })) {
       if (!(key in preset.fields))
         Object.assign(preset.fields, { [key]: { value, hlc: preset.fields.name.hlc } });
     }
@@ -415,6 +499,8 @@ export class Collection {
       preset = this.record({
         isDefault: true,
         ...AUDIO_TIMER_DEFAULTS,
+        ...LIMIT_RULE_DEFAULTS,
+        ...AUTO_ADVANCE_DEFAULTS,
         name: "Default",
         buryNew: false,
         buryReviews: false,
@@ -423,16 +509,47 @@ export class Collection {
         reviewsPerDay: 200,
         desiredRetention: 0.9,
         learningSteps: [1, 10],
+        relearningSteps: [10],
+        insertionOrder: "sequential" as const,
+        leechThreshold: 8,
+        leechAction: "tagOnly" as const,
+        maximumInterval: 36500,
         fsrsParameters: [...DEFAULT_FSRS_PARAMETERS],
+        easyDays: [...NORMAL_WEEK],
+        ...DEFAULT_DISPLAY_ORDER,
       });
       this.state.presets.push(preset);
     }
     return preset;
   }
+  /** Applies the leech action after any answer, in the same transaction as its log entry. */
+  applyReviewEffects(log: readonly LogEntry[], entry: LogEntry) {
+    if (entry.kind !== "review") return;
+    const card = this.state.cards.find((c) => c.id === entry.cardId);
+    const deck = this.state.decks.find((d) => d.id === card?.fields.deckId.value);
+    const preset = deck && deckPreset(this.state, deck);
+    if (!card || !preset) throw new Error("Card missing");
+    const options = entry.options ?? schedulingOptions(preset, entry.at);
+    const threshold = options.leechThreshold ?? 8;
+    const memory = cardMemory(this.state, [...log, entry], card.id, entry.at)!;
+    if (threshold === 0 || memory.lapses < threshold) return;
+    const note = this.state.notes.find((n) => n.id === card.fields.noteId.value)!;
+    if (!note.fields.tags.value.includes("leech"))
+      note.fields.tags = { value: [...note.fields.tags.value, "leech"], hlc: this.tick() };
+    if (options.leechAction === "suspend") this.setCardsSuspended([card.id], true);
+  }
   createDeck(name: string): Deck {
     if (!name.trim()) throw new Error("Deck name is required");
     const preset = this.defaultPreset();
-    const deck = this.record({ name: name.trim(), presetId: preset.id, desiredRetention: null });
+    const deck = this.record({
+      name: name.trim(),
+      presetId: preset.id,
+      desiredRetention: null,
+      newLimit: null,
+      reviewLimit: null,
+      newLimitToday: null,
+      reviewLimitToday: null,
+    });
     this.state.decks.push(deck);
     return copy(deck);
   }
@@ -624,11 +741,23 @@ export class Collection {
       name: name.trim(),
       newPerDay: factory ? 20 : source.fields.newPerDay.value,
       reviewsPerDay: factory ? 200 : source.fields.reviewsPerDay.value,
+      newIgnoreReviewLimit: factory
+        ? LIMIT_RULE_DEFAULTS.newIgnoreReviewLimit
+        : source.fields.newIgnoreReviewLimit.value,
+      applyAllParentLimits: factory
+        ? LIMIT_RULE_DEFAULTS.applyAllParentLimits
+        : source.fields.applyAllParentLimits.value,
       desiredRetention: factory ? 0.9 : source.fields.desiredRetention.value,
       learningSteps: factory ? [1, 10] : copy(source.fields.learningSteps.value),
+      relearningSteps: factory ? [10] : copy(source.fields.relearningSteps.value),
+      insertionOrder: factory ? ("sequential" as const) : source.fields.insertionOrder.value,
+      leechThreshold: factory ? 8 : source.fields.leechThreshold.value,
+      leechAction: factory ? ("tagOnly" as const) : source.fields.leechAction.value,
+      maximumInterval: factory ? 36500 : source.fields.maximumInterval.value,
       fsrsParameters: factory
         ? [...DEFAULT_FSRS_PARAMETERS]
         : copy(source.fields.fsrsParameters.value),
+      easyDays: factory ? [...NORMAL_WEEK] : copy(source.fields.easyDays.value),
       buryNew: factory ? false : source.fields.buryNew.value,
       buryReviews: factory ? false : source.fields.buryReviews.value,
       buryLearning: factory ? false : source.fields.buryLearning.value,
@@ -645,6 +774,16 @@ export class Collection {
       stopTimerOnAnswer: factory
         ? AUDIO_TIMER_DEFAULTS.stopTimerOnAnswer
         : source.fields.stopTimerOnAnswer.value,
+      newGatherPriority: factory
+        ? DEFAULT_DISPLAY_ORDER.newGatherPriority
+        : source.fields.newGatherPriority.value,
+      newSortOrder: factory ? DEFAULT_DISPLAY_ORDER.newSortOrder : source.fields.newSortOrder.value,
+      newMix: factory ? DEFAULT_DISPLAY_ORDER.newMix : source.fields.newMix.value,
+      interdayLearningMix: factory
+        ? DEFAULT_DISPLAY_ORDER.interdayLearningMix
+        : source.fields.interdayLearningMix.value,
+      reviewOrder: factory ? DEFAULT_DISPLAY_ORDER.reviewOrder : source.fields.reviewOrder.value,
+      ...(factory ? AUTO_ADVANCE_DEFAULTS : autoAdvanceOptions(source)),
       isDefault: false,
     });
     this.state.presets.push(preset);
@@ -656,6 +795,28 @@ export class Collection {
       throw new Error("Invalid preset");
     if (deck.fields.presetId.value !== presetId)
       deck.fields.presetId = { value: presetId, hlc: this.tick() };
+  }
+  /**
+   * Sets a deck's daily limit at a scope. This deck replaces any today override; the preset writes
+   * the shared limit and drops both of this deck's overrides.
+   */
+  setDeckLimit(deckId: string, kind: LimitKind, scope: LimitScope, limit: number) {
+    const deck = this.state.decks.find((d) => d.id === deckId);
+    if (!deck || !validOption.newPerDay(limit)) throw new Error("Invalid daily limit");
+    const stamp = (key: `${LimitKind}Limit` | `${LimitKind}LimitToday`, value: unknown) => {
+      if (!same(deck.fields[key]?.value ?? null, value))
+        Object.assign(deck.fields, { [key]: { value, hlc: this.tick() } });
+    };
+    if (scope === "today") {
+      stamp(`${kind}LimitToday`, { limit, day: studyDayStart(this.env.now()) });
+      return;
+    }
+    stamp(`${kind}LimitToday`, null);
+    stamp(`${kind}Limit`, scope === "deck" ? limit : null);
+    if (scope === "preset")
+      this.updatePreset(deck.fields.presetId.value, {
+        [kind === "new" ? "newPerDay" : "reviewsPerDay"]: limit,
+      });
   }
   deletePreset(id: string) {
     const preset = this.state.presets.find((p) => p.id === id);
@@ -827,7 +988,7 @@ export class Collection {
       steps.set(id, options.learningSteps);
       if (!this.state.presets.some((p) => p.id === presetId))
         this.state.presets.push({
-          ...this.record({ ...AUDIO_TIMER_DEFAULTS, ...options }, presetId),
+          ...this.record(options, presetId),
           anki: { id: ankiId },
         });
       const deck = this.state.decks.find((d) => d.id === id);
@@ -1035,16 +1196,31 @@ export class Collection {
         maximumAnswerSeconds: p.maximumAnswerSeconds ?? AUDIO_TIMER_DEFAULTS.maximumAnswerSeconds,
         showTimer: p.showTimer ?? AUDIO_TIMER_DEFAULTS.showTimer,
         stopTimerOnAnswer: p.stopTimerOnAnswer ?? AUDIO_TIMER_DEFAULTS.stopTimerOnAnswer,
+        secondsToShowQuestion:
+          p.secondsToShowQuestion ?? AUTO_ADVANCE_DEFAULTS.secondsToShowQuestion,
+        secondsToShowAnswer: p.secondsToShowAnswer ?? AUTO_ADVANCE_DEFAULTS.secondsToShowAnswer,
+        waitForAudio: p.waitForAudio ?? AUTO_ADVANCE_DEFAULTS.waitForAudio,
+        questionAction: p.questionAction ?? AUTO_ADVANCE_DEFAULTS.questionAction,
+        answerAction: p.answerAction ?? AUTO_ADVANCE_DEFAULTS.answerAction,
         name,
         newPerDay,
         reviewsPerDay,
+        newIgnoreReviewLimit: p.newIgnoreReviewLimit ?? LIMIT_RULE_DEFAULTS.newIgnoreReviewLimit,
+        applyAllParentLimits: p.applyAllParentLimits ?? LIMIT_RULE_DEFAULTS.applyAllParentLimits,
         desiredRetention,
         learningSteps,
         buryNew: p.buryNew ?? false,
         buryReviews: p.buryReviews ?? false,
         buryLearning: p.buryLearning ?? false,
+        relearningSteps: p.relearningSteps ?? [10],
+        insertionOrder: p.insertionOrder ?? ("sequential" as const),
+        leechThreshold: p.leechThreshold ?? 8,
+        leechAction: p.leechAction ?? ("tagOnly" as const),
+        maximumInterval: p.maximumInterval ?? 36500,
         fsrsParameters: [...weights],
+        easyDays: p.easyDays ?? [...NORMAL_WEEK],
         ...(p.appId && p.isDefault !== undefined ? { isDefault: p.isDefault } : {}),
+        ...(p.displayOrder ?? DEFAULT_DISPLAY_ORDER),
       };
       if (merge("presets", this.state.presets, index.presets, { id, values, mtime, rest }))
         presets.set(p.id, id);
@@ -1054,7 +1230,15 @@ export class Collection {
       if (!usedDecks.has(d.id)) continue;
       const { id, rest } = identity(d.appId, importId("deck", d.id, d.name), { id: d.id });
       const presetId = presets.get(d.presetId) ?? this.defaultPreset().id;
-      const values = { name: d.name, presetId, desiredRetention: d.desiredRetention };
+      const values = {
+        name: d.name,
+        presetId,
+        desiredRetention: d.desiredRetention,
+        newLimit: d.newLimit ?? null,
+        reviewLimit: d.reviewLimit ?? null,
+        newLimitToday: d.newLimitToday ?? null,
+        reviewLimitToday: d.reviewLimitToday ?? null,
+      };
       if (merge("decks", this.state.decks, index.decks, { id, values, mtime: d.mtime, rest }))
         decks.set(d.id, id);
     }
@@ -1146,7 +1330,7 @@ export class Collection {
           grade: r.grade,
           durationMs: r.durationMs,
           origin: "import",
-          options: schedulingOptions(preset),
+          options: schedulingOptions(preset, r.at),
         });
       } else if (r.kind === "reset") log.push({ ...base, kind: "reset" });
       else log.push({ ...base, kind: "setDueDate", due: dueAfter(r.at, r.interval) });

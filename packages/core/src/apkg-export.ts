@@ -1,6 +1,9 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh copies are sorted. */
 /* oxlint-disable eslint/no-await-in-loop -- Statements run in order, one media file at a time. */
 import { APP_ID_KEY } from "./apkg.ts";
+import { ankiAutoAdvance, autoAdvanceOptions } from "./auto-advance.ts";
+import { displayOrderToAnki } from "./display-order.ts";
+import { easyDaysToAnki } from "./easy-days.ts";
 import { mediaReferences, safeMediaName } from "./media.ts";
 import type { Card, CollectionState, Deck, Field, NoteType, Preset } from "./collection.ts";
 import { importId, sha1, type ImportKind } from "./ids.ts";
@@ -120,8 +123,6 @@ type Value = string | number;
 const ROLLOVER = 4;
 /** SM-2's starting ease, for users who import with FSRS off. */
 const EASE = 2500;
-/** The relearning step ts-fsrs uses: the preset has no relearning steps of its own. */
-const RELEARNING_STEPS = [10];
 const seconds = (ms: number) => Math.floor(ms / 1000);
 const clockOf = (record: { fields: { [key: string]: Field<unknown> }; values?: Field<string>[] }) =>
   seconds(
@@ -344,7 +345,7 @@ function collectionRows({ collection, log, deckId, now }: ApkgExportInput) {
     decks.map((deck) => {
       const anki = deckAnki.get(deck.id)!;
       const presetId = presetAnki.get(deck.fields.presetId.value)!.id;
-      return [String(anki.id), deckEntry(deck, anki, presetId)];
+      return [String(anki.id), deckEntry(deck, anki, presetId, dayNumber)];
     }),
   );
   const dconf = Object.fromEntries(
@@ -360,8 +361,12 @@ function collectionRows({ collection, log, deckId, now }: ApkgExportInput) {
     for (const m of mediaReferences(type.fields.templates.value.flatMap((t) => [t.front, t.back])))
       media.add(m);
   const first = deckAnki.get(root.id)!.id;
+  // Anki keeps these rules for the whole collection, so the exported deck's preset speaks for it.
+  const rules = presets.find((p) => p.id === root.fields.presetId.value)?.fields;
   const conf = {
     ...CONF,
+    newCardsIgnoreReviewLimit: rules?.newIgnoreReviewLimit.value ?? false,
+    applyAllParentLimits: rules?.applyAllParentLimits.value ?? false,
     curDeck: first,
     activeDecks: [first],
     curModel: typeAnki.get(types[0]?.id ?? "")?.id ?? null,
@@ -454,7 +459,9 @@ function cardRow(
             EASE,
           ];
   const steps =
-    memory.state === CardState.Relearning ? RELEARNING_STEPS : preset.fields.learningSteps.value;
+    memory.state === CardState.Relearning
+      ? preset.fields.relearningSteps.value
+      : preset.fields.learningSteps.value;
   const left = learning ? Math.max(1, steps.length - memory.learning_steps) : 0;
   const weights = preset.fields.fsrsParameters.value;
   const data =
@@ -544,7 +551,14 @@ function modelJson(type: NoteType, anki: { id: number; appId?: string }) {
   };
 }
 
-function deckEntry(deck: Deck, anki: { id: number; appId?: string }, presetId: number) {
+function deckEntry(
+  deck: Deck,
+  anki: { id: number; appId?: string },
+  presetId: number,
+  dayNumber: (ms: number) => number,
+) {
+  const today = (limit: { limit: number; day: number } | null | undefined) =>
+    limit ? { limit: limit.limit, today: dayNumber(limit.day) } : null;
   const override = deck.fields.desiredRetention.value;
   return {
     id: anki.id,
@@ -563,10 +577,10 @@ function deckEntry(deck: Deck, anki: { id: number; appId?: string }, presetId: n
     conf: presetId,
     extendNew: 0,
     extendRev: 0,
-    reviewLimit: null,
-    newLimit: null,
-    reviewLimitToday: null,
-    newLimitToday: null,
+    reviewLimit: deck.fields.reviewLimit?.value ?? null,
+    newLimit: deck.fields.newLimit?.value ?? null,
+    reviewLimitToday: today(deck.fields.reviewLimitToday?.value),
+    newLimitToday: today(deck.fields.newLimitToday?.value),
     // Schema 11 keeps the deck's override as a whole percent.
     desiredRetention: override == null ? null : Math.round(override * 100),
   };
@@ -585,19 +599,39 @@ function presetJson(preset: Preset, anki: { id: number; appId?: string }) {
       ...DCONF.new,
       bury: f.buryNew.value,
       delays: f.learningSteps.value,
+      order: f.insertionOrder.value === "random" ? 0 : 1,
       perDay: f.newPerDay.value,
     },
-    rev: { ...DCONF.rev, bury: f.buryReviews.value, perDay: f.reviewsPerDay.value },
-    lapse: { ...DCONF.lapse, delays: RELEARNING_STEPS },
+    rev: {
+      ...DCONF.rev,
+      bury: f.buryReviews.value,
+      perDay: f.reviewsPerDay.value,
+      maxIvl: f.maximumInterval.value,
+    },
+    lapse: {
+      ...DCONF.lapse,
+      delays: f.relearningSteps.value,
+      leechFails: f.leechThreshold.value,
+      leechAction: f.leechAction.value === "suspend" ? 0 : 1,
+    },
     ...(f.isDefault ? { ankiAlarmDefault: f.isDefault.value } : {}),
     buryInterdayLearning: f.buryLearning.value,
     fsrsParams6: f.fsrsParameters.value,
     desiredRetention: f.desiredRetention.value,
+    easyDaysPercentages: easyDaysToAnki(f.easyDays.value),
     autoplay: !f.dontPlayAutomatically.value,
     replayq: !f.skipQuestionWhenReplayingAnswer.value,
     maxTaken: f.maximumAnswerSeconds.value,
     timer: f.showTimer.value ? 1 : 0,
     stopTimerOnAnswer: f.stopTimerOnAnswer.value,
+    ...displayOrderToAnki({
+      newGatherPriority: f.newGatherPriority.value,
+      newSortOrder: f.newSortOrder.value,
+      newMix: f.newMix.value,
+      interdayLearningMix: f.interdayLearningMix.value,
+      reviewOrder: f.reviewOrder.value,
+    }),
+    ...ankiAutoAdvance(autoAdvanceOptions(preset)),
   };
 }
 

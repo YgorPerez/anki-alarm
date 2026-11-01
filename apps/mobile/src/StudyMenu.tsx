@@ -25,12 +25,18 @@ export function StudyMenu({
   items,
   locale,
   busy = false,
+  onOpenChange,
 }: {
   items: readonly StudyMenuItem[];
   locale: Locale;
   busy?: boolean;
+  onOpenChange?: ((open: boolean) => void) | undefined;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
+  const setOpen = (next: boolean) => {
+    setOpenState(next);
+    onOpenChange?.(next);
+  };
   const insets = useSafeAreaInsets();
   const t = copy(locale);
   if (!items.length) return null;

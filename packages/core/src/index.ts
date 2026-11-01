@@ -126,6 +126,8 @@ export type {
   ReliabilityKind,
   ReliabilityStep,
 } from "./reliability.ts";
+export { deckLimitTexts, LIMIT_SCOPES, scopedLimit } from "./daily-limits.ts";
+export type { LimitKind, LimitScope } from "./daily-limits.ts";
 export {
   deckPreset,
   schedulingOptions,
@@ -133,6 +135,7 @@ export {
   nextIntervals,
   studyQueue,
   studyCounts,
+  canStudyCard,
   nextStudyCard,
   studyDayStart,
   isBuried,
@@ -159,7 +162,9 @@ export type { BrowseRow } from "./browse.ts";
 export { runCommand } from "./commands.ts";
 export { answerUndo, popUndo, pushUndo, runStudyAction, UNDO_LIMIT } from "./undo.ts";
 export type { StudyAction, UndoStack, UndoStep } from "./undo.ts";
-export { presetTexts, readPresetTexts, validPresetText } from "./preset-text.ts";
+export { DISPLAY_ORDER_KEYS } from "./display-order.ts";
+export type { DisplayOrder } from "./display-order.ts";
+export { presetOptionTexts, presetTexts, readPresetTexts, validPresetText } from "./preset-text.ts";
 export type { PresetTexts } from "./preset-text.ts";
 export type { CollectionCommand } from "./commands.ts";
 export type {
@@ -231,9 +236,14 @@ export {
 export type { QuickAlarmOptions } from "./quick-alarm.ts";
 
 export type { SchedulingOptions } from "./study.ts";
+export { EASY_DAYS } from "./easy-days.ts";
+export type { EasyDay } from "./easy-days.ts";
 
 export { isDefaultPreset } from "./collection.ts";
 
 export { studyAnswerDuration } from "./study.ts";
 
 export { studyAudio } from "./read-aloud.ts";
+
+export { ANSWER_ACTIONS, QUESTION_ACTIONS, autoAdvanceStep } from "./auto-advance.ts";
+export type { AnswerAction, AutoAdvanceStep, QuestionAction } from "./auto-advance.ts";

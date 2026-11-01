@@ -204,14 +204,29 @@ test("deck options brings AnkiDroid values into the form, warns about SM-2, and 
   source.decks.forEach((deck) => {
     deck.options = JSON.stringify({
       ...JSON.parse(deck.options),
-      new: { perDay: 42, delays: [3, 15], bury: true },
-      rev: { perDay: 177, bury: true },
+      new: { perDay: 42, delays: [3, 15], bury: true, order: 0 },
+      rev: { perDay: 177, bury: true, maxIvl: 400 },
+      lapse: { delays: [5, 20], leechFails: 4, leechAction: 0 },
+      newCardsIgnoreReviewLimit: true,
+      applyAllParentLimits: true,
+      newGatherPriority: 5,
+      newSortOrder: 3,
+      newMix: 2,
+      interdayLearningMix: 1,
+      reviewOrder: 12,
       buryInterdayLearning: true,
       autoplay: false,
       replayq: false,
       maxTaken: 45,
       timer: 1,
       stopTimerOnAnswer: true,
+      secondsToShowQuestion: 2.5,
+      secondsToShowAnswer: 4,
+      waitForAudio: false,
+      questionAction: 1,
+      answerAction: 2,
+      easyDaysPercentages: [1, 1, 0.5, 1, 1, 0, 0],
+      desiredRetention: 0.85,
       fsrsParams6: [
         0.4, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 0.796, 1.4835,
         0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658, 0.1542,
@@ -250,6 +265,69 @@ test("deck options brings AnkiDroid values into the form, warns about SM-2, and 
     expect(fields.maximumAnswerSeconds.value).toBe(45);
     expect(fields.showTimer.value).toBe(true);
     expect(fields.stopTimerOnAnswer.value).toBe(true);
+    expect(fields.reviewsPerDay.value).toBe(177);
+    expect(fields.learningSteps.value).toEqual([3, 15]);
+    expect(fields.insertionOrder.value).toBe("random");
+    expect(fields.relearningSteps.value).toEqual([5, 20]);
+    expect(fields.leechThreshold.value).toBe(4);
+    expect(fields.leechAction.value).toBe("suspend");
+    expect(fields.maximumInterval.value).toBe(400);
+    expect(fields.newIgnoreReviewLimit.value).toBe(true);
+    expect(fields.applyAllParentLimits.value).toBe(true);
+    expect(fields.newGatherPriority.value).toBe("deckThenRandomNotes");
+    expect(fields.newSortOrder.value).toBe("randomNoteThenTemplate");
+    expect(fields.newMix.value).toBe("before");
+    expect(fields.interdayLearningMix.value).toBe("after");
+    expect(fields.reviewOrder.value).toBe("relativeOverdueness");
+    expect(fields.secondsToShowQuestion.value).toBe(2.5);
+    expect(fields.secondsToShowAnswer.value).toBe(4);
+    expect(fields.waitForAudio.value).toBe(false);
+    expect(fields.questionAction.value).toBe("showReminder");
+    expect(fields.answerAction.value).toBe("good");
+    expect(fields.easyDays.value).toEqual([
+      "normal",
+      "normal",
+      "reduced",
+      "normal",
+      "normal",
+      "minimum",
+      "minimum",
+    ]);
+    expect(fields.desiredRetention.value).toBe(0.85);
+    // The preset's name stays the app's.
+    expect(fields.name.value).toBe(before.presets[0]!.fields.name.value);
+  });
+});
+
+test("Bring from AnkiDroid puts a limit this deck kept for itself back on the preset", async () => {
+  await run((data) => data.linkAnkiDroidDeck(fixture.source));
+  const state = await run((data) => data.collection);
+  const deckId = state.decks.find((d) => d.fields.linkedBy)!.id;
+  await run((data) =>
+    data.changeCollection((c) => {
+      c.setDeckLimit(deckId, "new", "deck", 3);
+    }),
+  );
+  const source = structuredClone(fixture.source);
+  source.decks.forEach((deck) => {
+    deck.options = JSON.stringify({ ...JSON.parse(deck.options), new: { perDay: 42 } });
+  });
+  await show(memoryAnkiDroid({ installed: ready, sources: [source] }));
+  await press(/Japonês/);
+  await press("Opções do baralho");
+  await screen.findByLabelText("Cartões novos por dia");
+  expect(screen.getByLabelText("Cartões novos por dia").props.value).toBe("3");
+  await press("Trazer do AnkiDroid");
+  await waitFor(() =>
+    expect(screen.getByLabelText("Cartões novos por dia").props.value).toBe("42"),
+  );
+  await press("Salvar");
+  await waitFor(async () => {
+    const after = await run((data) => data.collection);
+    const deck = after.decks.find((d) => d.id === deckId)!;
+    const preset = after.presets.find((p) => p.id === deck.fields.presetId.value)!;
+    expect(preset.fields.newPerDay.value).toBe(42);
+    expect(deck.fields.newLimit?.value ?? null).toBeNull();
   });
 });
 

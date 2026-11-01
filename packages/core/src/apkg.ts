@@ -1,6 +1,16 @@
 /* oxlint-disable unicorn/no-array-sort -- ES2022/Hermes target; only fresh copies are sorted. */
+import {
+  ankiAnswerAction,
+  ankiQuestionAction,
+  ankiSeconds,
+  type AnswerAction,
+  type QuestionAction,
+} from "./auto-advance.ts";
+import { displayOrderFromAnki, type DisplayOrder } from "./display-order.ts";
+import { easyDaysFromAnki, type EasyDay } from "./easy-days.ts";
 import { safeMediaName } from "./media.ts";
 import { Message } from "./protobuf.ts";
+import { studyDayStart } from "./study.ts";
 
 /**
  * What the app gives Core to read an `.apkg`: the zip's entries, zstd and a read-only SQLite
@@ -41,8 +51,16 @@ export interface AnkiPackage {
     mtime: number;
     presetId: number;
     desiredRetention: number | null;
+    newLimit?: number | null;
+    reviewLimit?: number | null;
+    /** `day` is the start of the study day the limit was set on. */
+    newLimitToday?: { limit: number; day: number } | null;
+    reviewLimitToday?: { limit: number; day: number } | null;
   }[];
   presets: {
+    /** Anki keeps these two for the whole collection, so every preset reads the same. */
+    newIgnoreReviewLimit?: boolean;
+    applyAllParentLimits?: boolean;
     isDefault?: boolean | undefined;
     id: number;
     appId?: string | undefined;
@@ -55,13 +73,27 @@ export interface AnkiPackage {
     buryReviews?: boolean;
     buryLearning?: boolean;
     learningSteps: number[];
+    relearningSteps?: number[];
+    insertionOrder?: "sequential" | "random";
+    leechThreshold?: number;
+    leechAction?: "suspend" | "tagOnly";
+    maximumInterval?: number;
     /** FSRS-6 weights; absent or empty means the defaults. */
     fsrsParameters?: number[];
+    /** Absent means every day is normal. */
+    easyDays?: EasyDay[];
     dontPlayAutomatically?: boolean;
     skipQuestionWhenReplayingAnswer?: boolean;
     maximumAnswerSeconds?: number;
     showTimer?: boolean;
     stopTimerOnAnswer?: boolean;
+    /** Absent means Anki's defaults. */
+    displayOrder?: DisplayOrder;
+    secondsToShowQuestion?: number;
+    secondsToShowAnswer?: number;
+    waitForAudio?: boolean;
+    questionAction?: QuestionAction;
+    answerAction?: AnswerAction;
   }[];
   notes: {
     id: number;
@@ -299,10 +331,24 @@ async function readCollection(db: AnkiDatabase): Promise<Omit<AnkiPackage, "vers
 
 type Config = Pick<AnkiPackage, "noteTypes" | "decks" | "presets"> & { schedulerVersion: number };
 
+/** The start of a study day from Anki's day number, days since the collection's creation. */
+function ankiDay(creationSeconds: number, day: number): number {
+  const date = new Date(creationSeconds * 1000);
+  date.setDate(date.getDate() + day);
+  return studyDayStart(date.getTime());
+}
+
 /** Schema 11: note types, decks and presets are JSON in the `col` row. */
 async function readJson(db: AnkiDatabase): Promise<Config> {
-  const [col] = await db.all("SELECT conf, models, decks, dconf FROM col");
+  const [col] = await db.all("SELECT conf, models, decks, dconf, crt FROM col");
   if (!col) throw new Error("Corrupt collection");
+  const conf = record(json(col.conf));
+  const today = (value: unknown) => {
+    const { limit, today: day } = record(value);
+    return limit == null || day == null
+      ? null
+      : { limit: int(limit), day: ankiDay(int(col.crt), int(day)) };
+  };
   return {
     schedulerVersion: int(record(json(col.conf)).schedVer) || 1,
     noteTypes: Object.values(record(json(col.models))).map((model) => {
@@ -341,6 +387,10 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         name: text(d.name),
         mtime: int(d.mod) * 1000,
         presetId: int(d.conf) || 1,
+        newLimit: d.newLimit == null ? null : int(d.newLimit),
+        reviewLimit: d.reviewLimit == null ? null : int(d.reviewLimit),
+        newLimitToday: today(d.newLimitToday),
+        reviewLimitToday: today(d.reviewLimitToday),
         desiredRetention:
           d.desiredRetention == null ? null : retention(int(d.desiredRetention) / 100, 0.9),
       })),
@@ -353,18 +403,34 @@ async function readJson(db: AnkiDatabase): Promise<Config> {
         mtime: int(c.mod) * 1000,
         newPerDay: int(record(c.new).perDay),
         reviewsPerDay: int(record(c.rev).perDay),
+        newIgnoreReviewLimit: conf.newCardsIgnoreReviewLimit === true,
+        applyAllParentLimits: conf.applyAllParentLimits === true,
         desiredRetention: retention(c.desiredRetention, 0.9),
         buryNew: record(c.new).bury === true,
         buryReviews: record(c.rev).bury === true,
         buryLearning: c.buryInterdayLearning === true,
         learningSteps: steps(record(c.new).delays),
+        relearningSteps: record(c.lapse).delays == null ? [10] : steps(record(c.lapse).delays),
+        insertionOrder: record(c.new).order === 0 ? ("random" as const) : ("sequential" as const),
+        leechThreshold: record(c.lapse).leechFails == null ? 8 : int(record(c.lapse).leechFails),
+        leechAction:
+          record(c.lapse).leechAction === 0 ? ("suspend" as const) : ("tagOnly" as const),
+        maximumInterval: int(record(c.rev).maxIvl) || 36500,
         fsrsParameters: fsrs6(steps(c.fsrsParams6)),
+        easyDays: easyDaysFromAnki(steps(c.easyDaysPercentages)),
         isDefault: typeof c.ankiAlarmDefault === "boolean" ? c.ankiAlarmDefault : undefined,
         dontPlayAutomatically: c.autoplay === false,
         skipQuestionWhenReplayingAnswer: c.replayq === false,
         maximumAnswerSeconds: typeof c.maxTaken === "number" ? c.maxTaken : 60,
         showTimer: c.timer === 1,
         stopTimerOnAnswer: c.stopTimerOnAnswer === true,
+        displayOrder: displayOrderFromAnki(c),
+        secondsToShowQuestion: ankiSeconds(c.secondsToShowQuestion),
+        secondsToShowAnswer: ankiSeconds(c.secondsToShowAnswer),
+        // Older packages don't have it; Anki's default is on.
+        waitForAudio: c.waitForAudio !== false,
+        questionAction: ankiQuestionAction(c.questionAction),
+        answerAction: ankiAnswerAction(c.answerAction),
       })),
   };
 }
@@ -374,6 +440,18 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
   const fields = await db.all("SELECT ntid, ord, name, config FROM fields");
   const templates = await db.all("SELECT ntid, ord, name, config FROM templates");
   const [schedVer] = await db.all("SELECT val FROM config WHERE KEY = 'schedVer'");
+  const [created] = await db.all("SELECT crt FROM col");
+  const rules = await db.all(
+    "SELECT key, val FROM config WHERE key IN ('newCardsIgnoreReviewLimit', 'applyAllParentLimits')",
+  );
+  const rule = (key: string) => {
+    const row = rules.find((r) => r.key === key);
+    return !!row && text(row.val) === "true";
+  };
+  const today = (limit: Message | undefined) =>
+    limit
+      ? { limit: limit.number(1) ?? 0, day: ankiDay(int(created?.crt), limit.number(2) ?? 0) }
+      : null;
   return {
     schedulerVersion: schedVer ? Number(text(schedVer.val)) || 2 : 2,
     noteTypes: (await db.all("SELECT id, name, mtime_secs, config FROM notetypes")).map((r) => {
@@ -411,6 +489,10 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
           name: text(r.name).split("\x1f").join("::"),
           mtime: int(r.mtime_secs) * 1000,
           presetId: normal.number(1) || 1,
+          newLimit: normal.number(7) ?? null,
+          reviewLimit: normal.number(6) ?? null,
+          newLimitToday: today(normal.message(9)),
+          reviewLimitToday: today(normal.message(8)),
           desiredRetention: override === undefined ? null : retention(override, 0.9),
         },
       ];
@@ -424,17 +506,38 @@ async function readTables(db: AnkiDatabase): Promise<Config> {
         mtime: int(r.mtime_secs) * 1000,
         newPerDay: c.number(9) ?? 0,
         reviewsPerDay: c.number(10) ?? 0,
+        newIgnoreReviewLimit: rule("newCardsIgnoreReviewLimit"),
+        applyAllParentLimits: rule("applyAllParentLimits"),
         desiredRetention: retention(c.float(37), 0.9),
         buryNew: c.number(27) === 1,
         buryReviews: c.number(28) === 1,
         buryLearning: c.number(29) === 1,
         learningSteps: c.floats(1),
+        relearningSteps: c.floats(2),
+        insertionOrder: c.number(20) === 1 ? ("random" as const) : ("sequential" as const),
+        leechThreshold: c.number(22) ?? 0,
+        leechAction: c.number(21) === 1 ? ("tagOnly" as const) : ("suspend" as const),
+        maximumInterval: c.number(16) || 36500,
         fsrsParameters: fsrs6(c.floats(6)),
+        easyDays: easyDaysFromAnki(c.floats(4)),
         dontPlayAutomatically: c.number(23) === 1,
         skipQuestionWhenReplayingAnswer: c.number(26) === 1,
         maximumAnswerSeconds: c.number(24) ?? 0,
         showTimer: c.number(25) === 1,
         stopTimerOnAnswer: c.number(38) === 1,
+        displayOrder: displayOrderFromAnki({
+          newMix: c.number(30),
+          interdayLearningMix: c.number(31),
+          newSortOrder: c.number(32),
+          reviewOrder: c.number(33),
+          newGatherPriority: c.number(34),
+        }),
+        // Proto3 leaves zero values out, so absent is 0, off or the first action.
+        secondsToShowQuestion: ankiSeconds(c.float(41)),
+        secondsToShowAnswer: ankiSeconds(c.float(42)),
+        waitForAudio: c.number(44) === 1,
+        questionAction: ankiQuestionAction(c.number(36)),
+        answerAction: ankiAnswerAction(c.number(43)),
       };
     }),
   };

@@ -1,12 +1,35 @@
 // The editors' shared copy: deck options, notes and card actions read the same on the phone and the
 // web. Each app spreads it into its own messages and adds the keys only its screens have. The
 // limits come from Core, so the copy can't drift from the rules it states.
-import { MAX_DUE_DAYS, PRESET_LIMITS, type Messages } from "@app/core";
+import {
+  DISPLAY_ORDER_KEYS,
+  MAX_DUE_DAYS,
+  PRESET_LIMITS,
+  type DisplayOrder,
+  type Locale,
+  type Messages,
+} from "@app/core";
 
 const { maxPerDay, minRetention, maxRetention, fsrsParameters } = PRESET_LIMITS;
 /** A retention as each locale writes it: 0,70 in pt-BR, 0.70 in English. */
 const retention = (value: number, comma: boolean) =>
   comma ? value.toFixed(2).replace(".", ",") : value.toFixed(2);
+
+/** Each weekday's message, Monday first, as a preset's `easyDays` lists them. */
+export const WEEKDAY_MESSAGES = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
+export const EASY_DAY_MESSAGES = {
+  minimum: "easyDayMinimum",
+  reduced: "easyDayReduced",
+  normal: "easyDayNormal",
+} as const;
 
 export const editingMessages = {
   "pt-BR": {
@@ -35,13 +58,38 @@ export const editingMessages = {
     stopTimerOnAnswer: "Parar ao mostrar a resposta",
     replayAudio: "Repetir áudio",
     answerTimer: "Tempo de resposta",
+    autoAdvance: "Avanço automático",
+    secondsToShowQuestion: "Segundos para mostrar a pergunta (0 desliga)",
+    secondsToShowAnswer: "Segundos para mostrar a resposta (0 desliga)",
+    waitForAudio: "Esperar o áudio terminar",
+    questionAction: "Ação da pergunta",
+    answerAction: "Ação da resposta",
+    actionShowAnswer: "Mostrar a resposta",
+    actionShowReminder: "Mostrar um lembrete",
+    actionBury: "Enterrar o cartão",
+    actionAgain: "Responder De novo",
+    actionGood: "Responder Bom",
+    actionHard: "Responder Difícil",
+    questionReminder: "Hora de mostrar a resposta",
+    answerReminder: "Hora de responder",
     deckOptions: "Opções do baralho",
+    displayOrder: "Ordem de exibição",
     advanced: "Avançado",
     discardOptions: "Descartar as alterações não salvas?",
     presetName: "Nome da predefinição",
     sharedPreset: "Estas opções valem para {count} baralhos.",
     newPerDay: "Cartões novos por dia",
     reviewsPerDay: "Revisões por dia",
+    newLimitScope: "Limite de novos vale para",
+    reviewLimitScope: "Limite de revisões vale para",
+    limitPreset: "A predefinição",
+    limitDeck: "Este baralho",
+    limitToday: "Só hoje",
+    limitTodayHint: "Só hoje termina no início do próximo dia de estudo.",
+    newIgnoreReviewLimit: "Novos ignoram o limite de revisões",
+    applyAllParentLimits: "Limites começam no baralho pai",
+    applyAllParentLimitsHint:
+      "Desligado, valem os limites do baralho estudado. Ligado, cada sub-baralho também respeita o seu.",
     desiredRetention: "Retenção desejada",
     desiredRetentionHint: `De ${retention(minRetention, true)} a ${retention(maxRetention, true)}. Mais alta: mais revisões, menos esquecimento.`,
     burying: "Enterrar irmãos",
@@ -50,9 +98,33 @@ export const editingMessages = {
     buryLearning: "Enterrar irmãos em aprendizado",
     learningSteps: "Etapas de aprendizado (minutos)",
     learningStepsHint: "Separadas por espaço, por exemplo 1 10.",
+    relearningSteps: "Etapas de reaprendizado (minutos)",
+    relearningStepsHint: "Separadas por espaço. Deixe vazio para ir direto à revisão.",
+    insertionOrder: "Ordem de inserção",
+    sequential: "Sequencial",
+    random: "Aleatória",
+    leechThreshold: "Limite de lapsos (0 desativa)",
+    leechAction: "Ação para cartões difíceis",
+    suspend: "Suspender",
+    tagOnly: "Só marcar com leech",
+    maximumInterval: "Intervalo máximo (dias)",
+    invalidInterval: "Use um número inteiro de 1 a 36500.",
     fsrsParameters: "Parâmetros do FSRS",
     fsrsParametersHint: `${fsrsParameters} números separados por vírgula, com ponto decimal.`,
     defaultParameters: "Usar os parâmetros padrão",
+    easyDays: "Dias fáceis",
+    easyDaysHint:
+      "As próximas respostas evitam os dias mínimos e reduzidos, em intervalos de até 90 dias. Cartões já respondidos não mudam.",
+    easyDayMinimum: "Mínimo",
+    easyDayReduced: "Reduzido",
+    easyDayNormal: "Normal",
+    monday: "Segunda-feira",
+    tuesday: "Terça-feira",
+    wednesday: "Quarta-feira",
+    thursday: "Quinta-feira",
+    friday: "Sexta-feira",
+    saturday: "Sábado",
+    sunday: "Domingo",
     invalidLimit: `Use um número inteiro de 0 a ${maxPerDay}.`,
     invalidRetention: `Use um valor de ${retention(minRetention, true)} a ${retention(maxRetention, true)}.`,
     invalidSteps: "Use minutos maiores que zero, separados por espaço.",
@@ -100,13 +172,38 @@ export const editingMessages = {
     stopTimerOnAnswer: "Stop timer on answer",
     replayAudio: "Replay audio",
     answerTimer: "Answer time",
+    autoAdvance: "Auto advance",
+    secondsToShowQuestion: "Seconds to show question (0 turns it off)",
+    secondsToShowAnswer: "Seconds to show answer (0 turns it off)",
+    waitForAudio: "Wait for audio",
+    questionAction: "Question action",
+    answerAction: "Answer action",
+    actionShowAnswer: "Show answer",
+    actionShowReminder: "Show reminder",
+    actionBury: "Bury card",
+    actionAgain: "Answer Again",
+    actionGood: "Answer Good",
+    actionHard: "Answer Hard",
+    questionReminder: "Time to show the answer",
+    answerReminder: "Time to answer",
     deckOptions: "Deck options",
+    displayOrder: "Display order",
     advanced: "Advanced",
     discardOptions: "Discard unsaved changes?",
     presetName: "Preset name",
     sharedPreset: "These options apply to {count} decks.",
     newPerDay: "New cards per day",
     reviewsPerDay: "Reviews per day",
+    newLimitScope: "New card limit applies to",
+    reviewLimitScope: "Review limit applies to",
+    limitPreset: "The preset",
+    limitDeck: "This deck",
+    limitToday: "Today only",
+    limitTodayHint: "Today only ends when the next study day starts.",
+    newIgnoreReviewLimit: "New cards ignore the review limit",
+    applyAllParentLimits: "Limits start from the parent deck",
+    applyAllParentLimitsHint:
+      "Off, the studied deck's limits apply. On, each subdeck also keeps to its own.",
     desiredRetention: "Desired retention",
     desiredRetentionHint: `From ${retention(minRetention, false)} to ${retention(maxRetention, false)}. Higher: more reviews, less forgetting.`,
     burying: "Sibling burying",
@@ -115,9 +212,33 @@ export const editingMessages = {
     buryLearning: "Bury learning siblings",
     learningSteps: "Learning steps (minutes)",
     learningStepsHint: "Separated by spaces, for example 1 10.",
+    relearningSteps: "Relearning steps (minutes)",
+    relearningStepsHint: "Separated by spaces. Leave empty to go straight to review.",
+    insertionOrder: "Insertion order",
+    sequential: "Sequential",
+    random: "Random",
+    leechThreshold: "Leech threshold (0 disables)",
+    leechAction: "Leech action",
+    suspend: "Suspend",
+    tagOnly: "Tag only",
+    maximumInterval: "Maximum interval (days)",
+    invalidInterval: "Use a whole number from 1 to 36500.",
     fsrsParameters: "FSRS parameters",
     fsrsParametersHint: `${fsrsParameters} numbers separated by commas, with a decimal point.`,
     defaultParameters: "Use the default parameters",
+    easyDays: "Easy days",
+    easyDaysHint:
+      "Later answers avoid minimum and reduced days, for intervals up to 90 days. Cards already answered stay put.",
+    easyDayMinimum: "Minimum",
+    easyDayReduced: "Reduced",
+    easyDayNormal: "Normal",
+    monday: "Monday",
+    tuesday: "Tuesday",
+    wednesday: "Wednesday",
+    thursday: "Thursday",
+    friday: "Friday",
+    saturday: "Saturday",
+    sunday: "Sunday",
     invalidLimit: `Use a whole number from 0 to ${maxPerDay}.`,
     invalidRetention: `Use a value from ${retention(minRetention, false)} to ${retention(maxRetention, false)}.`,
     invalidSteps: "Use minutes above zero, separated by spaces.",
@@ -139,3 +260,127 @@ export const editingMessages = {
       "Forget and Set due date stay in the app: AnkiDroid doesn't get these changes. This card's next review in AnkiDroid replaces them.",
   },
 } satisfies Messages<string>;
+
+type DisplayOrderCopy = {
+  [K in keyof DisplayOrder]: { label: string; choices: Record<DisplayOrder[K], string> };
+};
+// Each option's choices, in the order Anki lists them.
+const displayOrderCopy: Record<Locale, DisplayOrderCopy> = {
+  "pt-BR": {
+    newGatherPriority: {
+      label: "Coleta de cartões novos",
+      choices: {
+        deck: "Baralho",
+        deckThenRandomNotes: "Baralho, depois notas aleatórias",
+        lowestPosition: "Posição crescente",
+        highestPosition: "Posição decrescente",
+        randomNotes: "Notas aleatórias",
+        randomCards: "Cartões aleatórios",
+      },
+    },
+    newSortOrder: {
+      label: "Ordem dos cartões novos",
+      choices: {
+        template: "Tipo de cartão, depois ordem de coleta",
+        noSort: "Ordem de coleta",
+        templateThenRandom: "Tipo de cartão, depois aleatória",
+        randomNoteThenTemplate: "Nota aleatória, depois tipo de cartão",
+        randomCard: "Aleatória",
+      },
+    },
+    newMix: {
+      label: "Cartões novos e revisões",
+      choices: {
+        mix: "Misturar com as revisões",
+        after: "Depois das revisões",
+        before: "Antes das revisões",
+      },
+    },
+    interdayLearningMix: {
+      label: "Aprendizado e revisões",
+      choices: {
+        mix: "Misturar com as revisões",
+        after: "Depois das revisões",
+        before: "Antes das revisões",
+      },
+    },
+    reviewOrder: {
+      label: "Ordem das revisões",
+      choices: {
+        day: "Vencimento, depois aleatória",
+        dayThenDeck: "Vencimento, depois baralho",
+        deckThenDay: "Baralho, depois vencimento",
+        intervalsAscending: "Intervalos crescentes",
+        intervalsDescending: "Intervalos decrescentes",
+        difficultyDescending: "Dificuldade decrescente",
+        difficultyAscending: "Dificuldade crescente",
+        retrievabilityAscending: "Recuperabilidade crescente",
+        retrievabilityDescending: "Recuperabilidade decrescente",
+        relativeOverdueness: "Atraso relativo",
+        random: "Aleatória",
+        added: "Ordem de adição",
+        reverseAdded: "Ordem de adição invertida",
+      },
+    },
+  },
+  en: {
+    newGatherPriority: {
+      label: "New card gathering",
+      choices: {
+        deck: "Deck",
+        deckThenRandomNotes: "Deck, then random notes",
+        lowestPosition: "Ascending position",
+        highestPosition: "Descending position",
+        randomNotes: "Random notes",
+        randomCards: "Random cards",
+      },
+    },
+    newSortOrder: {
+      label: "New card sort order",
+      choices: {
+        template: "Card type, then order gathered",
+        noSort: "Order gathered",
+        templateThenRandom: "Card type, then random",
+        randomNoteThenTemplate: "Random note, then card type",
+        randomCard: "Random",
+      },
+    },
+    newMix: {
+      label: "New cards versus reviews",
+      choices: { mix: "Mix with reviews", after: "After reviews", before: "Before reviews" },
+    },
+    interdayLearningMix: {
+      label: "Learning versus reviews",
+      choices: { mix: "Mix with reviews", after: "After reviews", before: "Before reviews" },
+    },
+    reviewOrder: {
+      label: "Review sort order",
+      choices: {
+        day: "Due date, then random",
+        dayThenDeck: "Due date, then deck",
+        deckThenDay: "Deck, then due date",
+        intervalsAscending: "Ascending intervals",
+        intervalsDescending: "Descending intervals",
+        difficultyDescending: "Descending difficulty",
+        difficultyAscending: "Ascending difficulty",
+        retrievabilityAscending: "Ascending retrievability",
+        retrievabilityDescending: "Descending retrievability",
+        relativeOverdueness: "Relative overdueness",
+        random: "Random",
+        added: "Order added",
+        reverseAdded: "Reverse order added",
+      },
+    },
+  },
+};
+
+/** The display order options as both deck options screens list them. */
+export const displayOrderFields = (locale: Locale) =>
+  DISPLAY_ORDER_KEYS.map((key) => ({
+    key,
+    label: displayOrderCopy[locale][key].label,
+    choices: Object.entries(displayOrderCopy[locale][key].choices).map(([value, label]) => ({
+      value,
+      label,
+    })),
+  }));

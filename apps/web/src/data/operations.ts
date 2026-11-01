@@ -53,6 +53,10 @@ export function operations(
     pendingChanges: () => run(data.pendingChanges),
     answerCard: (cardId, grade, durationMs) => run(data.answerCard(cardId, grade, durationMs)),
     undo: (entryId) => run(data.undo(entryId)),
+    buryCard: async (cardId) => {
+      await run(data.studyAction({ kind: "buryCard", cardId }));
+      return undefined;
+    },
     change: async (command) => {
       let id: string | undefined;
       await run(

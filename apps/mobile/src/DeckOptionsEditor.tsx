@@ -1,27 +1,45 @@
 import { AnkiDroidOptions } from "./AnkiDroidOptions.tsx";
 import type { AnkiDroidApi } from "./ankidroid.ts";
-import type { Deck } from "@app/core";
 import {
+  ANSWER_ACTIONS,
   DEFAULT_FSRS_PARAMETERS,
+  deckLimitTexts,
+  QUESTION_ACTIONS,
+  presetOptionTexts,
   presetTexts,
   readPresetTexts,
+  scopedLimit,
+  studyDayStart,
   validPresetText,
+  type Deck,
+  type LimitScope,
   type Locale,
   type Preset,
   type PresetOptions,
 } from "@app/core";
+import { displayOrderFields } from "@app/editing-ui";
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
 import { RetentionSlider } from "./RetentionSlider.tsx";
-import { Switch, Text, View } from "react-native";
-import { Button, SaveButtons, TextField } from "./controls.tsx";
+import { Pressable, Switch, Text, View } from "react-native";
+import { Button, Choice, SaveButtons, TextField } from "./controls.tsx";
 import { editingCopy } from "./editing-copy.ts";
-import { regular } from "./fonts.ts";
+import { EasyDaysField } from "./EasyDaysField.tsx";
+import { bold, regular } from "./fonts.ts";
+
+const ACTION_LABELS = {
+  showAnswer: "actionShowAnswer",
+  showReminder: "actionShowReminder",
+  bury: "actionBury",
+  again: "actionAgain",
+  good: "actionGood",
+  hard: "actionHard",
+} as const;
 
 /** Edits a preset: the daily limits and FSRS options its decks share. */
 export function DeckOptionsEditor({
   preset,
-  linkedDeck,
+  deck,
   ankiDroid,
   deckCount,
   locale,
@@ -31,18 +49,26 @@ export function DeckOptionsEditor({
   onCancel,
 }: {
   onDirtyChange?: (dirty: boolean) => void;
-  linkedDeck?: Deck;
   ankiDroid?: AnkiDroidApi;
   preset: Preset;
+  /** The deck whose options these are: its limits can be set for it alone. */
+  deck?: Deck;
   deckCount: number;
   locale: Locale;
   busy: boolean;
-  onSave: (options: PresetOptions) => void;
+  onSave: (
+    options: PresetOptions,
+    limits?: { deckId: string; new: LimitScope; review: LimitScope },
+  ) => void;
   onCancel: () => void;
 }) {
   const t = editingCopy(locale);
   const [advanced, setAdvanced] = useState(false);
-  const defaultValues = presetTexts(preset, locale);
+  const [today] = useState(() => studyDayStart(Date.now()));
+  const defaultValues = {
+    ...presetTexts(preset, locale),
+    ...deckLimitTexts(deck, preset, today),
+  };
   const form = useForm({
     listeners: {
       onChange: ({ formApi }) => onDirtyChange?.(!formApi.state.isDefaultValue),
@@ -50,13 +76,28 @@ export function DeckOptionsEditor({
     defaultValues,
     onSubmit: ({ value }) => {
       const options = readPresetTexts(value);
-      if (options) onSave(options);
+      if (!options) return;
+      if (deck)
+        onSave(options, { deckId: deck.id, new: value.newScope, review: value.reviewScope });
+      else onSave(options);
     },
   });
   const fields = [
     {
       key: "maximumAnswerSeconds",
       label: t("maximumAnswerSeconds"),
+      error: t("invalidLimit"),
+      numeric: true,
+    },
+    {
+      key: "secondsToShowQuestion",
+      label: t("secondsToShowQuestion"),
+      error: t("invalidLimit"),
+      numeric: true,
+    },
+    {
+      key: "secondsToShowAnswer",
+      label: t("secondsToShowAnswer"),
       error: t("invalidLimit"),
       numeric: true,
     },
@@ -70,6 +111,13 @@ export function DeckOptionsEditor({
       hint: t("learningStepsHint"),
       numeric: true,
     },
+    {
+      key: "relearningSteps",
+      label: t("relearningSteps"),
+      error: t("invalidSteps"),
+      hint: t("relearningStepsHint"),
+    },
+    { key: "leechThreshold", label: t("leechThreshold"), error: t("invalidLimit"), numeric: true },
     {
       key: "fsrsParameters",
       label: t("fsrsParameters"),
@@ -98,35 +146,22 @@ export function DeckOptionsEditor({
           {t("sharedPreset", { count: String(deckCount) })}
         </Text>
       )}
-      {linkedDeck && ankiDroid && (
+      {deck?.fields.linkedBy && ankiDroid && (
         <AnkiDroidOptions
-          deck={linkedDeck}
+          deck={deck}
           api={ankiDroid}
           locale={locale}
           busy={busy}
           onBring={(options) => {
-            for (const key of [
-              "buryNew",
-              "buryReviews",
-              "buryLearning",
-              "dontPlayAutomatically",
-              "skipQuestionWhenReplayingAnswer",
-              "maximumAnswerSeconds",
-              "showTimer",
-              "stopTimerOnAnswer",
-            ] as const) {
-              form.setFieldValue(key, String(options[key]));
-            }
-            form.setFieldValue("newPerDay", String(options.newPerDay));
-            form.setFieldValue("reviewsPerDay", String(options.reviewsPerDay));
-            form.setFieldValue(
-              "desiredRetention",
-              locale === "pt-BR"
-                ? String(options.desiredRetention).replace(".", ",")
-                : String(options.desiredRetention),
+            const { values } = form.state;
+            form.reset(
+              {
+                ...presetOptionTexts({ ...options, name: values.name }, locale),
+                newScope: "preset",
+                reviewScope: "preset",
+              },
+              { keepDefaultValues: true },
             );
-            form.setFieldValue("learningSteps", options.learningSteps.join(" "));
-            form.setFieldValue("fsrsParameters", options.fsrsParameters.join(", "));
             onDirtyChange?.(true);
           }}
         />
@@ -188,6 +223,151 @@ export function DeckOptionsEditor({
           )}
         </form.Field>
       ))}
+      {deck &&
+        (
+          [
+            ["newScope", "newPerDay", "new", "newLimitScope"],
+            ["reviewScope", "reviewsPerDay", "review", "reviewLimitScope"],
+          ] as const
+        ).map(([name, limit, kind, label]) => (
+          <form.Field key={name} name={name}>
+            {(field) => (
+              <View className="gap-2" accessibilityRole="radiogroup" accessibilityLabel={t(label)}>
+                <Text style={regular} className="text-body text-foreground">
+                  {t(label)}
+                </Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {(
+                    [
+                      ["preset", "limitPreset"],
+                      ["deck", "limitDeck"],
+                      ["today", "limitToday"],
+                    ] as const
+                  ).map(([scope, scopeLabel]) => (
+                    <Pressable
+                      key={scope}
+                      accessibilityRole="radio"
+                      accessibilityLabel={t(scopeLabel)}
+                      accessibilityState={{ checked: field.state.value === scope, disabled: busy }}
+                      disabled={busy}
+                      className={`min-h-12 justify-center rounded-pill px-5 py-3 ${
+                        field.state.value === scope ? "bg-primary" : "bg-surface"
+                      }`}
+                      onPress={() => {
+                        form.setFieldValue(
+                          limit,
+                          String(scopedLimit(deck, preset, kind, scope, today)),
+                        );
+                        field.handleChange(scope);
+                      }}
+                    >
+                      <Text
+                        style={regular}
+                        className={
+                          field.state.value === scope
+                            ? "text-body text-primary-foreground"
+                            : "text-body text-foreground"
+                        }
+                      >
+                        {t(scopeLabel)}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
+          </form.Field>
+        ))}
+      {deck && (
+        <Text style={regular} className="text-body text-muted-foreground">
+          {t("limitTodayHint")}
+        </Text>
+      )}
+      {(["newIgnoreReviewLimit", "applyAllParentLimits"] as const).map((key) => (
+        <form.Field key={key} name={key}>
+          {(field) => (
+            <View className="min-h-12 flex-row items-center justify-between gap-3">
+              <Text style={regular} className="flex-1 text-body text-foreground">
+                {t(key)}
+              </Text>
+              <Switch
+                accessibilityRole="switch"
+                accessibilityLabel={t(key)}
+                value={field.state.value === "true"}
+                onValueChange={(value) => field.handleChange(String(value))}
+                disabled={busy}
+              />
+            </View>
+          )}
+        </form.Field>
+      ))}
+      <Text style={regular} className="text-body text-muted-foreground">
+        {t("applyAllParentLimitsHint")}
+      </Text>
+
+      {(["insertionOrder", "leechAction"] as const).map((key) => (
+        <form.Field key={key} name={key}>
+          {(field) => (
+            <Choice
+              label={t(key)}
+              value={field.state.value}
+              options={(key === "insertionOrder"
+                ? (["sequential", "random"] as const)
+                : (["suspend", "tagOnly"] as const)
+              ).map((value) => ({ value, label: t(value) }))}
+              onChange={field.handleChange}
+            />
+          )}
+        </form.Field>
+      ))}
+      <View className="gap-3">
+        <Text style={regular} className="text-label font-bold text-foreground">
+          {t("autoAdvance")}
+        </Text>
+        <form.Field name="waitForAudio">
+          {(field) => (
+            <View className="min-h-12 flex-row items-center justify-between gap-3">
+              <Text style={regular} className="flex-1 text-body text-foreground">
+                {t("waitForAudio")}
+              </Text>
+              <Switch
+                accessibilityLabel={t("waitForAudio")}
+                value={field.state.value === "true"}
+                onValueChange={(value) => field.handleChange(String(value))}
+                disabled={busy}
+              />
+            </View>
+          )}
+        </form.Field>
+        <form.Field name="questionAction">
+          {(field) => (
+            <Choice<string>
+              label={t("questionAction")}
+              options={QUESTION_ACTIONS.map((value) => ({
+                value,
+                label: t(ACTION_LABELS[value]),
+              }))}
+              value={field.state.value}
+              onChange={field.handleChange}
+              disabled={busy}
+            />
+          )}
+        </form.Field>
+        <form.Field name="answerAction">
+          {(field) => (
+            <Choice<string>
+              label={t("answerAction")}
+              options={ANSWER_ACTIONS.map((value) => ({
+                value,
+                label: t(ACTION_LABELS[value]),
+              }))}
+              value={field.state.value}
+              onChange={field.handleChange}
+              disabled={busy}
+            />
+          )}
+        </form.Field>
+      </View>
       {fields.map((spec) => (
         <form.Field
           key={spec.key}
@@ -214,6 +394,24 @@ export function DeckOptionsEditor({
                 <Button label={t("advanced")} onPress={() => setAdvanced(!advanced)} />
                 {advanced && (
                   <>
+                    <form.Field
+                      name="maximumInterval"
+                      validators={{
+                        onChange: ({ value }) =>
+                          validPresetText.maximumInterval(value) ? undefined : t("invalidInterval"),
+                      }}
+                    >
+                      {(intervalField) => (
+                        <TextField
+                          label={t("maximumInterval")}
+                          numeric
+                          value={intervalField.state.value}
+                          onChange={intervalField.handleChange}
+                          onBlur={intervalField.handleBlur}
+                          error={intervalField.state.meta.errors[0]}
+                        />
+                      )}
+                    </form.Field>
                     {control}
                     <Button
                       label={t("defaultParameters")}
@@ -229,6 +427,27 @@ export function DeckOptionsEditor({
               control
             );
           }}
+        </form.Field>
+      ))}
+      <form.Field name="easyDays">
+        {(field) => (
+          <EasyDaysField value={field.state.value} locale={locale} onChange={field.handleChange} />
+        )}
+      </form.Field>
+      <Text style={bold} accessibilityRole="header" className="text-label text-foreground">
+        {t("displayOrder")}
+      </Text>
+      {displayOrderFields(locale).map(({ key, label, choices }) => (
+        <form.Field key={key} name={key}>
+          {(field) => (
+            <Choice
+              label={label}
+              options={choices}
+              value={field.state.value}
+              onChange={field.handleChange}
+              disabled={busy}
+            />
+          )}
         </form.Field>
       ))}
     </View>

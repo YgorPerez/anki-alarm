@@ -185,6 +185,32 @@ test("presets can be created, assigned, duplicated and renamed without sharing o
   expect(next.fields.presetId.value).toBe(deck.fields.presetId.value);
 });
 
+test("duplicating a preset copies new card, lapse and maximum interval options; creating resets them", () => {
+  const c = new Collection(environment());
+  const custom = c.createPreset("Intensive");
+  c.updatePreset(custom.id, {
+    relearningSteps: [2, 20],
+    insertionOrder: "random",
+    leechThreshold: 4,
+    leechAction: "suspend",
+    maximumInterval: 90,
+  });
+  expect(c.duplicatePreset(custom.id, "Copy").fields).toMatchObject({
+    relearningSteps: { value: [2, 20] },
+    insertionOrder: { value: "random" },
+    leechThreshold: { value: 4 },
+    leechAction: { value: "suspend" },
+    maximumInterval: { value: 90 },
+  });
+  expect(c.createPreset("Fresh").fields).toMatchObject({
+    relearningSteps: { value: [10] },
+    insertionOrder: { value: "sequential" },
+    leechThreshold: { value: 8 },
+    leechAction: { value: "tagOnly" },
+    maximumInterval: { value: 36500 },
+  });
+});
+
 test("deleting a preset moves all its decks to Default and rejects invalid commands atomically", () => {
   const c = new Collection(environment());
   const first = c.createDeck("First");

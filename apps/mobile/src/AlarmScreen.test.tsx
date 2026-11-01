@@ -428,6 +428,10 @@ async function ringWithFronts(
           dontPlayAutomatically: true,
           showTimer: true,
           maximumAnswerSeconds: 1,
+          secondsToShowQuestion: 0.01,
+          secondsToShowAnswer: 0.01,
+          waitForAudio: false,
+          answerAction: "good",
         });
         if (options.language) c.setDeckLanguage(deck.id, options.language);
         for (const text of fronts) c.addBasicNote(deck.id, text, "verso");
@@ -513,7 +517,13 @@ test("an alarm without read aloud reads nothing", async () => {
     await start();
     await screen.findByLabelText("Frente");
     expect(screen.queryByLabelText("Tempo de resposta")).toBeNull();
+    // The preset's auto advance would have shown the answer by now.
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 150)));
+    screen.getByLabelText("Frente");
+    expect(screen.queryByText("Hora de responder")).toBeNull();
     await revealAndGrade("Bom");
+    // And would have graded the next card's answer: the count only moves with the user's grade.
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 150)));
     await screen.findByText("1 de 2 certos · faltam 1");
   } finally {
     await view.unmount();

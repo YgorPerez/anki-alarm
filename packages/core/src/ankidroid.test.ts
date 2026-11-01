@@ -4,6 +4,7 @@ import {
   DEFAULT_FSRS_PARAMETERS,
   browseCards,
   ankiDroidAccess,
+  presetFromOptions,
   ankiDroidScheduler,
   ankiDroidSyncWaitMs,
   cardId,
@@ -122,6 +123,38 @@ const withTags = (tags: string, mod = 1_760_000_000) => {
   linked.notes[0] = { ...linked.notes[0]!, tags, mod };
   return linked;
 };
+
+/** The preset a deck gets when linked with these options. */
+const linkedPreset = (json: object) => {
+  const linked = source();
+  linked.decks = linked.decks.map((d) => ({ ...d, options: JSON.stringify(json) }));
+  const c = new Collection(environment());
+  c.linkAnkiDroid(linked);
+  return c.snapshot().presets[0]!.fields;
+};
+
+test("a linked deck starts with its AnkiDroid options' display order", () => {
+  expect(
+    linkedPreset({
+      newGatherPriority: 5,
+      newSortOrder: 3,
+      newMix: 2,
+      interdayLearningMix: 1,
+      reviewOrder: 12,
+    }),
+  ).toMatchObject({
+    newGatherPriority: { value: "deckThenRandomNotes" },
+    newSortOrder: { value: "randomNoteThenTemplate" },
+    newMix: { value: "before" },
+    interdayLearningMix: { value: "after" },
+    reviewOrder: { value: "relativeOverdueness" },
+  });
+  // Older options and numbers from a later Anki take Anki's defaults.
+  expect(linkedPreset({ newMix: 99 })).toMatchObject({
+    newGatherPriority: { value: "deck" },
+    newMix: { value: "mix" },
+  });
+});
 
 test("linking takes AnkiDroid's mark; afterwards a pull keeps the app's", () => {
   const c = new Collection(environment());
@@ -539,6 +572,171 @@ test("linking takes FSRS-6 parameters and pulling preserves the app's options", 
   const preset = c.snapshot().presets.find((p) => p.id === presetId)!;
   expect(preset.fields.newPerDay.value).toBe(7);
   expect(preset.fields.fsrsParameters.value).toEqual(DEFAULT_FSRS_PARAMETERS);
+});
+
+/** Every option the app has, as Anki's schema-11 JSON holds it, none at its default. */
+const allOptions = {
+  id: 44,
+  name: "Kanji options",
+  new: { perDay: 42, delays: [3, 15], order: 0, bury: true },
+  rev: { perDay: 177, bury: true, maxIvl: 400 },
+  lapse: { delays: [5, 20], leechFails: 4, leechAction: 0 },
+  newCardsIgnoreReviewLimit: true,
+  applyAllParentLimits: true,
+  newGatherPriority: 5,
+  newSortOrder: 3,
+  newMix: 2,
+  interdayLearningMix: 1,
+  reviewOrder: 12,
+  buryInterdayLearning: true,
+  autoplay: false,
+  replayq: false,
+  maxTaken: 45,
+  timer: 1,
+  stopTimerOnAnswer: true,
+  secondsToShowQuestion: 2.5,
+  secondsToShowAnswer: 4,
+  waitForAudio: false,
+  questionAction: 1,
+  answerAction: 2,
+  easyDaysPercentages: [1, 1, 0.5, 1, 1, 0, 0],
+  desiredRetention: 0.85,
+  fsrsParams6: Array.from({ length: 21 }, (_, i) => i / 10),
+};
+/** The same options, as the app stores them. */
+const allOptionsRead = {
+  name: "Kanji options",
+  newPerDay: 42,
+  learningSteps: [3, 15],
+  insertionOrder: "random",
+  buryNew: true,
+  reviewsPerDay: 177,
+  buryReviews: true,
+  maximumInterval: 400,
+  relearningSteps: [5, 20],
+  leechThreshold: 4,
+  leechAction: "suspend",
+  newIgnoreReviewLimit: true,
+  applyAllParentLimits: true,
+  newGatherPriority: "deckThenRandomNotes",
+  newSortOrder: "randomNoteThenTemplate",
+  newMix: "before",
+  interdayLearningMix: "after",
+  reviewOrder: "relativeOverdueness",
+  buryLearning: true,
+  dontPlayAutomatically: true,
+  skipQuestionWhenReplayingAnswer: true,
+  maximumAnswerSeconds: 45,
+  showTimer: true,
+  stopTimerOnAnswer: true,
+  secondsToShowQuestion: 2.5,
+  secondsToShowAnswer: 4,
+  waitForAudio: false,
+  questionAction: "showReminder",
+  answerAction: "good",
+  easyDays: ["normal", "normal", "reduced", "normal", "normal", "minimum", "minimum"],
+  desiredRetention: 0.85,
+  fsrsParameters: allOptions.fsrsParams6,
+};
+const ankiDefaults = {
+  name: "Default",
+  newPerDay: 20,
+  learningSteps: [1, 10],
+  insertionOrder: "sequential",
+  buryNew: false,
+  reviewsPerDay: 200,
+  buryReviews: false,
+  maximumInterval: 36500,
+  relearningSteps: [10],
+  leechThreshold: 8,
+  leechAction: "tagOnly",
+  newIgnoreReviewLimit: false,
+  applyAllParentLimits: false,
+  newGatherPriority: "deck",
+  newSortOrder: "template",
+  newMix: "mix",
+  interdayLearningMix: "mix",
+  reviewOrder: "day",
+  buryLearning: false,
+  dontPlayAutomatically: false,
+  skipQuestionWhenReplayingAnswer: false,
+  maximumAnswerSeconds: 60,
+  showTimer: false,
+  stopTimerOnAnswer: false,
+  secondsToShowQuestion: 0,
+  secondsToShowAnswer: 0,
+  waitForAudio: true,
+  questionAction: "showAnswer",
+  answerAction: "bury",
+  easyDays: Array.from({ length: 7 }, () => "normal"),
+  desiredRetention: 0.9,
+  fsrsParameters: DEFAULT_FSRS_PARAMETERS,
+};
+
+test("presetFromOptions reads every option the app has from AnkiDroid's JSON", () => {
+  expect(presetFromOptions(JSON.stringify(allOptions))).toEqual({ ankiId: 44, ...allOptionsRead });
+});
+
+test("options AnkiDroid's JSON lacks take Anki's defaults", () => {
+  expect(presetFromOptions("{}")).toEqual({ ankiId: 1, ...ankiDefaults });
+  expect(presetFromOptions("not json")).toEqual({ ankiId: 1, ...ankiDefaults });
+});
+
+test("a value the app could not save takes Anki's default, leaving the rest", () => {
+  const read = presetFromOptions(
+    JSON.stringify({
+      ...allOptions,
+      new: { ...allOptions.new, perDay: -3, delays: [1, 0], order: "random" },
+      rev: { ...allOptions.rev, perDay: 1.5, maxIvl: 0 },
+      lapse: { delays: "10", leechFails: -1, leechAction: 7 },
+      desiredRetention: 1.5,
+      maxTaken: "45",
+      secondsToShowAnswer: -1,
+      fsrsParams6: [1, 2, 3],
+    }),
+  );
+  expect(read).toEqual({
+    ankiId: 44,
+    ...allOptionsRead,
+    newPerDay: 20,
+    learningSteps: [1, 10],
+    insertionOrder: "sequential",
+    reviewsPerDay: 200,
+    maximumInterval: 36500,
+    relearningSteps: [10],
+    leechThreshold: 8,
+    leechAction: "tagOnly",
+    desiredRetention: 0.9,
+    maximumAnswerSeconds: 60,
+    secondsToShowAnswer: 0,
+    fsrsParameters: DEFAULT_FSRS_PARAMETERS,
+  });
+});
+
+test("linking takes every option from AnkiDroid and a pull leaves them all alone", () => {
+  const c = new Collection(environment());
+  const ad = source();
+  ad.decks.forEach((d) => {
+    d.options = JSON.stringify(allOptions);
+  });
+  const { deckId } = c.linkAnkiDroid(ad);
+  const values = () => {
+    const state = c.snapshot();
+    const id = state.decks.find((d) => d.id === deckId)!.fields.presetId.value;
+    const preset = state.presets.find((p) => p.id === id)!;
+    return Object.fromEntries(Object.entries(preset.fields).map(([key, f]) => [key, f.value]));
+  };
+  expect(values()).toEqual(allOptionsRead);
+
+  ad.decks.forEach((d) => {
+    d.options = JSON.stringify({
+      ...allOptions,
+      new: { ...allOptions.new, perDay: 3 },
+      maxTaken: 9,
+    });
+  });
+  c.linkAnkiDroid(ad);
+  expect(values()).toEqual(allOptionsRead);
 });
 
 test("AnkiDroid scheduler detection uses reviewed cards and leaves new-only decks unknown", () => {

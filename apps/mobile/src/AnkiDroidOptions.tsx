@@ -56,13 +56,11 @@ export function AnkiDroidOptions({
       </Text>
       {owned && (
         <>
-          <Text style={regular} className="text-body text-attention">
-            {scheduler === "sm2"
-              ? t("ankiDroidSm2")
-              : scheduler === "unknown"
-                ? t("ankiDroidUnknown")
-                : null}
-          </Text>
+          {scheduler !== "fsrs" && (
+            <Text style={regular} className="text-body text-attention">
+              {t(scheduler === "sm2" ? "ankiDroidSm2" : "ankiDroidUnknown")}
+            </Text>
+          )}
           <Text style={regular} className="text-body text-muted-foreground">
             {t("bringAnkiDroidHint")}
           </Text>

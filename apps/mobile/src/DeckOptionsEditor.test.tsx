@@ -1,7 +1,38 @@
 import { Collection, type PresetOptions } from "@app/core";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native/pure";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native/pure";
 import { expect, test, vi } from "vite-plus/test";
 import { DeckOptionsEditor } from "./DeckOptionsEditor.tsx";
+
+test("scope edits stay dirty when a number returns to its saved value", async () => {
+  const c = new Collection({ deviceId: "phone", now: Date.now, random: () => new Uint8Array(16) });
+  const deck = c.createDeck("Limits");
+  const dirty = vi.fn<(dirty: boolean) => void>();
+  const save = vi.fn<(options: PresetOptions, limits?: object) => void>();
+  await render(
+    <DeckOptionsEditor
+      preset={c.snapshot().presets[0]!}
+      deck={deck}
+      deckCount={1}
+      locale="en"
+      busy={false}
+      onDirtyChange={dirty}
+      onSave={save}
+      onCancel={() => {}}
+    />,
+  );
+  await fireEvent.press(screen.getAllByRole("radio", { name: "Today only" })[0]!);
+  await fireEvent.changeText(screen.getByLabelText("New cards per day"), "3");
+  await fireEvent.changeText(screen.getByLabelText("New cards per day"), "20");
+  expect(dirty).toHaveBeenLastCalledWith(true);
+  await fireEvent(screen.getByLabelText("New cards ignore the review limit"), "valueChange", true);
+  await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({ newPerDay: 20, newIgnoreReviewLimit: true }),
+      { deckId: deck.id, new: "today", review: "preset" },
+    ),
+  );
+});
 
 test("audio and timer controls save the edited preset", async () => {
   const c = new Collection({
@@ -39,6 +70,50 @@ test("audio and timer controls save the edited preset", async () => {
         showTimer: true,
         stopTimerOnAnswer: true,
         maximumAnswerSeconds: 17,
+      }),
+    ),
+  );
+});
+
+test("auto advance controls save the edited preset", async () => {
+  const c = new Collection({
+    deviceId: "phone",
+    now: () => 1000,
+    random: () => new Uint8Array(16),
+  });
+  c.createDeck("Words");
+  const save = vi.fn<(options: PresetOptions) => void>();
+  await render(
+    <DeckOptionsEditor
+      preset={c.snapshot().presets[0]!}
+      deckCount={1}
+      locale="en"
+      busy={false}
+      onSave={save}
+      onCancel={() => {}}
+    />,
+  );
+  await fireEvent.changeText(
+    screen.getByLabelText("Seconds to show question (0 turns it off)"),
+    "2.5",
+  );
+  await fireEvent.changeText(screen.getByLabelText("Seconds to show answer (0 turns it off)"), "4");
+  await fireEvent(screen.getByLabelText("Wait for audio"), "valueChange", false);
+  await fireEvent.press(
+    within(screen.getByLabelText("Question action")).getByRole("radio", { name: "Show reminder" }),
+  );
+  await fireEvent.press(
+    within(screen.getByLabelText("Answer action")).getByRole("radio", { name: "Answer Hard" }),
+  );
+  await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secondsToShowQuestion: 2.5,
+        secondsToShowAnswer: 4,
+        waitForAudio: false,
+        questionAction: "showReminder",
+        answerAction: "hard",
       }),
     ),
   );

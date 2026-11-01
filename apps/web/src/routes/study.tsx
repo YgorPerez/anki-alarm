@@ -1,5 +1,6 @@
-import { deckPreset } from "@app/core";
+import { autoAdvanceStep, deckPreset } from "@app/core";
 import { StudyAudio } from "#/ui/study-audio.tsx";
+import { useAutoAdvance } from "#/ui/use-auto-advance.ts";
 import { useStudyTimer } from "#/ui/use-study-timer.ts";
 import { editingCopy } from "#/editing-copy.ts";
 import { nextStudyCard, type Grade, type LogEntry } from "@app/core";
@@ -74,7 +75,14 @@ function Study() {
               side={revealed ? "back" : "front"}
               preset={session.preset}
               locale={lang}
+              onPlaying={session.audioPlaying}
+              onFinished={session.audioFinished}
             />
+          )}
+          {session.reminder && (
+            <p role="status" className="text-label text-attention">
+              {editingCopy(lang)(revealed ? "answerReminder" : "questionReminder")}
+            </p>
           )}
           <AnswerControls t={t} session={session} />
         </>
@@ -153,8 +161,12 @@ interface SessionState {
   status: "ready" | "saving" | "failed";
 }
 
+const GRADE_ACTIONS = { again: 1, hard: 2, good: 3 } as const;
+
 function useStudySession(deckId: string) {
   const client = useQueryClient();
+  /** The card and side whose audio has ended. */
+  const [audioFinishedOn, setAudioFinishedOn] = useState<string>();
   const [state, setState] = useState<SessionState>({
     revealedId: undefined,
     answers: [],
@@ -185,26 +197,49 @@ function useStudySession(deckId: string) {
     }
     lock.current = false;
   };
+  const reveal = () => {
+    timer.stop();
+    setState((s) => ({ ...s, revealedId: cardId }));
+  };
+  const answer = (grade: Grade) =>
+    write(async () => {
+      if (!cardId || !revealed) return {};
+      const entry = await webRequest("answerCard", cardId, grade, timer.duration());
+      return { answers: [...state.answers, entry], undone: undefined };
+    });
+  const side = cardId && `${cardId}-${revealed}`;
+  const autoAdvance = useAutoAdvance({
+    side,
+    step: preset && autoAdvanceStep(preset, revealed ? "back" : "front"),
+    // A failed write keeps the card and waits for the user, rather than trying again by itself.
+    held: state.status !== "ready",
+    audioFinished: Boolean(side && audioFinishedOn === side),
+    run: (action) => {
+      if (!cardId) return;
+      if (action === "showAnswer") reveal();
+      else if (action === "bury")
+        void write(async () => {
+          await webRequest("buryCard", cardId);
+          return { undone: undefined };
+        });
+      else void answer(GRADE_ACTIONS[action]);
+    },
+  });
   return {
     query,
     preset,
     timer,
+    reminder: autoAdvance.reminder,
+    audioPlaying: () => setAudioFinishedOn(undefined),
+    audioFinished: () => setAudioFinishedOn(side),
     card: next?.card,
     note: next?.note,
     type: next?.type,
     busy: state.status === "saving",
     error: state.status === "failed",
     revealed,
-    reveal: () => {
-      timer.stop();
-      setState((s) => ({ ...s, revealedId: cardId }));
-    },
-    answer: (grade: Grade) =>
-      write(async () => {
-        if (!cardId || !revealed) return {};
-        const entry = await webRequest("answerCard", cardId, grade, timer.duration());
-        return { answers: [...state.answers, entry], undone: undefined };
-      }),
+    reveal,
+    answer,
     canUndo: state.answers.length > 0,
     undo: () =>
       write(async () => {

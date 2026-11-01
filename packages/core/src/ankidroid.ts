@@ -1,5 +1,8 @@
 import { default_w, State } from "ts-fsrs";
-import type { Card, CollectionState, PresetOptions } from "./collection.ts";
+import { ankiAnswerAction, ankiQuestionAction, ankiSeconds } from "./auto-advance.ts";
+import { validOption, type Card, type CollectionState, type PresetOptions } from "./collection.ts";
+import { displayOrderFromAnki } from "./display-order.ts";
+import { easyDaysFromAnki } from "./easy-days.ts";
 import { importId } from "./ids.ts";
 import { isBuried, type LogEntry } from "./study.ts";
 
@@ -117,7 +120,26 @@ export interface ImportedPreset extends PresetOptions {
 
 const number = (value: unknown, fallback: number) =>
   typeof value === "number" && Number.isFinite(value) ? value : fallback;
-/** Reads a deck's schema-11 options JSON; missing or broken keys take the app's defaults. */
+// The value when the app could save it as this option: the rule `updatePreset` applies.
+const numberOption = (
+  key:
+    | "newPerDay"
+    | "reviewsPerDay"
+    | "leechThreshold"
+    | "maximumInterval"
+    | "desiredRetention"
+    | "maximumAnswerSeconds",
+  value: unknown,
+  fallback: number,
+) => (typeof value === "number" && validOption[key](value) ? value : fallback);
+const isNumbers = (value: unknown): value is number[] =>
+  Array.isArray(value) && value.every((n) => typeof n === "number");
+const listOption = (
+  key: "learningSteps" | "relearningSteps" | "fsrsParameters",
+  value: unknown,
+  fallback: number[],
+) => (isNumbers(value) && validOption[key](value) ? value : fallback);
+/** Reads a deck's schema-11 options JSON; missing or broken keys take Anki's defaults. */
 export function presetFromOptions(json: string): ImportedPreset {
   let raw: Record<string, unknown> = {};
   try {
@@ -130,31 +152,43 @@ export function presetFromOptions(json: string): ImportedPreset {
     const value = raw[key];
     return value && typeof value === "object" ? { ...value } : {};
   };
-  const delays = section("new")["delays"];
+  const [fresh, rev, lapse] = [section("new"), section("rev"), section("lapse")];
+  const percentages = raw["easyDaysPercentages"];
   return {
     ankiId: number(raw["id"], 1),
+    name:
+      typeof raw["name"] === "string" && validOption.name(raw["name"]) ? raw["name"] : "Default",
+    newPerDay: numberOption("newPerDay", fresh["perDay"], 20),
+    reviewsPerDay: numberOption("reviewsPerDay", rev["perDay"], 200),
+    // Anki keeps these two for the whole collection, so AnkiDroid's JSON may not have them.
+    newIgnoreReviewLimit: raw["newCardsIgnoreReviewLimit"] === true,
+    applyAllParentLimits: raw["applyAllParentLimits"] === true,
+    learningSteps: listOption("learningSteps", fresh["delays"], [1, 10]),
+    insertionOrder: fresh["order"] === 0 ? "random" : "sequential",
+    relearningSteps: listOption("relearningSteps", lapse["delays"], [10]),
+    leechThreshold: numberOption("leechThreshold", lapse["leechFails"], 8),
+    leechAction: lapse["leechAction"] === 0 ? "suspend" : "tagOnly",
+    maximumInterval: numberOption("maximumInterval", rev["maxIvl"], 36500),
+    ...displayOrderFromAnki(raw),
+    desiredRetention: numberOption("desiredRetention", raw["desiredRetention"], 0.9),
+    fsrsParameters: listOption("fsrsParameters", raw["fsrsParams6"], [...default_w]),
+    buryNew: fresh["bury"] === true,
+    buryReviews: rev["bury"] === true,
+    buryLearning: raw["buryInterdayLearning"] === true,
     dontPlayAutomatically: raw["autoplay"] === false,
     skipQuestionWhenReplayingAnswer: raw["replayq"] === false,
-    maximumAnswerSeconds: number(raw["maxTaken"], 60),
+    maximumAnswerSeconds: numberOption("maximumAnswerSeconds", raw["maxTaken"], 60),
     showTimer: raw["timer"] === 1,
     stopTimerOnAnswer: raw["stopTimerOnAnswer"] === true,
-    buryNew: section("new")["bury"] === true,
-    buryReviews: section("rev")["bury"] === true,
-    buryLearning: raw["buryInterdayLearning"] === true,
-    name: typeof raw["name"] === "string" && raw["name"] ? raw["name"] : "Default",
-    newPerDay: number(section("new")["perDay"], 20),
-    reviewsPerDay: number(section("rev")["perDay"], 200),
-    desiredRetention: number(raw["desiredRetention"], 0.9),
-    fsrsParameters:
-      Array.isArray(raw["fsrsParams6"]) &&
-      raw["fsrsParams6"].length === 21 &&
-      raw["fsrsParams6"].every((n) => typeof n === "number" && Number.isFinite(n))
-        ? raw["fsrsParams6"]
-        : [...default_w],
-    learningSteps:
-      Array.isArray(delays) && delays.every((d) => typeof d === "number" && d > 0)
-        ? delays
-        : [1, 10],
+    secondsToShowQuestion: ankiSeconds(raw["secondsToShowQuestion"]),
+    secondsToShowAnswer: ankiSeconds(raw["secondsToShowAnswer"]),
+    // Older versions don't have it; Anki's default is on.
+    waitForAudio: raw["waitForAudio"] !== false,
+    questionAction: ankiQuestionAction(raw["questionAction"]),
+    answerAction: ankiAnswerAction(raw["answerAction"]),
+    easyDays: easyDaysFromAnki(
+      Array.isArray(percentages) ? percentages.filter((p) => typeof p === "number") : [],
+    ),
   };
 }
 

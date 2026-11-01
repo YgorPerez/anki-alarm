@@ -6,7 +6,7 @@ import {
   uuid7,
   deckPreset,
   schedulingOptions,
-  studyQueue,
+  canStudyCard,
   checkLogEntry,
   dueInDays,
   type LogEntry,
@@ -287,7 +287,9 @@ const open = (driver: SQLiteConnection, media: MediaFiles) =>
               const state = c.snapshot();
               const built = build(state, log, { id: uuid7(at, driver.random()), at });
               checkLogEntry(state, log, built);
-              return c.applySiblingBurying(built, log);
+              const entry = c.applySiblingBurying(built, log);
+              c.applyReviewEffects(log, entry);
+              return entry;
             },
             (entry) =>
               Effect.gen(function* () {
@@ -375,20 +377,14 @@ const open = (driver: SQLiteConnection, media: MediaFiles) =>
           if (![1, 2, 3, 4].includes(grade) || !Number.isFinite(durationMs) || durationMs < 0)
             throw new Error("Invalid answer");
           const card = state.cards.find((c) => c.id === cardId);
-          if (
-            !card ||
-            (ringId === undefined &&
-              !studyQueue(state, log, card.fields.deckId.value, base.at).some(
-                (c) => c.card.id === cardId,
-              ))
-          )
+          if (!card || (ringId === undefined && !canStudyCard(state, log, cardId, base.at)))
             throw new Error("Card is not available for study");
           const deck = state.decks.find((d) => d.id === card.fields.deckId.value);
           const preset = deck && deckPreset(state, deck);
           if (!preset) throw new Error("Deck preset missing");
           return {
             ...base,
-            options: schedulingOptions(preset),
+            options: schedulingOptions(preset, base.at),
             kind: "review",
             cardId,
             grade,

@@ -369,6 +369,68 @@ test("Basic notes stored before note fields had their own list are upgraded", ()
 });
 
 const utf8 = (s: string) => [...new TextEncoder().encode(s)];
+/** Reads a fixture after `change` edits its collection, for options the fixtures leave at default. */
+function changed(zip: Record<string, Uint8Array>, change: (db: DatabaseSync) => void) {
+  const base = host(zip);
+  return {
+    ...base,
+    openSqlite: async (bytes: Uint8Array) => {
+      const path = join(work, `${opened++}.db`);
+      writeFileSync(path, bytes);
+      const db = new DatabaseSync(path);
+      change(db);
+      db.close();
+      return base.openSqlite(readFileSync(path));
+    },
+  };
+}
+const displayOrder = (source: AnkiPackage) => source.presets[0]!.displayOrder;
+const CHOSEN = {
+  newGatherPriority: "deckThenRandomNotes",
+  newSortOrder: "randomNoteThenTemplate",
+  newMix: "before",
+  interdayLearningMix: "after",
+  reviewOrder: "relativeOverdueness",
+};
+
+test("imports take the five display order options, or Anki's defaults when untouched", async () => {
+  const packages = await Promise.all(["legacy1.apkg", "legacy2.apkg", "latest.apkg"].map(read));
+  for (const { package: source } of packages)
+    expect(displayOrder(source)).toEqual({
+      newGatherPriority: "deck",
+      newSortOrder: "template",
+      newMix: "mix",
+      interdayLearningMix: "mix",
+      reviewOrder: "day",
+    });
+  // Schema 11 keeps them as JSON keys.
+  const legacy = await readApkg(
+    changed(fixture("legacy2.apkg"), (db) => {
+      const [col] = db.prepare("SELECT dconf FROM col").all();
+      const dconf = JSON.parse(String(col!.dconf));
+      for (const preset of Object.values<object>(dconf))
+        Object.assign(preset, {
+          newGatherPriority: 5,
+          newSortOrder: 3,
+          newMix: 2,
+          interdayLearningMix: 1,
+          reviewOrder: 12,
+        });
+      db.prepare("UPDATE col SET dconf = ?").run(JSON.stringify(dconf));
+    }),
+  );
+  expect(displayOrder(legacy.package)).toEqual(CHOSEN);
+  // Schema 18 keeps them in the protobuf config: new_mix = 30 through new_card_gather_priority = 34.
+  const latest = await readApkg(
+    changed(fixture("latest.apkg"), (db) => {
+      db.exec(
+        "UPDATE deck_config SET config = unhex(hex(config) || 'F00102F8010180020388020C900205')",
+      );
+    }),
+  );
+  expect(displayOrder(latest.package)).toEqual(CHOSEN);
+});
+
 /** A protobuf MediaEntry: name = 1, size = 2, sha1 = 3, legacy_zip_filename = 255. */
 const mediaEntry = (name: string, legacy?: number) => {
   const bytes = [0x0a, utf8(name).length, ...utf8(name), 0x10, 0x05, 0x1a, 0x01, 0xff];
@@ -389,6 +451,50 @@ test("media alone are read without the collection, in protobuf order for Latest"
   await expect(readApkgMedia(host({ "notes.txt": new Uint8Array() }))).rejects.toThrow(
     "collection missing",
   );
+});
+
+test("current Anki protobuf decks and config import limits and limit rules", async () => {
+  const base = host(fixture("latest.apkg"));
+  const created = new Date(2026, 0, 1, 4);
+  const { package: source } = await readApkg({
+    ...base,
+    openSqlite: async (bytes) => {
+      const db = await base.openSqlite(bytes);
+      return {
+        ...db,
+        all: async (query) => {
+          if (query.includes("crt FROM col")) return [{ crt: created.getTime() / 1000 }];
+          if (query.includes("FROM config WHERE key IN"))
+            return [
+              { key: "newCardsIgnoreReviewLimit", val: new Uint8Array(utf8("true")) },
+              { key: "applyAllParentLimits", val: new Uint8Array(utf8("false")) },
+            ];
+          const rows = await db.all(query);
+          if (!query.includes("FROM decks")) return rows;
+          return rows.map((row) => {
+            if (!(row.kind instanceof Uint8Array) || row.kind[0] !== 0x0a || row.kind[1]! > 100)
+              throw new Error("Expected a short normal deck");
+            // review_limit = 6, new_limit = 7, review_limit_today = 8, new_limit_today = 9.
+            const limits = [0x30, 50, 0x38, 5, 0x42, 4, 8, 20, 16, 3, 0x4a, 4, 8, 2, 16, 3];
+            const normal = [...row.kind.subarray(2), ...limits];
+            row.kind = new Uint8Array([0x0a, normal.length, ...normal]);
+            return row;
+          });
+        },
+      };
+    },
+  });
+  expect(source.decks.length).toBeGreaterThan(0);
+  const day = new Date(2026, 0, 4, 4).getTime();
+  for (const deck of source.decks)
+    expect(deck).toMatchObject({
+      newLimit: 5,
+      reviewLimit: 50,
+      newLimitToday: { limit: 2, day },
+      reviewLimitToday: { limit: 20, day },
+    });
+  for (const preset of source.presets)
+    expect(preset).toMatchObject({ newIgnoreReviewLimit: true, applyAllParentLimits: false });
 });
 
 test("current Anki protobuf presets import all three sibling burying options", async () => {
@@ -414,4 +520,111 @@ test("current Anki protobuf presets import all three sibling burying options", a
   expect(source.presets.length).toBeGreaterThan(0);
   for (const preset of source.presets)
     expect([preset.buryNew, preset.buryReviews, preset.buryLearning]).toEqual([true, true, true]);
+});
+
+const float32 = (values: number[]) => new Uint8Array(new Float32Array(values).buffer);
+test("the current format brings a preset's easy days, Monday first", async () => {
+  // Field 4, seven packed floats: what Anki 26.09 writes for its all-normal default.
+  const normal = [0x22, 0x1c, ...float32([1, 1, 1, 1, 1, 1, 1])];
+  const week = [0x22, 0x1c, ...float32([1, 1, 1, 1, 1, 0.5, 0])];
+  const base = host(fixture("latest.apkg"));
+  const { package: source } = await readApkg({
+    ...base,
+    openSqlite: async (bytes) => {
+      const db = await base.openSqlite(bytes);
+      return {
+        ...db,
+        all: async (query) => {
+          const rows = await db.all(query);
+          if (!query.includes("deck_config")) return rows;
+          for (const row of rows) {
+            const { config } = row;
+            if (!(config instanceof Uint8Array)) throw new Error("No config blob");
+            const copy = Buffer.from(config);
+            const at = copy.indexOf(Buffer.from(normal));
+            expect(at).toBeGreaterThanOrEqual(0);
+            copy.set(week, at);
+            row["config"] = copy;
+          }
+          return rows;
+        },
+      };
+    },
+  });
+  const collection = new Collection(environment());
+  collection.importAnki(source);
+  expect(collection.snapshot().presets[0]!.fields.easyDays.value).toEqual([
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "reduced",
+    "minimum",
+  ]);
+});
+
+test("packages without easy days import an all-normal week", async () => {
+  const collection = new Collection(environment());
+  collection.importAnki((await read("legacy1.apkg")).package);
+  expect(new Set(collection.snapshot().presets[0]!.fields.easyDays.value)).toEqual(
+    new Set(["normal"]),
+  );
+});
+
+test("current Anki protobuf presets import auto advance", async () => {
+  const base = host(fixture("latest.apkg"));
+  const { package: source } = await readApkg({
+    ...base,
+    openSqlite: async (bytes) => {
+      const db = await base.openSqlite(bytes);
+      return {
+        ...db,
+        all: async (query) => {
+          const rows = await db.all(query);
+          if (!query.includes("FROM deck_config")) return rows;
+          return rows.map((row) => {
+            if (!(row.config instanceof Uint8Array)) throw new Error("Expected protobuf bytes");
+            // Anki's deck_config.proto: seconds_to_show_question (41) = 2.5,
+            // seconds_to_show_answer (42) = 1.5, question_action (36) = SHOW_REMINDER,
+            // answer_action (43) = ANSWER_HARD, wait_for_audio (44) = true.
+            row.config = new Uint8Array([
+              ...row.config,
+              0xcd,
+              0x02,
+              0x00,
+              0x00,
+              0x20,
+              0x40,
+              0xd5,
+              0x02,
+              0x00,
+              0x00,
+              0xc0,
+              0x3f,
+              0xa0,
+              0x02,
+              0x01,
+              0xd8,
+              0x02,
+              0x03,
+              0xe0,
+              0x02,
+              0x01,
+            ]);
+            return row;
+          });
+        },
+      };
+    },
+  });
+  expect(source.presets.length).toBeGreaterThan(0);
+  for (const preset of source.presets)
+    expect(preset).toMatchObject({
+      secondsToShowQuestion: 2.5,
+      secondsToShowAnswer: 1.5,
+      questionAction: "showReminder",
+      answerAction: "hard",
+      waitForAudio: true,
+    });
 });

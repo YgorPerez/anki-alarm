@@ -140,6 +140,10 @@ test("deck options reject values FSRS or the daily limits can't use", () => {
     { name: " " },
   ])
     expect(() => collection.updatePreset(id, patch)).toThrow("Invalid deck options");
+  // A display order takes only Anki's choices, even from a client that skipped its form.
+  const unknownChoice = JSON.parse('"sideways"');
+  expect(() => collection.updatePreset(id, { newMix: unknownChoice })).toThrow("Invalid");
+  expect(() => collection.updatePreset(id, { reviewOrder: unknownChoice })).toThrow("Invalid");
   expect(() => collection.updatePreset("missing", {})).toThrow("Invalid deck options");
   // Forms check each option with the same rule.
   expect(validOption.desiredRetention(0.5)).toBe(false);
@@ -219,6 +223,8 @@ test("deck options forms read what the user types with Core's rules", () => {
   const texts = presetTexts(preset, "pt-BR");
   expect(texts).toMatchObject({ newPerDay: "20", desiredRetention: "0,9", learningSteps: "1 10" });
   expect(readPresetTexts(texts)).toEqual({
+    newIgnoreReviewLimit: false,
+    applyAllParentLimits: false,
     buryNew: false,
     buryReviews: false,
     buryLearning: false,
@@ -227,14 +233,33 @@ test("deck options forms read what the user types with Core's rules", () => {
     maximumAnswerSeconds: 60,
     showTimer: false,
     stopTimerOnAnswer: false,
+    secondsToShowQuestion: 0,
+    secondsToShowAnswer: 0,
+    waitForAudio: true,
+    questionAction: "showAnswer",
+    answerAction: "bury",
     name: "Default",
     newPerDay: 20,
     reviewsPerDay: 200,
     desiredRetention: 0.9,
     learningSteps: [1, 10],
+    relearningSteps: [10],
+    insertionOrder: "sequential",
+    leechThreshold: 8,
+    leechAction: "tagOnly",
+    maximumInterval: 36500,
     fsrsParameters: preset.fields.fsrsParameters.value,
+    easyDays: ["normal", "normal", "normal", "normal", "normal", "normal", "normal"],
+    newGatherPriority: "deck",
+    newSortOrder: "template",
+    newMix: "mix",
+    interdayLearningMix: "mix",
+    reviewOrder: "day",
   });
+  expect(readPresetTexts({ ...texts, reviewOrder: "random" })?.reviewOrder).toBe("random");
+  expect(readPresetTexts({ ...texts, reviewOrder: "sideways" })).toBeUndefined();
   expect(presetTexts(preset, "en").desiredRetention).toBe("0.9");
+  expect(texts.easyDays).toBe("normal normal normal normal normal normal normal");
   expect(readPresetTexts({ ...texts, learningSteps: "", name: " Mine " })).toMatchObject({
     name: "Mine",
     learningSteps: [],
@@ -243,7 +268,15 @@ test("deck options forms read what the user types with Core's rules", () => {
     ["newPerDay", "1.5"],
     ["desiredRetention", "0,5"],
     ["learningSteps", "1 x"],
+    ["relearningSteps", "0"],
+    ["leechThreshold", "-1"],
+    ["leechAction", "invalid"],
+    ["insertionOrder", "invalid"],
+    ["maximumInterval", "0"],
+    ["maximumInterval", "36501"],
     ["fsrsParameters", "1, 2"],
+    ["easyDays", "normal normal"],
+    ["easyDays", "normal normal normal normal normal normal sometimes"],
     ["name", " "],
   ] as const) {
     expect(validPresetText[key](text)).toBe(false);

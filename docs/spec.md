@@ -199,8 +199,9 @@ AnkiDroid decks become the app's own decks. The app schedules them with FSRS lik
   fails it doesn't ask. Within 5 minutes of the last request a tap does neither and says how long
   to wait, across restarts. AnkiDroid reports no result, so the app says only that it asked.
 - A linked deck's options are the app's own after linking and pull never overwrites them. **Bring
-  from AnkiDroid** copies them on request, FSRS parameters included. The API can't write options, so
-  changes here don't reach AnkiDroid.
+  from AnkiDroid** copies them on request, FSRS parameters included, and puts the daily limits back on
+  the preset. Linking reads the same options; one AnkiDroid's JSON lacks takes Anki's default. The API
+  can't write options, so changes here don't reach AnkiDroid.
 - Buries go with sync back too, after the card's answers (an answer would unbury it): each linked
   card still buried in the app is buried in AnkiDroid once, checked by reading its queue back. A
   card already out of AnkiDroid's queue, or gone from it, needs nothing. A bury that ended before
@@ -296,7 +297,8 @@ Default. Defaults match Anki's.
 - **Daily limits:** new cards and reviews per day, each set for the preset, this deck or today only
   ("today" ends at the next study day); new cards ignore the review limit; limits start from the
   parent deck. By default the studied deck's limits apply; with that last option on, each subdeck
-  also keeps to its own.
+  also keeps to its own. Anki keeps those two rules for the whole collection, so `.apkg` import gives
+  them to every imported preset and export writes the exported deck's.
 - **New cards:** learning steps, insertion order.
 - **Lapses:** relearning steps, leech threshold, leech action (suspend or tag only).
 - **Display order:** new card gathering and sort order, new versus reviews, learning versus reviews,
@@ -308,6 +310,15 @@ Default. Defaults match Anki's.
 - **Auto advance:** seconds for the question and answer, wait for audio, question and answer actions.
 - **Easy days:** minimum, reduced or normal for each weekday.
 - **Advanced:** maximum interval.
+
+Easy days follow Anki's FSRS rule within what a fuzz-free, one-card replay can know. An answer that
+would land on a minimum or reduced day moves to the nearest better day in Anki's fuzz range for that
+interval (a normal day beats a reduced one, a reduced one beats a minimum one; the earlier day wins a
+tie). It never moves below Anki's minimum for a card under review, grades stay in order, and
+intervals above 90 days stay put, as in Anki. Anki also weighs how many reviews each day already has;
+replay can't, since it reads one card's log, so every day counts as equally loaded. A review records
+the week and its study day's weekday only when some day isn't normal, so a device in another time
+zone replays it the same.
 
 An alarm session and an awake check use only the options that schedule (steps, retention, parameters,
 maximum interval, easy days, leeches). Timer, auto advance, display order and burying don't apply, and
