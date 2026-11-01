@@ -420,3 +420,55 @@ test("pending answers expose held cards and a stopped run's reason across restar
     close();
   }
 });
+
+import { unlinkedAnkiDroidDeck } from "./ankidroid-offer-fixture.ts";
+
+test("linking offers earlier answers and keeps them out of sync back until accepted", async () => {
+  const { open, close } = openData();
+  const anki = fakeAnkiDroid();
+  try {
+    const data = await open();
+    await run(data.importAnki(unlinkedAnkiDroidDeck()));
+    const cards = (await run(data.collection)).cards;
+    await run(data.answerCard(cards[1]!.id, 1, 8000));
+    await run(data.answerCard(cards[0]!.id, 4, 3000));
+    const deckId = await run(data.linkAnkiDroidDeck(anki.source));
+    expect(await run(data.ankiDroidLinkOffer(deckId))).toBe(2);
+    expect((await run(data.syncBackAnkiDroid(anki.provider))).sent).toBe(0);
+    const reopened = await open();
+    expect(await run(reopened.ankiDroidLinkOffer(deckId))).toBe(2);
+    await run(reopened.resolveAnkiDroidLinkOffer(deckId, true));
+    expect((await run(reopened.syncBackAnkiDroid(anki.provider))).sent).toBe(2);
+    expect(anki.calls.filter((c) => c.startsWith("answer"))).toEqual([
+      "answer 502:0 ease 1 8000ms",
+      "answer 501:0 ease 4 3000ms",
+    ]);
+    await run(reopened.linkAnkiDroidDeck(anki.source));
+    expect(await run(reopened.ankiDroidLinkOffer(deckId))).toBe(0);
+    expect((await run(reopened.syncBackAnkiDroid(anki.provider))).sent).toBe(0);
+  } finally {
+    close();
+  }
+});
+
+test("declining earlier answers survives reopening and leaves later answers sendable", async () => {
+  const { open, close } = openData();
+  const anki = fakeAnkiDroid();
+  try {
+    const data = await open();
+    await run(data.importAnki(unlinkedAnkiDroidDeck()));
+    const card = (await run(data.collection)).cards[0]!;
+    await run(data.answerCard(card.id, 3, 5000));
+    const deckId = await run(data.linkAnkiDroidDeck(anki.source));
+    expect(await run(data.ankiDroidLinkOffer(deckId))).toBe(1);
+    await run(data.resolveAnkiDroidLinkOffer(deckId, false));
+    const reopened = await open();
+    await run(reopened.linkAnkiDroidDeck(anki.source));
+    expect(await run(reopened.ankiDroidLinkOffer(deckId))).toBe(0);
+    expect((await run(reopened.syncBackAnkiDroid(anki.provider))).sent).toBe(0);
+    await run(reopened.answerCard(card.id, 4, 1000, "ring-later"));
+    expect((await run(reopened.syncBackAnkiDroid(anki.provider))).sent).toBe(1);
+  } finally {
+    close();
+  }
+});

@@ -149,6 +149,10 @@ interface Data extends Engine {
    * reviewed card, in one transaction. Linking again updates it. Resolves with the deck's id.
    */
   linkAnkiDroidDeck: (source: AnkiDroidSource) => Effect.Effect<string, Rejectable>;
+  /** Earlier answers awaiting the user's choice, including a linked deck's subdecks. */
+  ankiDroidLinkOffer: (deckId: string) => Effect.Effect<number, StorageFailed>;
+  /** Accept releases these answers for sync back; decline records them as sent locally. */
+  resolveAnkiDroidLinkOffer: (deckId: string, send: boolean) => Effect.Effect<void, StorageFailed>;
   /** This phone's id: the `linkedBy` of the decks it linked. */
   deviceId: string;
   /**
@@ -416,6 +420,8 @@ const open = (driver: SQLiteConnection, media: MediaFiles) =>
         ),
       deviceId: store.deviceId,
       linkAnkiDroidDeck: (source) => Effect.map(ankiDroid.link(source), (link) => link.deckId),
+      ankiDroidLinkOffer: ankiDroid.offer,
+      resolveAnkiDroidLinkOffer: ankiDroid.resolveOffer,
       syncBackAnkiDroid: ankiDroid.syncBack,
       ankiDroidSyncBackStatus: ankiDroid.status,
       setAnkiDroidSyncBackFailure: ankiDroid.setFailure,

@@ -13,14 +13,14 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { AppState, BackHandler, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ankiDroidCopy } from "./ankidroid-copy.ts";
-import { AnkiDroidError, type AnkiDroidApi } from "./ankidroid.ts";
+import { ankiDroidProvider, AnkiDroidError, type AnkiDroidApi } from "./ankidroid.ts";
 import { Button } from "./controls.tsx";
 import { localData } from "./database.ts";
 
 const regular = { fontFamily: "AtkinsonHyperlegible_400Regular" };
 const bold = { fontFamily: "AtkinsonHyperlegible_700Bold" };
 type Translate = ReturnType<typeof ankiDroidCopy>;
-type Linked = { deckId: string; name: string };
+type Linked = { deckId: string; name: string; offered: number };
 type Media = "idle" | "busy" | "error" | number;
 
 /**
@@ -60,7 +60,11 @@ export function AnkiDroidScreen({
     >
       <ScrollView contentContainerClassName="gap-6 p-6">
         <View className="flex-row">
-          <Button label={t("back")} disabled={Boolean(session.linking)} onPress={onExit} />
+          <Button
+            label={t("back")}
+            disabled={Boolean(session.linking) || session.deciding}
+            onPress={onExit}
+          />
         </View>
         <Text accessibilityRole="header" style={bold} className="text-title text-foreground">
           {t("title")}
@@ -84,15 +88,49 @@ function Body({
   onOpen: (deckId: string) => void;
 }) {
   const { linked, view, refresh } = session;
+  if (linked?.offered)
+    return (
+      <>
+        <Text style={regular} className="text-body text-foreground">
+          {t("offer", { count: String(linked.offered) })}
+        </Text>
+        <Text style={regular} className="text-body text-muted-foreground">
+          {t("syncBackNote")}
+        </Text>
+        {session.offerError && (
+          <Text accessibilityRole="alert" className="text-body text-foreground">
+            {t("offerError")}
+          </Text>
+        )}
+        <Button
+          label={t("syncBack")}
+          primary
+          disabled={session.deciding}
+          onPress={() => void session.decide(true)}
+        />
+        <Button
+          label={t("declineOffer")}
+          disabled={session.deciding}
+          onPress={() => void session.decide(false)}
+        />
+      </>
+    );
   if (linked)
     return (
-      <LinkedDeck
-        t={t}
-        linked={linked}
-        media={session.media}
-        onPick={() => void session.importMedia()}
-        onOpen={() => onOpen(linked.deckId)}
-      />
+      <>
+        {session.sendError && (
+          <Text accessibilityRole="alert" className="text-body text-foreground">
+            {t("syncBackError")}
+          </Text>
+        )}
+        <LinkedDeck
+          t={t}
+          linked={linked}
+          media={session.media}
+          onPick={() => void session.importMedia()}
+          onOpen={() => onOpen(linked.deckId)}
+        />
+      </>
     );
   switch (view) {
     case "permission":
@@ -151,6 +189,9 @@ function useLinkSession(ankiDroid: AnkiDroidApi) {
   const [linking, setLinking] = useState<string>();
   const [linked, setLinked] = useState<Linked>();
   const [linkError, setLinkError] = useState<AnkiDroidError["reason"] | "save">();
+  const [deciding, setDeciding] = useState(false);
+  const [offerError, setOfferError] = useState(false);
+  const [sendError, setSendError] = useState(false);
   const [media, setMedia] = useState<Media>("idle");
   const busy = useRef(false);
 
@@ -175,19 +216,49 @@ function useLinkSession(ankiDroid: AnkiDroidApi) {
         ankiDroid.readDeck(deck.id).pipe(
           Effect.mapError((error) => error.reason),
           Effect.flatMap((source) =>
-            localData((data) => data.linkAnkiDroidDeck(source)).pipe(
-              Effect.mapError(() => "save" as const),
-            ),
+            localData((data) =>
+              data
+                .linkAnkiDroidDeck(source)
+                .pipe(
+                  Effect.flatMap((deckId) =>
+                    Effect.map(data.ankiDroidLinkOffer(deckId), (offered) => ({ deckId, offered })),
+                  ),
+                ),
+            ).pipe(Effect.mapError(() => "save" as const)),
           ),
         ),
       ),
     );
     if (Result.isSuccess(result)) {
       await client.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY });
-      setLinked({ deckId: result.success, name: deck.name });
+      setLinked({ ...result.success, name: deck.name });
       setMedia("idle");
     } else setLinkError(result.failure);
     setLinking(undefined);
+    busy.current = false;
+  }
+
+  async function decide(send: boolean) {
+    if (busy.current || !linked) return;
+    busy.current = true;
+    setDeciding(true);
+    setOfferError(false);
+    try {
+      await Effect.runPromise(
+        localData((data) => data.resolveAnkiDroidLinkOffer(linked.deckId, send)),
+      );
+      if (send) {
+        const result = await Effect.runPromise(
+          Effect.result(localData((data) => data.syncBackAnkiDroid(ankiDroidProvider(ankiDroid)))),
+        );
+        setSendError(Result.isFailure(result));
+      }
+      setLinked({ ...linked, offered: 0 });
+      await client.invalidateQueries();
+    } catch {
+      setOfferError(true);
+    }
+    setDeciding(false);
     busy.current = false;
   }
 
@@ -213,6 +284,10 @@ function useLinkSession(ankiDroid: AnkiDroidApi) {
     media,
     link,
     importMedia,
+    deciding,
+    offerError,
+    sendError,
+    decide,
     refresh,
     view: screenView(access, deckError, linkError, status.isError || decks.isError, decks.data),
   };

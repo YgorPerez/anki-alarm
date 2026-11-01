@@ -84,3 +84,42 @@ test("links a deck as this phone's linked deck, then brings its media from an .a
     await api.dispose();
   }
 });
+
+import { unlinkedAnkiDroidDeck } from "../../../packages/client-data/src/ankidroid-offer-fixture.ts";
+
+test.each([true, false])(
+  "linking asks how many earlier reviews to send (accept: %s)",
+  async (send) => {
+    const source = structuredClone(fixture.source);
+    source.deckId += send ? 10 : 20;
+    source.decks[0]!.id = source.deckId;
+    for (const card of source.cards) card.deckId = source.deckId;
+    for (const note of source.notes) note.guid += send ? "-send" : "-skip";
+    await Effect.runPromise(localData((data) => data.importAnki(unlinkedAnkiDroidDeck(source))));
+    const state = await Effect.runPromise(localData((data) => data.collection));
+    const deck = state.decks.find((d) => d.anki?.id === source.deckId)!;
+    const card = state.cards.find((c) => c.fields.deckId.value === deck.id)!;
+    await Effect.runPromise(localData((data) => data.answerCard(card.id, 3, 5000)));
+    const anki = memoryAnkiDroid({
+      installed: { versionCode: 22500300, permission: "granted" },
+      decks: source.decks,
+      sources: [source],
+    });
+    await show(anki);
+    await fireEvent.press(await screen.findByRole("button", { name: "Japonês" }));
+    expect(
+      await screen.findByText("Revisões ainda não enviadas ao AnkiDroid: 1. Deseja enviá-las?"),
+    ).toBeDefined();
+    expect(anki.answers).toHaveLength(0);
+    await fireEvent.press(
+      screen.getByRole("button", {
+        name: send ? "Enviar revisões ao AnkiDroid" : "Não enviar essas revisões",
+      }),
+    );
+    expect(await screen.findByRole("button", { name: "Abrir baralho" })).toBeDefined();
+    expect(anki.answers).toHaveLength(send ? 1 : 0);
+    expect(
+      (await Effect.runPromise(localData((data) => data.ankiDroidSyncBackStatus))).pending,
+    ).toHaveLength(0);
+  },
+);
