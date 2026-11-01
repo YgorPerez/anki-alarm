@@ -183,14 +183,14 @@ export function DeckOptionsEditor({
                               : t("invalidInterval"),
                         }}
                       >
-                        {(field) => (
+                        {(intervalField) => (
                           <TextField
                             label={t("maximumInterval")}
                             inputMode="numeric"
-                            value={field.state.value}
-                            onChange={field.handleChange}
-                            onBlur={field.handleBlur}
-                            errors={field.state.meta.errors}
+                            value={intervalField.state.value}
+                            onChange={intervalField.handleChange}
+                            onBlur={intervalField.handleBlur}
+                            errors={intervalField.state.meta.errors}
                           />
                         )}
                       </form.Field>

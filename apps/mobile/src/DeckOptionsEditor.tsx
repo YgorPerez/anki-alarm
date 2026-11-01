@@ -150,14 +150,14 @@ export function DeckOptionsEditor({
                           validPresetText.maximumInterval(value) ? undefined : t("invalidInterval"),
                       }}
                     >
-                      {(field) => (
+                      {(intervalField) => (
                         <TextField
                           label={t("maximumInterval")}
                           numeric
-                          value={field.state.value}
-                          onChange={field.handleChange}
-                          onBlur={field.handleBlur}
-                          error={field.state.meta.errors[0]}
+                          value={intervalField.state.value}
+                          onChange={intervalField.handleChange}
+                          onBlur={intervalField.handleBlur}
+                          error={intervalField.state.meta.errors[0]}
                         />
                       )}
                     </form.Field>
