@@ -424,6 +424,11 @@ async function ringWithFronts(
     localData((data) =>
       data.changeCollection((c) => {
         const deck = c.createDeck(name);
+        c.updatePreset(deck.fields.presetId.value, {
+          dontPlayAutomatically: true,
+          showTimer: true,
+          maximumAnswerSeconds: 1,
+        });
         if (options.language) c.setDeckLanguage(deck.id, options.language);
         for (const text of fronts) c.addBasicNote(deck.id, text, "verso");
       }),
@@ -507,6 +512,7 @@ test("an alarm without read aloud reads nothing", async () => {
   try {
     await start();
     await screen.findByLabelText("Frente");
+    expect(screen.queryByLabelText("Tempo de resposta")).toBeNull();
     await revealAndGrade("Bom");
     await screen.findByText("1 de 2 certos · faltam 1");
   } finally {

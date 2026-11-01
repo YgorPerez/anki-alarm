@@ -27,3 +27,7 @@ vi.mock("../src/download.ts", async () => {
   const { downloads } = await import("./downloads.ts");
   return { download: (name: string, bytes: Uint8Array) => downloads.push({ name, bytes }) };
 });
+
+// jsdom cannot play media; playback is a browser boundary.
+vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});

@@ -20,6 +20,7 @@ type OptionKey = keyof PresetOptions;
 /** Each option's label, error and hint copy, and the control it takes. */
 const OPTIONS: [OptionKey, EditingKey, EditingKey, EditingKey | null, "line" | "number" | "box"][] =
   [
+    ["maximumAnswerSeconds", "maximumAnswerSeconds", "invalidLimit", null, "number"],
     ["name", "presetName", "invalidName", null, "line"],
     ["newPerDay", "newPerDay", "invalidLimit", null, "number"],
     ["reviewsPerDay", "reviewsPerDay", "invalidLimit", null, "number"],
@@ -114,6 +115,47 @@ export function DeckOptionsEditor({
           </Field>
         )}
       </form.Field>
+      <fieldset className="flex flex-col gap-3">
+        <legend className="text-label font-bold">{t("burying")}</legend>
+        {(["buryNew", "buryReviews", "buryLearning"] as const).map((key) => (
+          <form.Field key={key} name={key}>
+            {(field) => (
+              <label className="flex min-h-12 items-center gap-3 text-body">
+                <input
+                  type="checkbox"
+                  checked={field.state.value === "true"}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(String(event.target.checked))}
+                  className="size-5 accent-primary"
+                />
+                {t(key)}
+              </label>
+            )}
+          </form.Field>
+        ))}
+      </fieldset>
+
+      {(
+        [
+          "dontPlayAutomatically",
+          "skipQuestionWhenReplayingAnswer",
+          "showTimer",
+          "stopTimerOnAnswer",
+        ] as const
+      ).map((key) => (
+        <form.Field key={key} name={key}>
+          {(field) => (
+            <label className="flex min-h-12 items-center gap-3 text-body">
+              <input
+                type="checkbox"
+                checked={field.state.value === "true"}
+                onChange={(event) => field.handleChange(String(event.target.checked))}
+              />
+              {t(key)}
+            </label>
+          )}
+        </form.Field>
+      ))}
       <div className="grid gap-5 sm:grid-cols-2">
         {OPTIONS.map(([key, label, error, hint, control]) => (
           <form.Field

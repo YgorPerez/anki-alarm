@@ -13,6 +13,8 @@ export interface RenderInput {
   media?: (name: string) => string;
   /** Lets the deck's own scripts run. Network access stays blocked either way. */
   scripts?: boolean;
+  /** Exclude question sounds inserted by FrontSide when choosing answer audio. */
+  excludeQuestionAudio?: boolean;
 }
 
 /** Whether a card's HTML has code to run: a script tag or an inline event handler. */
@@ -52,7 +54,10 @@ export function renderSide(
   };
   const front = render(parse(template?.front ?? ""), context);
   context.side = "back";
-  context.special.set("FrontSide", front);
+  context.special.set(
+    "FrontSide",
+    input.excludeQuestionAudio ? front.replace(MEDIA_SOUND, "") : front,
+  );
   return side === "front" ? front : render(parse(template?.back ?? ""), context);
 }
 

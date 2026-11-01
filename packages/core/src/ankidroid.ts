@@ -113,6 +113,9 @@ export function linkedAnkiDroidDecks(source: AnkiDroidSource): AnkiDroidDeck[] {
 
 export interface ImportedPreset {
   ankiId: number;
+  buryNew: boolean;
+  buryReviews: boolean;
+  buryLearning: boolean;
   name: string;
   newPerDay: number;
   reviewsPerDay: number;
@@ -138,6 +141,9 @@ export function presetFromOptions(json: string): ImportedPreset {
   const delays = section("new")["delays"];
   return {
     ankiId: number(raw["id"], 1),
+    buryNew: section("new")["bury"] === true,
+    buryReviews: section("rev")["bury"] === true,
+    buryLearning: raw["buryInterdayLearning"] === true,
     name: typeof raw["name"] === "string" && raw["name"] ? raw["name"] : "Default",
     newPerDay: number(section("new")["perDay"], 20),
     reviewsPerDay: number(section("rev")["perDay"], 200),

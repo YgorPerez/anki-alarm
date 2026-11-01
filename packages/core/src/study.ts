@@ -25,6 +25,8 @@ export type LogEntry = Entry &
         grade: Grade;
         /** Absent only on legacy entries, frozen by the upgrade migration. */
         options?: SchedulingOptions;
+        /** Previous sibling buries, for undo; the actual buries are synced card fields. */
+        siblingBuries?: { cardId: string; until: number | null }[];
         durationMs: number;
         origin: "phone" | "web" | "alarm" | "import";
         /**
@@ -355,4 +357,12 @@ export function nextStudyCard(
   const note = collection.notes.find((n) => n.id === item?.card.fields.noteId.value);
   const type = collection.noteTypes.find((t) => t.id === note?.fields.noteTypeId.value);
   return item && note && type ? { card: item.card, note, type } : undefined;
+}
+
+/** Time recorded by normal study, capped by the card’s preset. */
+export function studyAnswerDuration(preset: Preset, elapsedMs: number): number {
+  return Math.min(
+    Math.max(0, Math.round(elapsedMs)),
+    preset.fields.maximumAnswerSeconds.value * 1000,
+  );
 }

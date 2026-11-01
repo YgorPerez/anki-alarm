@@ -197,6 +197,7 @@ test("study answers survive reopen and outbox failure rolls back the review", as
       data.changeCollection((c) => {
         const d = c.createDeck("Words");
         c.addBasicNote(d.id, "house", "casa");
+        c.updatePreset(d.fields.presetId.value, { maximumAnswerSeconds: 1 });
       }),
     );
     const cardId = state.cards[0]!.id;
@@ -209,7 +210,7 @@ test("study answers survive reopen and outbox failure rolls back the review", as
       kind: "review",
       cardId,
       grade: 3,
-      durationMs: 1400,
+      durationMs: 1000,
       origin: "phone",
       at: 1700000000000,
       options: {
@@ -230,8 +231,14 @@ test("study answers survive reopen and outbox failure rolls back the review", as
     await expect(Effect.runPromise(reopened.answerCard(cardId, 3, 900))).rejects.toThrow(
       /not available/,
     );
-    const alarm = await Effect.runPromise(reopened.answerCard(cardId, 1, 900, "ring-1"));
-    expect(alarm).toMatchObject({ kind: "review", origin: "alarm", ringId: "ring-1", grade: 1 });
+    const alarm = await Effect.runPromise(reopened.answerCard(cardId, 1, 9000, "ring-1"));
+    expect(alarm).toMatchObject({
+      kind: "review",
+      origin: "alarm",
+      ringId: "ring-1",
+      grade: 1,
+      durationMs: 9000,
+    });
     await expect(
       Effect.runPromise(reopened.answerCard("deleted", 3, 900, "ring-1")),
     ).rejects.toThrow(/not available/);
@@ -417,6 +424,91 @@ test("linking an AnkiDroid deck stores it with its snapshots in one transaction,
     expect(pending.filter((c) => c.kind === "reviewLog").map((c) => c.recordId)).toEqual([
       log[0]!.id,
     ]);
+  } finally {
+    for (const db of databases.values()) db.close();
+  }
+});
+
+test("normal answers persist sibling buries and undo, while alarm and awake answers leave siblings available", async () => {
+  const databases = new Map<string, DatabaseSync>();
+  let n = 0;
+  let fail = false;
+  const layer = clientDataLayer({
+    now: () => 1700000000000,
+    random: () => new Uint8Array(16).fill(n++),
+    connect: (name) => {
+      const db = databases.get(name) ?? new DatabaseSync(":memory:");
+      databases.set(name, db);
+      return async (query, params, method) => {
+        if (fail && query.includes('insert into "outbox"')) throw new Error("disk full");
+        const statement = db.prepare(query);
+        if (method === "run") {
+          statement.run(...params);
+          return { rows: [] };
+        }
+        statement.setReturnArrays(true);
+        return { rows: statement.all(...params) };
+      };
+    },
+  });
+  try {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const data = yield* ClientData;
+        const state = yield* data.changeCollection((c) => {
+          const deck = c.createDeck("Siblings");
+          const note = c.addBasicNote(deck.id, "front", "back");
+          c.editNoteType(note.fields.noteTypeId.value, {
+            name: "Reverse",
+            fields: [
+              { name: "Front", from: 0 },
+              { name: "Back", from: 1 },
+            ],
+            css: "",
+            templates: [
+              { name: "Forward", front: "{{Front}}", back: "{{Back}}", from: 0 },
+              { name: "Reverse", front: "{{Back}}", back: "{{Front}}" },
+            ],
+          });
+          c.updatePreset(c.snapshot().presets[0]!.id, { buryNew: true });
+        });
+        const [first, sibling] = state.cards;
+        for (const ring of ["alarm-ring", "awake-check"]) {
+          const answer = yield* data.answerCard(first!.id, 3, 100, ring);
+          expect(
+            (yield* data.collection).cards.find((c) => c.id === sibling!.id)!.fields.buriedUntil
+              .value,
+          ).toBeNull();
+          yield* data.undo(answer.id);
+        }
+        const before = yield* data.reviewLog;
+        fail = true;
+        expect(Result.isFailure(yield* Effect.result(data.answerCard(first!.id, 3, 100)))).toBe(
+          true,
+        );
+        fail = false;
+        expect(yield* data.reviewLog).toEqual(before);
+        expect(
+          (yield* data.collection).cards.find((c) => c.id === sibling!.id)!.fields.buriedUntil
+            .value,
+        ).toBeNull();
+        const answer = yield* data.answerCard(first!.id, 3, 100);
+        expect(
+          (yield* data.collection).cards.find((c) => c.id === sibling!.id)!.fields.buriedUntil
+            .value,
+        ).toBeGreaterThan(1700000000000);
+        expect(
+          (yield* data.pendingChanges).some(
+            (change) => change.kind === "cards" && change.recordId === sibling!.id,
+          ),
+        ).toBe(true);
+        yield* data.undo(answer.id);
+        expect(
+          (yield* data.collection).cards.find((c) => c.id === sibling!.id)!.fields.buriedUntil
+            .value,
+        ).toBeNull();
+      }).pipe(Effect.provide(layer)),
+    );
   } finally {
     for (const db of databases.values()) db.close();
   }

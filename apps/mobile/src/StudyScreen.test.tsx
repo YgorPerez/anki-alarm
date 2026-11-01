@@ -461,3 +461,42 @@ test("Undo reverses suspend, bury, flag and mark too, newest first, and the card
   const log = await Effect.runPromise(localData((data) => data.reviewLog));
   expect(log.filter((e) => cards.some((c) => c.id === e.cardId))).toEqual([]);
 });
+
+test("the preset timer freezes on reveal and its elapsed time is logged", async () => {
+  const now = vi.spyOn(performance, "now").mockReturnValue(1000);
+  try {
+    const state = await Effect.runPromise(
+      localData((data) =>
+        data.changeCollection((c) => {
+          const deck = c.createDeck("Timed study");
+          c.addBasicNote(deck.id, "front", "back");
+          c.updatePreset(deck.fields.presetId.value, {
+            showTimer: true,
+            stopTimerOnAnswer: true,
+            maximumAnswerSeconds: 12,
+          });
+        }),
+      ),
+    );
+    const deck = state.decks.find((d) => d.fields.name.value === "Timed study")!;
+    await render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <StudyScreen deckId={deck.id} locale="en" onExit={() => {}} />
+      </QueryClientProvider>,
+    );
+    await screen.findByLabelText("Front");
+    expect(screen.getByLabelText("Answer time").props.children).toEqual([0, "s"]);
+    now.mockReturnValue(7000);
+    await fireEvent.press(screen.getByRole("button", { name: "Show answer" }));
+    expect(screen.getByLabelText("Answer time").props.children).toEqual([6, "s"]);
+    now.mockReturnValue(21000);
+    await fireEvent.press(screen.getByRole("button", { name: "Good" }));
+    await screen.findByText("No cards available now. Daily limits apply.");
+    const log = await Effect.runPromise(localData((data) => data.reviewLog));
+    expect(log.at(-1)).toMatchObject({ kind: "review", durationMs: 6000 });
+  } finally {
+    now.mockRestore();
+  }
+});

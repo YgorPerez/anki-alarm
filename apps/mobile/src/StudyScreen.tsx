@@ -1,3 +1,6 @@
+import { deckPreset } from "@app/core";
+import { StudyAudio } from "./StudyAudio.tsx";
+import { useStudyTimer } from "./use-study-timer.ts";
 import { autoSyncBack } from "./ankidroid-sync-query.ts";
 import type { AnkiDroidApi } from "./ankidroid.ts";
 import { COLLECTION_QUERY_KEY } from "./collection-query.ts";
@@ -161,6 +164,23 @@ function StudyReview({
               ...(deckName === undefined ? {} : { deckName }),
             }}
           />
+          {study.timer.show && (
+            <Text
+              accessibilityLabel={editingCopy(locale)("answerTimer")}
+              className="text-label text-muted-foreground"
+            >
+              {study.timer.seconds}s
+            </Text>
+          )}
+          {study.preset && (
+            <StudyAudio
+              key={`${card.id}-${revealed}`}
+              input={{ note, type, ordinal: card.fields.ordinal.value }}
+              side={revealed ? "back" : "front"}
+              preset={study.preset}
+              locale={locale}
+            />
+          )}
           <AnswerControls
             intervals={study.intervals}
             onReveal={reveal}
@@ -447,6 +467,9 @@ function useStudySession(deckId: string, onExit: () => void) {
   const card = next?.card;
   const cardId = card?.id;
   const revealed = Boolean(cardId && revealedId === cardId);
+  const ownDeck = query.data?.collection.decks.find((d) => d.id === card?.fields.deckId.value);
+  const preset = ownDeck && query.data ? deckPreset(query.data.collection, ownDeck) : undefined;
+  const timer = useStudyTimer(query.data?.started, preset);
   const screenActive = useContext(ScreenActivity);
   useEffect(() => {
     if (!screenActive) return undefined;
@@ -482,13 +505,7 @@ function useStudySession(deckId: string, onExit: () => void) {
     if (!cardId || !revealed) return;
     await guarded(async () => {
       const entry = await Effect.runPromise(
-        localData((data) =>
-          data.answerCard(
-            cardId,
-            grade,
-            Math.max(0, performance.now() - (query.data?.started ?? performance.now())),
-          ),
-        ),
+        localData((data) => data.answerCard(cardId, grade, timer.duration())),
       );
       history.record(answerUndo(entry));
       setUndone(undefined);
@@ -516,6 +533,8 @@ function useStudySession(deckId: string, onExit: () => void) {
     });
   }
   return {
+    preset,
+    timer,
     intervals:
       query.data && cardId
         ? nextIntervals(query.data.collection, query.data.log, cardId, query.data.now)
@@ -531,7 +550,10 @@ function useStudySession(deckId: string, onExit: () => void) {
     busy,
     error,
     revealed,
-    reveal: () => setRevealedId(cardId),
+    reveal: () => {
+      timer.stop();
+      setRevealedId(cardId);
+    },
     answer,
     change,
     leave,
