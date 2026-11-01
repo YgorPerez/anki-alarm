@@ -11,6 +11,8 @@ const retention = (value: number, comma: boolean) =>
 export const editingMessages = {
   "pt-BR": {
     deckOptions: "Opções do baralho",
+    advanced: "Avançado",
+    discardOptions: "Descartar as alterações não salvas?",
     presetName: "Nome da predefinição",
     sharedPreset: "Estas opções valem para {count} baralhos.",
     newPerDay: "Cartões novos por dia",
@@ -45,6 +47,8 @@ export const editingMessages = {
   },
   en: {
     deckOptions: "Deck options",
+    advanced: "Advanced",
+    discardOptions: "Discard unsaved changes?",
     presetName: "Preset name",
     sharedPreset: "These options apply to {count} decks.",
     newPerDay: "New cards per day",

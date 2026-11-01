@@ -1,5 +1,5 @@
-import { screen, waitFor, within } from "@testing-library/react";
-import { expect, test } from "vite-plus/test";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { expect, test, vi } from "vite-plus/test";
 
 import { webRequest } from "#/data/client.ts";
 
@@ -12,6 +12,16 @@ test("a new deck gets options and a note, which the browser finds and edits as y
   await user.click(screen.getByRole("button", { name: "Criar baralho" }));
   expect(await screen.findByRole("heading", { name: "Inglês" })).toBeDefined();
 
+  expect(screen.queryByLabelText("Cartões novos por dia")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Exportar .apkg" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Opções do baralho" }));
+
+  const retention = screen.getByRole("slider", { name: "Retenção desejada" });
+  fireEvent.change(retention, { target: { value: "85" } });
+  expect(retention).toHaveProperty("value", "85");
+  expect(screen.queryByLabelText("Parâmetros do FSRS")).toBeNull();
+  await user.click(screen.getByText("Avançado"));
+  expect(screen.getByLabelText("Parâmetros do FSRS")).toBeDefined();
   // Deck options: Core's rules check what is typed, then the preset saves.
   const newPerDay = screen.getByLabelText("Cartões novos por dia");
   await user.clear(newPerDay);
@@ -24,9 +34,10 @@ test("a new deck gets options and a note, which the browser finds and edits as y
   expect(await screen.findByText("Salvo.")).toBeDefined();
   // Leaving and coming back shows what was saved.
   await user.click(screen.getByRole("link", { name: "‹ Voltar" }));
-  await user.click(await screen.findByRole("link", { name: "Editar Inglês" }));
+  await user.click(await screen.findByRole("button", { name: "Opções do baralho" }));
   expect(await screen.findByLabelText("Cartões novos por dia")).toHaveProperty("value", "5");
 
+  await user.click(screen.getByRole("link", { name: "‹ Voltar" }));
   await user.click(screen.getByRole("button", { name: "Adicionar nota" }));
   await user.type(await screen.findByLabelText("Frente"), "cat");
   await user.type(screen.getByLabelText("Verso"), "gato");
@@ -126,4 +137,32 @@ test("the browser finds flagged and marked cards", async () => {
   await found("is:marked", ["star"]);
   await found("-is:marked -flag:1", ["blue"]);
   expect(screen.getByText(/flag:1.*is:marked/)).toBeDefined();
+});
+
+test("deck options protect unsaved changes and leave freely after saving", async () => {
+  const id = await webRequest("change", { kind: "createDeck", name: "Draft options" });
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  try {
+    const { user } = await renderRoute(`/deck?deck=${id}&options=true&lang=en`);
+    const limit = await screen.findByLabelText("New cards per day");
+    await user.clear(limit);
+    await user.type(limit, "7");
+    await user.click(screen.getByRole("link", { name: "‹ Back" }));
+    expect(confirm).toHaveBeenCalledWith("Discard unsaved changes?");
+    expect(screen.getByLabelText("New cards per day")).toHaveProperty("value", "7");
+    confirm.mockReturnValue(true);
+    await user.click(screen.getByRole("link", { name: "‹ Back" }));
+    await user.click(await screen.findByRole("button", { name: "Deck options" }));
+    expect(await screen.findByLabelText("New cards per day")).not.toHaveProperty("value", "7");
+    await user.clear(screen.getByLabelText("New cards per day"));
+    await user.type(screen.getByLabelText("New cards per day"), "8");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("Saved.");
+    confirm.mockClear();
+    await user.click(screen.getByRole("link", { name: "‹ Back" }));
+    await screen.findByRole("button", { name: "Deck options" });
+    expect(confirm).not.toHaveBeenCalled();
+  } finally {
+    confirm.mockRestore();
+  }
 });

@@ -25,6 +25,7 @@ test("an Anki package imports with its media, and a deck exports back with them"
   const decks = await screen.findByRole("list", { name: "Baralhos" });
   await user.click(await within(decks).findByRole("link", { name: "Editar Português::Verbos" }));
 
+  await user.click(screen.getByRole("button", { name: "Opções do baralho" }));
   await user.click(await screen.findByRole("button", { name: "Exportar .apkg" }));
   expect(await screen.findByText("Baixado como Português - Verbos.apkg.")).toBeDefined();
   const [download] = downloads;
@@ -34,6 +35,7 @@ test("an Anki package imports with its media, and a deck exports back with them"
   expect(Object.values(media).length).toBeGreaterThan(0);
 
   // Importing the export again merges into the same records and adds no reviews.
+  await user.click(screen.getByRole("link", { name: "‹ Voltar" }));
   await user.click(screen.getByRole("link", { name: "‹ Voltar" }));
   const exported = new File([download!.bytes.slice()], download!.name);
   await user.upload(await screen.findByLabelText("Importar .apkg"), exported);

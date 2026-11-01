@@ -112,21 +112,31 @@ test("deck options save limits, retention and learning steps, and refuse what FS
   const presetId = state.decks.find((d) => d.fields.name.value === "Opções")!.fields.presetId.value;
   await open();
   await press("button", /Opções/);
+  expect(screen.queryByRole("button", { name: "Exportar .apkg" })).toBeNull();
   await press("button", "Opções do baralho");
+  expect(screen.getByRole("button", { name: "Exportar .apkg" })).toBeDefined();
   expect(await screen.findByText(/Estas opções valem para \d+ baralhos\./)).toBeDefined();
-  await fireEvent.changeText(screen.getByLabelText("Retenção desejada"), "0,5");
-  expect(await screen.findByText("Use um valor de 0,70 a 0,99.")).toBeDefined();
+  const slider = screen.getByRole("adjustable", { name: "Retenção desejada" });
+  expect(slider.props.accessibilityValue.now).toBe(90);
+  await fireEvent(slider, "accessibilityAction", { nativeEvent: { actionName: "decrement" } });
+  expect(screen.getByRole("adjustable").props.accessibilityValue.now).toBe(89);
+  expect(screen.queryByLabelText("Parâmetros do FSRS")).toBeNull();
+  await press("button", "Avançado");
+  expect(screen.getByLabelText("Parâmetros do FSRS").props.value.split(",")).toHaveLength(21);
+  await fireEvent.changeText(screen.getByLabelText("Etapas de aprendizado (minutos)"), "-1");
+  expect(
+    await screen.findByText("Use minutos maiores que zero, separados por espaço."),
+  ).toBeDefined();
   expect(screen.getByRole("button", { name: "Salvar" }).props.accessibilityState.disabled).toBe(
     true,
   );
-  await fireEvent.changeText(screen.getByLabelText("Retenção desejada"), "0,85");
   await fireEvent.changeText(screen.getByLabelText("Cartões novos por dia"), "5");
   await fireEvent.changeText(screen.getByLabelText("Etapas de aprendizado (minutos)"), "2 15");
   await press("button", "Salvar");
   await screen.findByRole("button", { name: "Opções do baralho" });
 
   const preset = (await run((data) => data.collection)).presets.find((p) => p.id === presetId)!;
-  expect(preset.fields.desiredRetention.value).toBe(0.85);
+  expect(preset.fields.desiredRetention.value).toBe(0.89);
   expect(preset.fields.newPerDay.value).toBe(5);
   expect(preset.fields.learningSteps.value).toEqual([2, 15]);
   expect(preset.fields.fsrsParameters.value).toHaveLength(21);
@@ -161,4 +171,24 @@ test("Set due date and Forget append their log entries for a studied card", asyn
     "setDueDate",
     "reset",
   ]);
+});
+
+test("deck options leave cleanly, but Back and Cancel protect unsaved edits", async () => {
+  await change((c) => {
+    c.createDeck("Draft options");
+  });
+  await open();
+  await press("button", /Draft options/);
+  await press("button", "Opções do baralho");
+  await press("button", "Voltar");
+  expect(screen.queryByLabelText("Cartões novos por dia")).toBeNull();
+  await press("button", "Opções do baralho");
+  await fireEvent.changeText(screen.getByLabelText("Cartões novos por dia"), "7");
+  await press("button", "Cancelar");
+  expect(screen.getByLabelText("Cartões novos por dia").props.value).toBe("7");
+  answerAlert("Cancelar");
+  await press("button", "Voltar");
+  answerAlert("Descartar");
+  await press("button", "Opções do baralho");
+  expect(screen.getByLabelText("Cartões novos por dia").props.value).not.toBe("7");
 });
