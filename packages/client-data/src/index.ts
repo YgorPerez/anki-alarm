@@ -43,6 +43,8 @@ import {
   type DeckNotLinked,
   type PullSummary,
   type SyncBackSummary,
+  type SyncBackStatus,
+  type SyncBackFailure,
 } from "./ankidroid.ts";
 import { openCollectionStore } from "./collection.ts";
 import {
@@ -64,6 +66,8 @@ export {
   type AnkiDroidProvider,
   type PullSummary,
   type SyncBackSummary,
+  type SyncBackStatus,
+  type SyncBackFailure,
 } from "./ankidroid.ts";
 export { syncScheduler, type SyncScheduler, type SyncStatus } from "./scheduler.ts";
 export {
@@ -152,12 +156,16 @@ interface Data extends Engine {
   syncBackAnkiDroid: (
     provider: AnkiDroidProvider,
   ) => Effect.Effect<SyncBackSummary, StorageFailed | WritebackNotRecorded | Error>;
+  ankiDroidSyncBackStatus: Effect.Effect<SyncBackStatus, StorageFailed>;
+  setAnkiDroidSyncBackFailure: (
+    failure: SyncBackFailure | null,
+  ) => Effect.Effect<void, StorageFailed>;
   /** Syncs back, then brings in the linked deck's new notes, edited fields and newer states. */
   pullAnkiDroid: (
     provider: AnkiDroidProvider,
     deckId: string,
   ) => Effect.Effect<PullSummary, Rejectable | WritebackNotRecorded | DeckNotLinked | Error>;
-  /** Whether sync back runs after each alarm session; on unless turned off. This phone only. */
+  /** Whether sync back runs automatically; on unless turned off. This phone only. */
   autoSyncBack: Effect.Effect<boolean, StorageFailed>;
   setAutoSyncBack: (on: boolean) => Effect.Effect<void, StorageFailed>;
   alarms: Effect.Effect<Alarm[], StorageFailed>;
@@ -403,6 +411,8 @@ const open = (driver: SQLiteConnection, media: MediaFiles) =>
       deviceId: store.deviceId,
       linkAnkiDroidDeck: (source) => Effect.map(ankiDroid.link(source), (link) => link.deckId),
       syncBackAnkiDroid: ankiDroid.syncBack,
+      ankiDroidSyncBackStatus: ankiDroid.status,
+      setAnkiDroidSyncBackFailure: ankiDroid.setFailure,
       pullAnkiDroid: ankiDroid.pull,
       autoSyncBack: ankiDroid.autoSyncBack,
       setAutoSyncBack: ankiDroid.setAutoSyncBack,
