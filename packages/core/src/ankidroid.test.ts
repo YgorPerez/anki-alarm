@@ -3,6 +3,7 @@ import {
   Collection,
   browseCards,
   ankiDroidAccess,
+  ankiDroidSyncWaitMs,
   cardId,
   cardsStayInApp,
   importId,
@@ -103,6 +104,15 @@ test("AnkiDroid's screens say why linking isn't possible, and from which version
   expect(ankiDroidAccess({ versionCode: 322303300, permission: "granted" })).toBe("outdated");
   expect(ankiDroidAccess({ versionCode: 22400300, permission: "denied" })).toBe("permission");
   expect(ankiDroidAccess({ versionCode: 322500300, permission: "granted" })).toBe("ready");
+});
+
+test("Sync AnkiDroid leaves five minutes between requests", () => {
+  expect(ankiDroidSyncWaitMs(null, now)).toBe(0);
+  expect(ankiDroidSyncWaitMs(now - 60_000, now)).toBe(240_000);
+  expect(ankiDroidSyncWaitMs(now - 299_999, now)).toBe(1);
+  expect(ankiDroidSyncWaitMs(now - 300_000, now)).toBe(0);
+  // A phone clock set back mustn't lock the button.
+  expect(ankiDroidSyncWaitMs(now + 60_000, now)).toBe(0);
 });
 
 const withTags = (tags: string, mod = 1_760_000_000) => {

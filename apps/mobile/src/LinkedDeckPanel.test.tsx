@@ -4,7 +4,12 @@ import { expect, test } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Effect } from "effect";
 import fixture from "../../../packages/core/fixtures/ankidroid-deck.json" with { type: "json" };
-import { memoryAnkiDroid, syncBackAfterSession, type AnkiDroidApi } from "./ankidroid.ts";
+import {
+  AnkiDroidError,
+  memoryAnkiDroid,
+  syncBackAfterSession,
+  type AnkiDroidApi,
+} from "./ankidroid.ts";
 import { AnkiDroidAutoSync } from "./AnkiDroidAutoSync.tsx";
 import { AnkiDroidSyncBackCard } from "./AnkiDroidSyncBackCard.tsx";
 import { StudyScreen } from "./StudyScreen.tsx";
@@ -61,6 +66,32 @@ test("on the phone that linked it, the deck sends its reviews to AnkiDroid and p
   // Forget and Set due date say they stay in the app.
   await press("Editar nota: 猫");
   expect(await screen.findByText(/ficam só no app/)).toBeDefined();
+});
+
+test("Sync AnkiDroid sends pending reviews, asks AnkiDroid to sync, and holds a repeat tap", async () => {
+  const ankiDroid = memoryAnkiDroid({ installed: ready, sources: [fixture.source] });
+  const requestSync = ankiDroid.requestSync;
+  await run((data) => data.linkAnkiDroidDeck(fixture.source));
+  await answerFirstCard(3);
+  await show(ankiDroid);
+  await press(/Japonês/);
+  expect(ankiDroid.syncRequests).toBe(0);
+
+  // A request AnkiDroid couldn't take can be tried again at once.
+  ankiDroid.requestSync = Effect.fail(new AnkiDroidError("failed"));
+  await press("Sincronizar AnkiDroid");
+  expect(await screen.findByRole("alert")).toBeDefined();
+  expect(screen.getByText(/Não foi possível chamar o AnkiDroid/)).toBeDefined();
+  ankiDroid.requestSync = requestSync;
+
+  await press("Sincronizar AnkiDroid");
+  expect(await screen.findByText(/Pedimos ao AnkiDroid que sincronize/)).toBeDefined();
+  expect(ankiDroid.answers.map((a) => a.ease)).toEqual([3]);
+  expect(ankiDroid.syncRequests).toBe(1);
+
+  await press("Sincronizar AnkiDroid");
+  expect(await screen.findByText(/Tente de novo em 5 min/)).toBeDefined();
+  expect(ankiDroid.syncRequests).toBe(1);
 });
 
 test("after an alarm session, sync back runs unless the user turned it off", async () => {

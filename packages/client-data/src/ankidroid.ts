@@ -1,6 +1,7 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import type { SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import {
+  ankiDroidSyncWaitMs,
   sentSuspensionKey,
   syncBackBuries,
   syncBackBuryPlan,
@@ -40,6 +41,8 @@ export interface AnkiDroidProvider {
   answer: (answer: SyncBackAnswer) => Effect.Effect<AnkiDroidCard | null, Error>;
   /** Buries the card and reads it back; `null` when AnkiDroid has no such card. */
   bury: (bury: SyncBackBury) => Effect.Effect<AnkiDroidCard | null, Error>;
+  /** Asks AnkiDroid to sync with AnkiWeb. AnkiDroid doesn't report whether the sync happened. */
+  requestSync: Effect.Effect<void, Error>;
 }
 export interface SyncBackSummary {
   sent: number;
@@ -52,6 +55,10 @@ export interface SyncBackSummary {
   /** Cards buried in the app that this sync back buried in AnkiDroid. */
   buried: number;
 }
+/** Sync AnkiDroid's outcome. Too soon after the last request, nothing was sent or asked for. */
+export type AnkiDroidSyncRequest =
+  | ({ requested: true } & SyncBackSummary)
+  | { requested: false; waitMs: number };
 export type SyncBackFailure =
   | "permission"
   | "missing"
@@ -100,6 +107,7 @@ interface Deps {
 
 const offerKey = (deckId: string) => `ankiDroidLinkOffer:${deckId}`;
 const AUTO = "ankiDroidAutoSyncBack";
+const SYNC_REQUESTED_AT = "ankiDroidSyncRequestedAt";
 /** AnkiDroid finds a card by note id and ord. */
 const key = (c: { noteId: number; ord: number }) => `${c.noteId}:${c.ord}`;
 /** Sync back and pull for the decks this phone linked (ADR 0001, ADR 0003). */
@@ -363,6 +371,20 @@ export function ankiDroidEngine(deps: Deps) {
       return summary;
     });
 
+  // A failed send or request leaves the clock alone, so the user can retry at once.
+  const requestSync = (provider: AnkiDroidProvider) =>
+    Effect.gen(function* () {
+      const [last] = yield* deps.read(
+        query(() => db.select().from(metadata).where(eq(metadata.id, SYNC_REQUESTED_AT))),
+      );
+      const waitMs = ankiDroidSyncWaitMs(last ? Number(last.value) : null, deps.now());
+      if (waitMs > 0) return { requested: false, waitMs } satisfies AnkiDroidSyncRequest;
+      const summary = yield* syncBack(provider);
+      yield* provider.requestSync;
+      yield* saveMetadata(SYNC_REQUESTED_AT, String(deps.now()));
+      return { requested: true, ...summary } satisfies AnkiDroidSyncRequest;
+    });
+
   const autoSyncBack = deps.read(
     Effect.map(
       query(() => db.select().from(metadata).where(eq(metadata.id, AUTO))),
@@ -387,6 +409,7 @@ export function ankiDroidEngine(deps: Deps) {
     resolveOffer,
     syncBack,
     pull,
+    requestSync,
     autoSyncBack,
     setAutoSyncBack,
     status,

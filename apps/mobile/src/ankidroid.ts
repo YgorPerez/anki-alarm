@@ -37,6 +37,8 @@ export interface AnkiDroidApi {
   answer: (answer: SyncBackAnswer) => Effect.Effect<AnkiDroidCard | null, AnkiDroidError>;
   /** Buries a card in AnkiDroid and reads it back; `null` when AnkiDroid has no such card. */
   bury: (bury: SyncBackBury) => Effect.Effect<AnkiDroidCard | null, AnkiDroidError>;
+  /** Opens AnkiDroid's `DO_SYNC` intent, which starts its sync with AnkiWeb. */
+  requestSync: Effect.Effect<void, AnkiDroidError>;
   /** Lets the user pick an `.apkg` and stores its media. `null` when the picker is cancelled. */
   importMedia: Effect.Effect<number | null, Error>;
 }
@@ -48,6 +50,7 @@ export const ankiDroidProvider = (api: AnkiDroidApi): AnkiDroidProvider => ({
   answer: api.answer,
   suspend: api.suspend,
   bury: api.bury,
+  requestSync: api.requestSync,
 });
 
 /** Automatic sync back, shared by study, backgrounding and alarm sessions. */
@@ -85,13 +88,19 @@ export function memoryAnkiDroid(options: {
   media?: number | null;
   /** What the provider throws, e.g. after the permission is revoked. */
   failure?: AnkiDroidError["reason"];
-}): AnkiDroidApi & { requests: number; answers: SyncBackAnswer[]; buries: SyncBackBury[] } {
+}): AnkiDroidApi & {
+  requests: number;
+  syncRequests: number;
+  answers: SyncBackAnswer[];
+  buries: SyncBackBury[];
+} {
   const state = { ...options, sources: structuredClone(options.sources ?? []) };
   const fail = (): Effect.Effect<void, AnkiDroidError> =>
     state.failure ? Effect.fail(new AnkiDroidError(state.failure)) : Effect.void;
   const allCards = () => state.sources.flatMap((s) => s.cards);
   const api = {
     requests: 0,
+    syncRequests: 0,
     answers: [] as SyncBackAnswer[],
     buries: [] as SyncBackBury[],
     status: Effect.sync(() => state.installed),
@@ -151,6 +160,11 @@ export function memoryAnkiDroid(options: {
           return { ...card };
         }),
       ),
+    requestSync: fail().pipe(
+      Effect.map(() => {
+        api.syncRequests++;
+      }),
+    ),
     importMedia: Effect.sync(() => state.media ?? null),
   };
   return api;
