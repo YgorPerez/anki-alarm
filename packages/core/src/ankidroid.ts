@@ -86,6 +86,17 @@ export function ankiDroidAccess(
   return installed.permission === "granted" ? "ready" : "permission";
 }
 
+/**
+ * The app's gap between Sync AnkiDroid requests. AnkiDroid's docs warn of a "server busy" error
+ * under 5 minutes; its code rejects `DO_SYNC` under 2.
+ */
+const SYNC_REQUEST_GAP_MS = 5 * 60_000;
+/** How long Sync AnkiDroid must wait after the request at `requestedAt`; 0 when it can go now. */
+export function ankiDroidSyncWaitMs(requestedAt: number | null, now: number): number {
+  if (requestedAt === null || requestedAt > now) return 0;
+  return Math.max(0, requestedAt + SYNC_REQUEST_GAP_MS - now);
+}
+
 export function linkableAnkiDroidDecks(decks: readonly AnkiDroidDeck[]): AnkiDroidDeck[] {
   // oxlint-disable-next-line unicorn/no-array-sort -- ES2022/Hermes target; sorts a fresh copy.
   return decks.filter((d) => !d.filtered).sort((a, b) => a.name.localeCompare(b.name));

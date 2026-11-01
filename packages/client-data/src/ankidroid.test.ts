@@ -10,7 +10,11 @@ const NOW = 1_770_000_000_000;
 function fakeAnkiDroid() {
   const source: AnkiDroidSource = structuredClone(fixture.source);
   const calls: string[] = [];
-  const state = { ignoreAnswers: false, ignoreBuries: false };
+  const state = {
+    ignoreAnswers: false,
+    ignoreBuries: false,
+    syncFailure: undefined as Error | undefined,
+  };
   const provider: AnkiDroidProvider = {
     suspend: ({ noteId, ord }) =>
       Effect.sync(() => {
@@ -45,6 +49,10 @@ function fakeAnkiDroid() {
         if (!state.ignoreBuries) card.queue = -3;
         return { ...card };
       }),
+    requestSync: Effect.suspend(() => {
+      calls.push("requestSync");
+      return state.syncFailure ? Effect.fail(state.syncFailure) : Effect.void;
+    }),
   };
   return { provider, source, calls, state, review };
 }
@@ -61,7 +69,7 @@ function review(card: AnkiDroidCard, secs: number) {
   });
 }
 
-const openData = () => {
+const openData = (now = () => NOW) => {
   const databases = new Map<string, DatabaseSync>();
   const connect = (name: string): ExecuteSql => {
     const db = databases.get(name) ?? new DatabaseSync(":memory:");
@@ -81,7 +89,7 @@ const openData = () => {
     Effect.runPromise(
       ClientData.pipe(
         Effect.provide(
-          clientDataLayer({ connect, now: () => NOW, random: () => new Uint8Array(16).fill(n++) }),
+          clientDataLayer({ connect, now, random: () => new Uint8Array(16).fill(n++) }),
         ),
       ),
     );
@@ -232,6 +240,89 @@ test("an answer, suspend or bury undone before sync back never reaches AnkiDroid
     ankiDroid.calls.length = 0;
     expect(await run(data.syncBackAnkiDroid(provider))).toMatchObject({ sent: 0, buried: 0 });
     expect(ankiDroid.calls.filter((call) => !call.startsWith("cards"))).toEqual([]);
+  } finally {
+    close();
+  }
+});
+
+test("Sync AnkiDroid sends pending answers, then asks AnkiDroid to sync", async () => {
+  const { open, close } = openData();
+  const anki = fakeAnkiDroid();
+  try {
+    const data = await open();
+    await run(data.linkAnkiDroidDeck(anki.source));
+    const card = (await run(data.collection)).cards.find((c) => c.anki?.id === 9001)!;
+    await run(data.answerCard(card.id, 3, 5000));
+    anki.calls.length = 0;
+    expect(await run(data.requestAnkiDroidSync(anki.provider))).toMatchObject({
+      requested: true,
+      sent: 1,
+    });
+    expect(anki.calls.filter((call) => !call.startsWith("cards"))).toEqual([
+      "answer 501:0 ease 3 5000ms",
+      "requestSync",
+    ]);
+  } finally {
+    close();
+  }
+});
+
+test("a second Sync AnkiDroid within five minutes waits, even after a restart", async () => {
+  let now = NOW;
+  const { open, close } = openData(() => now);
+  const anki = fakeAnkiDroid();
+  try {
+    await run((await open()).requestAnkiDroidSync(anki.provider));
+    anki.calls.length = 0;
+    now += 60_000;
+    const reopened = await open();
+    expect(await run(reopened.requestAnkiDroidSync(anki.provider))).toEqual({
+      requested: false,
+      waitMs: 240_000,
+    });
+    expect(anki.calls).toEqual([]);
+    now += 240_000;
+    expect(await run(reopened.requestAnkiDroidSync(anki.provider))).toMatchObject({
+      requested: true,
+    });
+    expect(anki.calls.filter((call) => call === "requestSync")).toHaveLength(1);
+  } finally {
+    close();
+  }
+});
+
+test("Sync AnkiDroid doesn't ask for a sync when sending failed, and can retry at once", async () => {
+  const { open, close } = openData();
+  const anki = fakeAnkiDroid();
+  try {
+    const data = await open();
+    await run(data.linkAnkiDroidDeck(anki.source));
+    const card = (await run(data.collection)).cards.find((c) => c.anki?.id === 9001)!;
+    await run(data.answerCard(card.id, 3, 5000));
+    anki.state.ignoreAnswers = true;
+    await expect(run(data.requestAnkiDroidSync(anki.provider))).rejects.toThrow(/AnkiDroid/);
+    expect(anki.calls).not.toContain("requestSync");
+    anki.state.ignoreAnswers = false;
+    expect(await run(data.requestAnkiDroidSync(anki.provider))).toMatchObject({
+      requested: true,
+    });
+    expect(anki.calls).toContain("requestSync");
+  } finally {
+    close();
+  }
+});
+
+test("a request AnkiDroid couldn't take doesn't start the five minutes", async () => {
+  const { open, close } = openData();
+  const anki = fakeAnkiDroid();
+  try {
+    const data = await open();
+    anki.state.syncFailure = new Error("no activity");
+    await expect(run(data.requestAnkiDroidSync(anki.provider))).rejects.toThrow("no activity");
+    anki.state.syncFailure = undefined;
+    expect(await run(data.requestAnkiDroidSync(anki.provider))).toMatchObject({
+      requested: true,
+    });
   } finally {
     close();
   }
