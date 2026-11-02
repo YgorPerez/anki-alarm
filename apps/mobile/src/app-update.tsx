@@ -3,8 +3,11 @@ import * as Updates from "expo-updates";
 
 import { appUpdate } from "./app-update-store.ts";
 import { UpdateCard, UpdateOfferButton } from "./UpdateOffer.tsx";
-import { showsUpdateCard, updateOffer } from "./update-store.ts";
+import { pollsDownload, showsUpdateCard, updateOffer } from "./update-store.ts";
 import { useUI } from "./ui.ts";
+import { useForegroundInterval } from "./use-foreground-interval.ts";
+
+const POLL_INTERVAL = 1000;
 
 function useOffer() {
   const state = appUpdate();
@@ -29,6 +32,12 @@ export function GlobalUpdateCard({ bottom = 0 }: { bottom?: number }) {
   const locale = useUI((ui) => ui.locale);
   const pathname = usePathname();
   const { offer, dismissed, onAccept, onDismiss } = useOffer();
+  // The layouts that mount this stay mounted under Study, so the path decides.
+  useForegroundInterval(
+    offer?.kind === "apk" && offer.download.kind === "downloading" && pollsDownload(pathname),
+    appUpdate.getState().pollDownload,
+    POLL_INTERVAL,
+  );
   if (!offer || dismissed || !showsUpdateCard(pathname)) return null;
   return (
     <UpdateCard

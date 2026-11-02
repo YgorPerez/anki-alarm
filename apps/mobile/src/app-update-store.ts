@@ -1,12 +1,21 @@
 import * as Updates from "expo-updates";
 
 import { createUpdateStore } from "./update-store.ts";
-import { downloadApk, fetchOtaInBackground, findApk, openInstaller } from "./updates.ts";
+import {
+  fetchOtaInBackground,
+  findApk,
+  listDownloads,
+  openInstaller,
+  removeDownload,
+  startDownload,
+} from "./updates.ts";
 
 export const appUpdate = createUpdateStore({
   findApk,
   fetchOta: fetchOtaInBackground,
-  downloadApk,
+  listDownloads,
+  startDownload,
+  removeDownload,
   openInstaller,
   restart: () => Updates.reloadAsync(),
   now: Date.now,

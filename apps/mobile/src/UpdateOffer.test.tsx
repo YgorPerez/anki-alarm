@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react-native/pure";
 import { expect, test } from "vite-plus/test";
 import { UpdateCard, UpdateOfferButton } from "./UpdateOffer.tsx";
-import { showsUpdateCard } from "./update-store.ts";
+import { pollsDownload, showsUpdateCard } from "./update-store.ts";
 import type { ApkDownload } from "./update-store.ts";
 
 const apkOffer = (download: ApkDownload) =>
@@ -27,6 +27,17 @@ test.each([
   ["/ankidroid", false],
 ])("the card on %s: %s", (pathname, shown) => {
   expect(showsUpdateCard(pathname)).toBe(shown);
+});
+
+test.each([
+  ["/", true],
+  ["/settings", true],
+  ["/settings/theme", true],
+  ["/study/deck-1", false],
+  ["/alarm/new", false],
+  ["/ankidroid", false],
+])("the download is watched, and can open the installer, on %s: %s", (pathname, polled) => {
+  expect(pollsDownload(pathname)).toBe(polled);
 });
 
 test("the card offers the APK with its size, and tapping or dismissing it reports back", async () => {

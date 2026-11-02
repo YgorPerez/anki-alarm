@@ -85,7 +85,9 @@ Core.
   when the user taps the update card, never during an alarm.
 - **APK**: when the fingerprint changed, CI builds a signed APK with Gradle on GitHub Actions and
   attaches it to the GitHub release. The app offers a release's APK only when its versionCode is
-  above the installed one, and installs it in-app. The offer is a dismissible card on most screens
+  above the installed one, and installs it in-app after a system download that shows in the
+  notification shade and survives the app's death. The APK is 64-bit ARM only. The offer is a
+  dismissible card on most screens
   and a button at the top of Settings; the ADR lists where it stays hidden.
 - Sync is lockstep: a `SYNC_PROTOCOL` number in Core must match the Worker's, or sync pauses until
   the app updates.

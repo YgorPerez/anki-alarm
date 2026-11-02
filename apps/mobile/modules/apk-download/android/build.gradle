@@ -1,0 +1,15 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.apkdownload'
+version = '0.0.1'
+
+android {
+  namespace "expo.modules.apkdownload"
+  defaultConfig {
+    versionCode 1
+    versionName '0.0.1'
+  }
+}
