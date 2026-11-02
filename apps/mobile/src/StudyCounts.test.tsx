@@ -4,7 +4,7 @@ import { expect, test } from "vite-plus/test";
 import { StudyCounts } from "./StudyCounts.tsx";
 
 test.each([
-  ["1 novos", "#006cff"],
+  ["1 novo", "#006cff"],
   ["2 aprendendo", "#ec0000"],
   ["3 revisões", "#008900"],
 ] as const)(

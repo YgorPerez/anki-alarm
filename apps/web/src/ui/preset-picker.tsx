@@ -5,6 +5,7 @@ import {
   type Locale,
   type Preset,
 } from "@app/core";
+import { presetChoices, usedByDecksText } from "@app/editing-ui";
 import { useState } from "react";
 import { editingCopy } from "#/editing-copy.ts";
 import { Field, TextField } from "#/ui/form.tsx";
@@ -26,6 +27,7 @@ export function PresetPicker({
   const t = editingCopy(locale);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [managing, setManaging] = useState(false);
   const [failed, setFailed] = useState(false);
   async function apply(command: CollectionCommand) {
     setBusy(true);
@@ -50,53 +52,63 @@ export function PresetPicker({
               void apply({ kind: "setDeckPreset", deckId, presetId: event.target.value })
             }
           >
-            {state.presets.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.fields.name.value}
+            {presetChoices(state.presets, locale).map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label}
               </option>
             ))}
           </select>
         )}
       </Field>
       <p className="text-label text-muted-foreground">
-        {t("usedByDecks", {
-          count: String(state.decks.filter((d) => d.fields.presetId.value === preset.id).length),
-        })}
+        {usedByDecksText(
+          state.decks.filter((d) => d.fields.presetId.value === preset.id).length,
+          locale,
+        )}
       </p>
-      <TextField label={t("presetActionName")} value={name} onChange={setName} />
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="outline"
-          disabled={!name.trim()}
-          onClick={() => void apply({ kind: "createPreset", deckId, name })}
-        >
-          {t("createPreset")}
-        </Button>
-        <Button
-          variant="outline"
-          disabled={!name.trim()}
-          onClick={() => void apply({ kind: "duplicatePreset", id: preset.id, deckId, name })}
-        >
-          {t("duplicatePreset")}
-        </Button>
-        <Button
-          variant="outline"
-          disabled={!name.trim()}
-          onClick={() => void apply({ kind: "updatePreset", id: preset.id, patch: { name } })}
-        >
-          {t("renamePreset")}
-        </Button>
-        <Button
-          variant="outline"
-          disabled={isDefaultPreset(preset)}
-          onClick={() => {
-            if (window.confirm(t("deletePresetConfirm")))
-              void apply({ kind: "deletePreset", id: preset.id });
-          }}
-        >
-          {t("deletePreset")}
+      <div>
+        <Button variant="outline" aria-expanded={managing} onClick={() => setManaging(!managing)}>
+          {t("managePresets")}
         </Button>
       </div>
+      {managing && (
+        <>
+          <TextField label={t("presetActionName")} value={name} onChange={setName} />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              disabled={!name.trim()}
+              onClick={() => void apply({ kind: "createPreset", deckId, name })}
+            >
+              {t("createPreset")}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!name.trim()}
+              onClick={() => void apply({ kind: "duplicatePreset", id: preset.id, deckId, name })}
+            >
+              {t("duplicatePreset")}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!name.trim()}
+              onClick={() => void apply({ kind: "updatePreset", id: preset.id, patch: { name } })}
+            >
+              {t("renamePreset")}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={isDefaultPreset(preset)}
+              onClick={() => {
+                if (window.confirm(t("deletePresetConfirm")))
+                  void apply({ kind: "deletePreset", id: preset.id });
+              }}
+            >
+              {t("deletePreset")}
+            </Button>
+          </div>
+        </>
+      )}
       {failed && <p role="alert">{t("presetFailed")}</p>}
     </fieldset>
   );

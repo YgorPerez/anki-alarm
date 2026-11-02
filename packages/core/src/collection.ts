@@ -180,6 +180,12 @@ export type Card = RecordFields<{
   /** Buried until this time, the start of a study day; a past time or null means not buried. */
   buriedUntil: number | null;
   flag: number;
+  /**
+   * Where Anki keeps this new card in line (its due position). Synced, unlike `anki`, because a
+   * pull can change it. Absent on cards made here, on cards seen only after their first answer and
+   * on those linked before it existed. Only the new-card order reads it.
+   */
+  sourcePosition?: number;
 }> &
   AnkiIdentity;
 export type RecordKind = "decks" | "presets" | "noteTypes" | "notes" | "cards";
@@ -1039,16 +1045,30 @@ export class Collection {
       const ours = sent.has(sentSuspensionKey(id));
       if (ours && !suspended) released.push(sentSuspensionKey(id));
       const card = this.state.cards.find((c) => c.id === id);
+      // A due is a position only on a new card outside a filtered deck.
+      const position = ad.type === 0 && !ad.originalDeckId ? ad.due : undefined;
       if (!card)
         this.state.cards.push({
           ...this.record(
-            { noteId, deckId, ordinal: ad.ord, suspended, buriedUntil: null, flag: 0 },
+            {
+              noteId,
+              deckId,
+              ordinal: ad.ord,
+              suspended,
+              buriedUntil: null,
+              flag: 0,
+              ...(position === undefined ? {} : { sourcePosition: position }),
+            },
             id,
           ),
           anki: { id: ad.id },
         });
-      else if (card.fields.suspended.value !== suspended && !(suspended && ours))
-        card.fields.suspended = { value: suspended, hlc: this.tick() };
+      else {
+        if (card.fields.suspended.value !== suspended && !(suspended && ours))
+          card.fields.suspended = { value: suspended, hlc: this.tick() };
+        if (position !== undefined && card.fields.sourcePosition?.value !== position)
+          card.fields.sourcePosition = { value: position, hlc: this.tick() };
+      }
       reps.push([id, ad.reps]);
       if (ad.reps <= seenReps(log, id, seen)) continue;
       const snapshot = snapshotEntry(ad, id, steps.get(deckId) ?? [], this.env.now());
@@ -1286,6 +1306,8 @@ export class Collection {
           // Anki unburies at the first study day after the card's last change.
           buriedUntil: c.buried ? dueInDays(1, c.mtime) : null,
           flag: c.flag ?? 0,
+          // The app's own cards order by their own clock, here and on any other install.
+          ...(c.position === undefined || n.appId ? {} : { sourcePosition: c.position }),
         };
         const merged = {
           id: cardId(id, c.ordinal),

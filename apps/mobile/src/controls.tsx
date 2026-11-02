@@ -12,17 +12,20 @@ export function Button({
   primary = false,
   destructive = false,
   disabled = false,
+  expanded,
 }: {
   label: string;
   onPress: () => void;
   primary?: boolean;
   destructive?: boolean;
   disabled?: boolean;
+  /** For a button that shows or hides what follows it. */
+  expanded?: boolean;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled, ...(expanded === undefined ? {} : { expanded }) }}
       disabled={disabled}
       onPress={onPress}
       className={

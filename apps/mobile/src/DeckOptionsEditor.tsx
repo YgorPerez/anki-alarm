@@ -16,9 +16,9 @@ import {
 } from "@app/core";
 import { autoAdvanceActionFields, displayOrderFields, presetTextValidators } from "@app/editing-ui";
 import { useForm } from "@tanstack/react-form";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { RetentionSlider } from "./RetentionSlider.tsx";
-import { Pressable, Switch, Text, View } from "react-native";
+import { Pressable, ScrollView, Switch, Text, View } from "react-native";
 import { Button, Choice, SaveButtons, TextField } from "./controls.tsx";
 import { editingCopy, type EditingTranslate } from "./editing-copy.ts";
 import { EasyDaysField } from "./EasyDaysField.tsx";
@@ -151,6 +151,36 @@ function LimitScopeChoice({
   );
 }
 
+/** The options scroll; the bar stays on screen, so Save is always a tap away. */
+function DeckOptionsLayout({
+  busy,
+  alert,
+  bar,
+  children,
+}: {
+  busy: boolean;
+  alert: ReactNode;
+  bar: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <View className="flex-1" pointerEvents={busy ? "none" : "auto"}>
+      <ScrollView
+        testID="deck-options-scroll"
+        className="flex-1"
+        contentContainerClassName="gap-6 px-6 pb-6"
+        keyboardShouldPersistTaps="handled"
+      >
+        {children}
+      </ScrollView>
+      <View testID="deck-options-bar" className="gap-2 border-t border-border px-6 py-3">
+        {alert}
+        <View className="flex-row flex-wrap justify-end gap-3">{bar}</View>
+      </View>
+    </View>
+  );
+}
+
 /** Edits a preset: the daily limits and FSRS options its decks share. */
 export function DeckOptionsEditor({
   preset,
@@ -162,7 +192,16 @@ export function DeckOptionsEditor({
   onDirtyChange,
   onSave,
   onCancel,
+  before,
+  after,
+  alert,
 }: {
+  /** What scrolls above the options. */
+  before?: ReactNode;
+  /** What scrolls below the options. */
+  after?: ReactNode;
+  /** Shown over Save, so a failed save is seen wherever the options are scrolled to. */
+  alert?: ReactNode;
   onDirtyChange?: (dirty: boolean) => void;
   ankiDroid?: AnkiDroidApi;
   preset: Preset;
@@ -199,20 +238,26 @@ export function DeckOptionsEditor({
   });
   const fields = textOptions(t);
   return (
-    <View className="gap-6" pointerEvents={busy ? "none" : "auto"}>
-      <form.Subscribe selector={(state) => state.canSubmit}>
-        {(canSubmit) => (
-          <SaveButtons
-            locale={locale}
-            busy={busy}
-            disabled={!canSubmit}
-            onSave={() => {
-              void form.handleSubmit();
-            }}
-            onCancel={onCancel}
-          />
-        )}
-      </form.Subscribe>
+    <DeckOptionsLayout
+      busy={busy}
+      alert={alert}
+      bar={
+        <form.Subscribe selector={(state) => state.canSubmit}>
+          {(canSubmit) => (
+            <SaveButtons
+              locale={locale}
+              busy={busy}
+              disabled={!canSubmit}
+              onSave={() => {
+                void form.handleSubmit();
+              }}
+              onCancel={onCancel}
+            />
+          )}
+        </form.Subscribe>
+      }
+    >
+      {before}
       {deckCount > 1 && (
         <Text style={regular} className="text-body text-attention">
           {t("sharedPreset", { count: String(deckCount) })}
@@ -420,6 +465,7 @@ export function DeckOptionsEditor({
           )}
         </form.Field>
       ))}
-    </View>
+      {after}
+    </DeckOptionsLayout>
   );
 }

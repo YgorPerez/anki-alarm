@@ -5,7 +5,7 @@ import { editingCopy } from "#/editing-copy.ts";
 import { Button } from "#/ui/shadcn/button.tsx";
 
 export function StudyAudio(props: StudyAudioProps) {
-  const { clips, replay, finished, startReplay } = useStudyAudio(props);
+  const { clips, canReplay, replay, finished, startReplay } = useStudyAudio(props);
   const playback = JSON.stringify({ clips, replay });
   useEffect(() => {
     let cancelled = false;
@@ -31,6 +31,7 @@ export function StudyAudio(props: StudyAudioProps) {
       current?.pause();
     };
   }, [playback, finished]);
+  if (!canReplay) return null;
   return (
     <Button variant="ghost" onClick={startReplay}>
       {editingCopy(props.locale)("replayAudio")}

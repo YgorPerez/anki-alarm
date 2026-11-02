@@ -264,7 +264,18 @@ test("deck options create, copy, rename, switch and delete presets", async () =>
   await open();
   await press("button", /Predefinições/);
   await press("button", "Opções do baralho");
-  expect(await screen.findByText(/Usada por \d+ baralhos/)).toBeDefined();
+  expect(await screen.findByText(/Usada por \d+ baralhos?/)).toBeDefined();
+  expect(screen.queryByRole("button", { name: "Criar predefinição" })).toBeNull();
+  // The options stay in the scroll area; Save sits outside it, always on screen.
+  const scroll = within(screen.getByTestId("deck-options-scroll"));
+  expect(scroll.getByLabelText("Cartões novos por dia")).toBeDefined();
+  expect(scroll.queryByRole("button", { name: "Salvar" })).toBeNull();
+  expect(
+    within(screen.getByTestId("deck-options-bar")).getByRole("button", { name: "Salvar" }),
+  ).toBeDefined();
+  // Changing preset reopens the screen, so the management control starts collapsed again.
+  const manage = () => press("button", "Gerenciar predefinições");
+  await manage();
   await fireEvent.changeText(screen.getByLabelText("Nome para a predefinição"), "Intensivo");
   await press("button", "Criar predefinição");
   await waitFor(() =>
@@ -272,6 +283,7 @@ test("deck options create, copy, rename, switch and delete presets", async () =>
       true,
     ),
   );
+  await manage();
   await fireEvent.changeText(screen.getByLabelText("Nome para a predefinição"), "Cópia");
   await press("button", "Duplicar predefinição");
   await waitFor(() =>
@@ -279,6 +291,7 @@ test("deck options create, copy, rename, switch and delete presets", async () =>
       true,
     ),
   );
+  await manage();
   await fireEvent.changeText(screen.getByLabelText("Nome para a predefinição"), "Renomeada");
   await press("button", "Renomear predefinição");
   await screen.findByRole("radio", { name: "Renomeada" });
@@ -288,9 +301,11 @@ test("deck options create, copy, rename, switch and delete presets", async () =>
       true,
     ),
   );
+  await manage();
   await press("button", "Excluir predefinição");
   answerAlert("Excluir predefinição");
   await waitFor(() => expect(screen.queryByRole("radio", { name: "Intensivo" })).toBeNull());
+  await manage();
   expect(
     screen.getByRole("button", { name: "Excluir predefinição" }).props.accessibilityState.disabled,
   ).toBe(true);

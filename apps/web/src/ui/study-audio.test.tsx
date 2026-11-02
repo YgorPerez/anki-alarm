@@ -39,3 +39,22 @@ test("replay follows the preset even when automatic playback is off", async () =
     play.mockRestore();
   }
 });
+
+test("a side with nothing to play has no replay button and still finishes", async () => {
+  const c = new Collection({ deviceId: "web", now: () => 1000, random: () => new Uint8Array(16) });
+  const deck = c.createDeck("Words");
+  c.addBasicNote(deck.id, "casa", "house");
+  const state = c.snapshot();
+  const onFinished = vi.fn<() => void>();
+  render(
+    <StudyAudio
+      input={{ note: state.notes[0]!, type: state.noteTypes[0]!, ordinal: 0 }}
+      side="front"
+      preset={state.presets[0]!}
+      locale="en"
+      onFinished={onFinished}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Replay audio" })).toBeNull();
+  await waitFor(() => expect(onFinished).toHaveBeenCalled());
+});

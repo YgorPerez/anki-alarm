@@ -232,6 +232,72 @@ export function CollectionScreen({
         }}
       />
     );
+  const heading = (
+    <CollectionHeading
+      t={t}
+      locale={locale}
+      form={form}
+      deck={deck}
+      busy={busy}
+      goBack={goBack}
+      onExit={onExit}
+      onTheme={onTheme}
+      onOptions={() => setForm({ kind: "options" })}
+    />
+  );
+  const problem =
+    error || query.isError ? (
+      <Text accessibilityRole="alert" style={regular} className="text-body text-destructive">
+        {t(state ? "error" : "loadError")}
+      </Text>
+    ) : null;
+  const preset = state?.presets.find((p) => p.id === deck?.fields.presetId.value);
+  // The options scroll inside their own screen, so Save can stay outside the scroll area.
+  if (form?.kind === "options" && state && preset)
+    return (
+      <CollectionPage scrolls={false}>
+        <DeckOptionsScreen
+          ankiDroid={ankiDroid}
+          heading={heading}
+          problem={problem}
+          preset={preset}
+          state={state}
+          deck={deck}
+          locale={locale}
+          busy={busy}
+          onDirtyChange={(dirty) => {
+            optionsDirty.current = dirty;
+          }}
+          onCancel={goBack}
+          onPresetChange={(command, onSaved) => {
+            const apply = () =>
+              void change(
+                (c) => {
+                  runCommand(c, command);
+                },
+                () => {
+                  optionsDirty.current = false;
+                  onSaved();
+                },
+              );
+            if (optionsDirty.current) confirmDiscard(t, apply);
+            else apply();
+          }}
+          onSave={(options, limits) =>
+            void change(
+              (c) =>
+                runCommand(c, {
+                  kind: "updatePreset",
+                  id: preset.id,
+                  patch: options,
+                  ...(limits ? { limits } : {}),
+                }),
+              () => setForm(undefined),
+            )
+          }
+        />
+      </CollectionPage>
+    );
   const content = () => {
     if (!state)
       return (
@@ -289,48 +355,6 @@ export function CollectionScreen({
         </>
       );
     }
-    const preset = state.presets.find((p) => p.id === deck?.fields.presetId.value);
-    if (form?.kind === "options" && preset)
-      return (
-        <DeckOptionsScreen
-          ankiDroid={ankiDroid}
-          preset={preset}
-          state={state}
-          deck={deck}
-          locale={locale}
-          busy={busy}
-          onDirtyChange={(dirty) => {
-            optionsDirty.current = dirty;
-          }}
-          onCancel={goBack}
-          onPresetChange={(command, onSaved) => {
-            const apply = () =>
-              void change(
-                (c) => {
-                  runCommand(c, command);
-                },
-                () => {
-                  optionsDirty.current = false;
-                  onSaved();
-                },
-              );
-            if (optionsDirty.current) confirmDiscard(t, apply);
-            else apply();
-          }}
-          onSave={(options, limits) =>
-            void change(
-              (c) =>
-                runCommand(c, {
-                  kind: "updatePreset",
-                  id: preset.id,
-                  patch: options,
-                  ...(limits ? { limits } : {}),
-                }),
-              () => setForm(undefined),
-            )
-          }
-        />
-      );
     if (deck)
       return (
         <DeckDetails
@@ -363,17 +387,7 @@ export function CollectionScreen({
   };
   return (
     <CollectionPage>
-      <CollectionHeading
-        t={t}
-        locale={locale}
-        form={form}
-        deck={deck}
-        busy={busy}
-        goBack={goBack}
-        onExit={onExit}
-        onTheme={onTheme}
-        onOptions={() => setForm({ kind: "options" })}
-      />
+      {heading}
       <DeckStudyStart
         deck={deck}
         editing={Boolean(form)}
@@ -392,11 +406,7 @@ export function CollectionScreen({
         busy={busy}
         onLink={() => setLinking(true)}
       />
-      {error || query.isError ? (
-        <Text accessibilityRole="alert" style={regular} className="text-body text-destructive">
-          {t(state ? "error" : "loadError")}
-        </Text>
-      ) : null}
+      {problem}
       {content()}
     </CollectionPage>
   );
@@ -411,6 +421,8 @@ function confirmDiscard(t: Translate, onDiscard: () => void) {
 /** Options and export share a screen, separate from the deck's notes. */
 function DeckOptionsScreen({
   ankiDroid,
+  heading,
+  problem,
   onPresetChange,
   preset,
   state,
@@ -422,6 +434,8 @@ function DeckOptionsScreen({
   onSave,
 }: {
   ankiDroid: AnkiDroidApi;
+  heading: ReactNode;
+  problem: ReactNode;
   onPresetChange: (command: CollectionCommand, onSaved: () => void) => void;
   preset: Preset;
   state: CollectionState;
@@ -436,31 +450,35 @@ function DeckOptionsScreen({
   ) => void;
 }) {
   return (
-    <>
-      {deck && (
-        <PresetPicker
-          state={state}
-          preset={preset}
-          deckId={deck.id}
-          locale={locale}
-          busy={busy}
-          onChange={onPresetChange}
-        />
-      )}
-      <DeckOptionsEditor
-        ankiDroid={ankiDroid}
-        key={`${preset.id}-${preset.fields.name.value}`}
-        preset={preset}
-        {...(deck ? { deck } : {})}
-        deckCount={state.decks.filter((d) => d.fields.presetId.value === preset.id).length}
-        locale={locale}
-        busy={busy}
-        onDirtyChange={onDirtyChange}
-        onCancel={onCancel}
-        onSave={onSave}
-      />
-      {deck && <DeckExport deckId={deck.id} locale={locale} busy={busy} />}
-    </>
+    <DeckOptionsEditor
+      ankiDroid={ankiDroid}
+      key={`${preset.id}-${preset.fields.name.value}`}
+      preset={preset}
+      {...(deck ? { deck } : {})}
+      deckCount={state.decks.filter((d) => d.fields.presetId.value === preset.id).length}
+      locale={locale}
+      busy={busy}
+      onDirtyChange={onDirtyChange}
+      onCancel={onCancel}
+      onSave={onSave}
+      alert={problem}
+      before={
+        <>
+          {heading}
+          {deck && (
+            <PresetPicker
+              state={state}
+              preset={preset}
+              deckId={deck.id}
+              locale={locale}
+              busy={busy}
+              onChange={onPresetChange}
+            />
+          )}
+        </>
+      }
+      after={deck && <DeckExport deckId={deck.id} locale={locale} busy={busy} />}
+    />
   );
 }
 
@@ -513,7 +531,14 @@ function CollectionHeading({
   );
 }
 
-function CollectionPage({ children }: { children: ReactNode }) {
+function CollectionPage({
+  children,
+  scrolls = true,
+}: {
+  children: ReactNode;
+  /** False when the screen scrolls by itself. */
+  scrolls?: boolean;
+}) {
   const insets = useSafeAreaInsets();
   return (
     <KeyboardAvoidingView
@@ -521,9 +546,13 @@ function CollectionPage({ children }: { children: ReactNode }) {
       className="flex-1 bg-background"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      <ScrollView contentContainerClassName="gap-6 px-6 pb-6" keyboardShouldPersistTaps="handled">
-        {children}
-      </ScrollView>
+      {scrolls ? (
+        <ScrollView contentContainerClassName="gap-6 px-6 pb-6" keyboardShouldPersistTaps="handled">
+          {children}
+        </ScrollView>
+      ) : (
+        children
+      )}
     </KeyboardAvoidingView>
   );
 }

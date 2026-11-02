@@ -212,7 +212,9 @@ test("deck options protect unsaved changes and leave freely after saving", async
 test("deck options manage presets and return deleted presets' decks to Default", async () => {
   const id = await webRequest("change", { kind: "createDeck", name: "Presets" });
   const { user } = await renderRoute(`/deck?deck=${id}&options=true&lang=en`);
-  expect(await screen.findByText(/Used by \d+ decks/)).toBeDefined();
+  expect(await screen.findByText(/Used by \d+ decks?/)).toBeDefined();
+  expect(screen.queryByRole("button", { name: "Create preset" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Manage presets" }));
   await user.type(screen.getByLabelText("Name for preset"), "Intensive");
   await user.click(screen.getByRole("button", { name: "Create preset" }));
   await waitFor(() =>

@@ -374,7 +374,7 @@ test("Bury from the card menu skips the card until tomorrow without answering it
   ]);
   await fireEvent.press(screen.getByRole("button", { name: "Enterrar até amanhã" }));
   await waitFor(() => expect(screen.getByLabelText("Frente").props.source.html).toContain(other));
-  expect(screen.getByLabelText("1 novos")).toBeTruthy();
+  expect(screen.getByLabelText("1 novo")).toBeTruthy();
   const after = await Effect.runPromise(localData((data) => data.collection));
   const note = after.notes.find((n) => n.values[0]?.value === buried)!;
   const card = after.cards.find((c) => c.fields.noteId.value === note.id)!;

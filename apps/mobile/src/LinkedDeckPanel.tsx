@@ -177,11 +177,11 @@ function OwnedLinkControls({
         </>
       )}
       <Text style={regular} className="text-body text-foreground">
-        {t("pending", { count: String(pendingCount) })}
+        {counted(t, pendingCount, "pending", "pendingOne")}
       </Text>
       {held > 0 && (
         <Text style={regular} className="text-body text-attention">
-          {t("held", { held: String(held) })}
+          {counted(t, held, "held", "heldOne")}
         </Text>
       )}
       {pendingCount > held && (
@@ -233,16 +233,31 @@ function LinkStatus({ status }: { status: Status }) {
   );
 }
 
+type CountKeys =
+  | ["held", "heldOne"]
+  | ["pending", "pendingOne"]
+  | ["sentBack", "sentBackOne"]
+  | ["pulledNotes", "pulledNotesOne"]
+  | ["pulledEdited", "pulledEditedOne"]
+  | ["pulledCards", "pulledCardsOne"]
+  | ["pulledSent", "pulledSentOne"];
+function counted(t: Translate, count: number, ...[many, one]: CountKeys) {
+  return t(count === 1 ? one : many, { count: String(count) });
+}
+
 function summary(
   t: Translate,
   key: "pulled" | "sentBack",
   counts: { sent: number; held: number; snapshots: number; added?: number; edited?: number },
 ) {
-  const text = t(key, {
-    sent: String(counts.sent),
-    snapshots: String(counts.snapshots),
-    added: String(counts.added ?? 0),
-    edited: String(counts.edited ?? 0),
-  });
-  return counts.held ? `${text} ${t("held", { held: String(counts.held) })}` : text;
+  const text =
+    key === "sentBack"
+      ? counted(t, counts.sent, "sentBack", "sentBackOne")
+      : t("pulled", {
+          added: counted(t, counts.added ?? 0, "pulledNotes", "pulledNotesOne"),
+          edited: counted(t, counts.edited ?? 0, "pulledEdited", "pulledEditedOne"),
+          snapshots: counted(t, counts.snapshots, "pulledCards", "pulledCardsOne"),
+          sent: counted(t, counts.sent, "pulledSent", "pulledSentOne"),
+        });
+  return counts.held ? `${text} ${counted(t, counts.held, "held", "heldOne")}` : text;
 }

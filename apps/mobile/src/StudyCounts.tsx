@@ -20,7 +20,9 @@ export function StudyCounts({
   return (
     <View className="flex-row items-center gap-2">
       <Text
-        accessibilityLabel={t("studyNew", { count: String(counts.new) })}
+        accessibilityLabel={t(counts.new === 1 ? "studyNewOne" : "studyNew", {
+          count: String(counts.new),
+        })}
         className="text-caption"
         style={{ color: COUNT_COLORS.new }}
       >
@@ -34,7 +36,9 @@ export function StudyCounts({
         {counts.learning}
       </Text>
       <Text
-        accessibilityLabel={t("studyReview", { count: String(counts.review) })}
+        accessibilityLabel={t(counts.review === 1 ? "studyReviewOne" : "studyReview", {
+          count: String(counts.review),
+        })}
         className="text-caption"
         style={{ color: COUNT_COLORS.review }}
       >

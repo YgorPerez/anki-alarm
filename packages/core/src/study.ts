@@ -268,13 +268,34 @@ export function readDueDays(text: string): number | undefined {
   const value = /^\d+$/.test(text.trim()) ? Number(text.trim()) : Number.NaN;
   return value <= MAX_DUE_DAYS ? value : undefined;
 }
-/** New cards come in creation order; a reset moves a card behind the untouched ones. */
+/**
+ * New cards come in their source's order: Anki's due position, else its card id (a creation time,
+ * so it follows the time a card made here carries), else that time. A link or an import writes
+ * many cards in one millisecond, so the clock alone can't order them. A reset moves a card behind
+ * the untouched ones.
+ */
 export function newPosition(card: Card, log: readonly LogEntry[], voided: ReadonlySet<string>) {
   return Math.max(
-    card.fields.noteId.hlc.wallMs,
+    card.fields.sourcePosition?.value ?? card.anki?.id ?? card.fields.noteId.hlc.wallMs,
     ...log
       .filter((e) => e.cardId === card.id && e.kind === "reset" && !voided.has(e.id))
       .map((e) => e.at),
+  );
+}
+/** The same on every device: no record order or locale decides a tie. */
+export function compareNewCards(
+  a: { card: Card; newPosition: number },
+  b: { card: Card; newPosition: number },
+) {
+  const [x, y] = [a.card.fields.noteId, b.card.fields.noteId];
+  return (
+    a.newPosition - b.newPosition ||
+    x.hlc.counter - y.hlc.counter ||
+    (x.value === y.value
+      ? a.card.fields.ordinal.value - b.card.fields.ordinal.value
+      : x.value < y.value
+        ? -1
+        : 1)
   );
 }
 // Stable pseudo-random positions keep a random new queue identical on both clients.
@@ -375,6 +396,8 @@ const by =
   };
 const negative = (key: SortKey) => (item: Queued) => -Number(key(item));
 const position: SortKey = (item) => item.newPosition;
+/** Cards written in one millisecond keep the order they were written in. */
+const written: SortKey = ({ card }) => card.fields.noteId.hlc.counter;
 const noteOf: SortKey = ({ card }) => card.fields.noteId.value;
 const template: SortKey = ({ card }) => card.fields.ordinal.value;
 const dueDay: SortKey = ({ memory }) => studyDayStart(memory.due.getTime());
@@ -424,10 +447,10 @@ function displayQueue<T extends Queued>(
   const randomNote: SortKey = ({ card }) => stableHash(card.fields.noteId.value, salt);
   const randomCard: SortKey = ({ card }) => stableHash(card.id, salt);
   const gather: { [K in DisplayOrder["newGatherPriority"]]: readonly SortKey[] } = {
-    deck: [deck, position, noteOf, template],
+    deck: [deck, position, written, noteOf, template],
     deckThenRandomNotes: [deck, randomNote, noteOf, template],
-    lowestPosition: [position, noteOf, template],
-    highestPosition: [negative(position), noteOf, template],
+    lowestPosition: [position, written, noteOf, template],
+    highestPosition: [negative(position), negative(written), noteOf, template],
     randomNotes: [randomNote, noteOf, template],
     randomCards: [randomCard],
   };

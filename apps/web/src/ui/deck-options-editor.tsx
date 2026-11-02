@@ -268,7 +268,8 @@ export function DeckOptionsEditor({
       <h2 id="deck-options" className="text-label font-bold">
         {t("deckOptions")}
       </h2>
-      <div className="flex flex-wrap items-center gap-4">
+      {/* Stays on screen, since the options run long. */}
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-4 bg-background py-2">
         <form.Subscribe selector={(state) => state.canSubmit}>
           {(canSubmit) => (
             <Button type="submit" size="lg" disabled={!canSubmit || status === "saving"}>

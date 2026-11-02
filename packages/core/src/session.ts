@@ -8,6 +8,7 @@ import {
   deckPreset,
   isBuried,
   nextIntervals,
+  compareNewCards,
   newPosition,
   replayCard,
   type LogEntry,
@@ -128,9 +129,7 @@ export function alarmSession({
   const due = fresh
     .filter((c) => c.memory.state !== State.New && c.memory.due.getTime() <= now)
     .sort((a, b) => a.memory.due.getTime() - b.memory.due.getTime());
-  const unseen = fresh
-    .filter((c) => c.memory.state === State.New)
-    .sort((a, b) => a.newPosition - b.newPosition);
+  const unseen = fresh.filter((c) => c.memory.state === State.New).sort(compareNewCards);
   const ahead = fresh
     .filter((c) => c.memory.state !== State.New && c.memory.due.getTime() > now)
     .sort((a, b) => a.memory.due.getTime() - b.memory.due.getTime());

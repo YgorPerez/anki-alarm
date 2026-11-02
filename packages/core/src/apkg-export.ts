@@ -10,6 +10,7 @@ import { importId, sha1, type ImportKind } from "./ids.ts";
 import {
   deckPreset,
   isBuried,
+  compareNewCards,
   newPosition,
   replayEntries,
   studyDayStart,
@@ -291,9 +292,16 @@ function collectionRows({ collection, log, deckId, now }: ApkgExportInput) {
 
   const newOrder = cards
     .filter((c) => replays.get(c.id)!.memory.state === CardState.New)
-    .map((c) => ({ id: c.id, at: newPosition(c, own.get(c.id) ?? [], voided) }))
-    .sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
-  const position = new Map(newOrder.map((c, i) => [c.id, i + 1]));
+    .map((card) => ({ card, newPosition: newPosition(card, own.get(card.id) ?? [], voided) }))
+    .sort(compareNewCards);
+  // A card keeps Anki's position while that keeps the order, so importing back changes nothing.
+  const position = new Map<string, number>();
+  let last = 0;
+  for (const { card } of newOrder) {
+    const source = card.fields.sourcePosition?.value ?? 0;
+    last = source > 0 && source >= last ? source : last + 1;
+    position.set(card.id, last);
+  }
   const cardRows = cards.map((card) =>
     cardRow(card, replays.get(card.id)!, {
       id: cardAnki.get(card.id)!,

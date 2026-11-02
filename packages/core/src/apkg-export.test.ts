@@ -230,7 +230,13 @@ test("another install gets the same records, history and schedule from the expor
       state.cards.some((c) => kept.has(c.id) && c.fields.noteId.value === n.id),
     ),
   });
-  expect(plain(copy)).toEqual(expected);
+  // A touched card's source position orders nothing: its file has only its schedule.
+  const untouched = (records: ReturnType<typeof plain>) => {
+    for (const card of records["cards"] ?? [])
+      if (log.some((e) => e.cardId === card.id)) delete card.fields["sourcePosition"];
+    return records;
+  };
+  expect(untouched(plain(copy))).toEqual(untouched(expected));
   expect(history(added)).toEqual(history(log));
   for (const card of copy.cards) {
     const preset = (s: CollectionState) => {
@@ -598,4 +604,25 @@ test("apkg round trip carries auto advance options", async () => {
     questionAction: { value: "showReminder" },
     answerAction: { value: "good" },
   });
+});
+
+test("new cards export in the order they study, keeping Anki's positions", async () => {
+  const collection = new Collection(environment());
+  const { package: source } = await readApkg(readHost(fixture("legacy2.apkg")));
+  collection.importAnki(source);
+  const deck = collection.createDeck("Ordem");
+  const notes = ["um", "dois", "três"].map((front) =>
+    collection.addBasicNote(deck.id, front, "verso"),
+  );
+  const state = collection.snapshot();
+  const { package: copy } = await exported(state, [], "Ordem");
+  const due = (noteId: string) => {
+    const ankiNote = copy.notes.find((n) => n.appId === noteId)!;
+    return copy.cards.find((c) => c.noteId === ankiNote.id)!.position;
+  };
+  expect(notes.map((note) => due(note.id))).toEqual([1, 2, 3]);
+  const linkedDeck = state.decks.find((d) => d.anki)!;
+  const { package: imported } = await exported(state, [], linkedDeck.fields.name.value);
+  const positions = new Map(state.cards.map((c) => [c.anki?.id, c.fields.sourcePosition?.value]));
+  for (const card of imported.cards) expect(card.position).toBe(positions.get(card.id));
 });

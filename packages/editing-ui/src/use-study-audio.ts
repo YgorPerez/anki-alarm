@@ -21,6 +21,8 @@ export function useStudyAudio({ input, side, preset, onPlaying, onFinished }: St
   });
   return {
     clips: studyAudio(input, side, preset, replay > 0),
+    /** A replay would play something, even when automatic playback is off. */
+    canReplay: studyAudio(input, side, preset, true).length > 0,
     replay,
     finished,
     startReplay: () => {

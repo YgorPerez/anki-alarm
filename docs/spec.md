@@ -297,9 +297,11 @@ session** is a special mode of it on the phone.
 ### Deck options
 
 A settings button in the deck's header opens the **deck options** screen, on the phone and the web.
-It also holds the deck's `.apkg` export. At the top are the preset picker ("used by N decks") and
-Save; leaving with unsaved changes asks first. Presets can be created, duplicated, renamed and
-deleted. Deleting one moves its decks to Default, which can't be deleted, and new decks start on
+It also holds the deck's `.apkg` export. At the top is the preset picker ("used by N decks"), and
+Save stays on screen however far the options scroll (a fixed bar on the phone, sticky on the web);
+leaving with unsaved changes asks first. Presets that share a name, as an imported Default and the
+app's own do, say where each came from in the picker; their stored names don't change. Presets can
+be created, duplicated, renamed and deleted, behind one collapsed control. Deleting one moves its decks to Default, which can't be deleted, and new decks start on
 Default. Defaults match Anki's.
 
 - **Daily limits:** new cards and reviews per day, each set for the preset, this deck or today only
@@ -307,7 +309,8 @@ Default. Defaults match Anki's.
   parent deck. By default the studied deck's limits apply; with that last option on, each subdeck
   also keeps to its own. Anki keeps those two rules for the whole collection, so `.apkg` import gives
   them to every imported preset and export writes the exported deck's.
-- **New cards:** learning steps, insertion order.
+- **New cards:** learning steps, insertion order. Sequential follows the source: Anki's due position
+  for a linked or imported card, else its card id, else the time it was made here.
 - **Lapses:** relearning steps, leech threshold, leech action (suspend or tag only). As in Anki, the
   action runs on the lapse that reaches the threshold and every half threshold (rounded up) after it.
   Undoing that answer takes back the tag and suspension it added.

@@ -5,6 +5,7 @@ import {
   type Locale,
   type Preset,
 } from "@app/core";
+import { presetChoices, usedByDecksText } from "@app/editing-ui";
 import { useState } from "react";
 import { Alert, Text, View } from "react-native";
 import { Button, Choice, TextField } from "./controls.tsx";
@@ -28,12 +29,13 @@ export function PresetPicker({
 }) {
   const t = editingCopy(locale);
   const [name, setName] = useState("");
+  const [managing, setManaging] = useState(false);
   const apply = (command: CollectionCommand) => onChange(command, () => setName(""));
   return (
     <View className="gap-4" pointerEvents={busy ? "none" : "auto"}>
       <Choice
         label={t("preset")}
-        options={state.presets.map((p) => ({ value: p.id, label: p.fields.name.value }))}
+        options={presetChoices(state.presets, locale)}
         value={preset.id}
         disabled={busy}
         onChange={(presetId) => {
@@ -41,41 +43,51 @@ export function PresetPicker({
         }}
       />
       <Text style={regular} className="text-label text-muted-foreground">
-        {t("usedByDecks", {
-          count: String(state.decks.filter((d) => d.fields.presetId.value === preset.id).length),
-        })}
+        {usedByDecksText(
+          state.decks.filter((d) => d.fields.presetId.value === preset.id).length,
+          locale,
+        )}
       </Text>
-      <TextField label={t("presetActionName")} value={name} onChange={setName} />
       <Button
-        label={t("createPreset")}
-        disabled={busy || !name.trim()}
-        onPress={() => apply({ kind: "createPreset", deckId, name })}
+        label={t("managePresets")}
+        expanded={managing}
+        onPress={() => setManaging(!managing)}
       />
-      <Button
-        label={t("duplicatePreset")}
-        disabled={busy || !name.trim()}
-        onPress={() => apply({ kind: "duplicatePreset", id: preset.id, deckId, name })}
-      />
-      <Button
-        label={t("renamePreset")}
-        disabled={busy || !name.trim() || name.trim() === preset.fields.name.value}
-        onPress={() => apply({ kind: "updatePreset", id: preset.id, patch: { name } })}
-      />
-      <Button
-        label={t("deletePreset")}
-        destructive
-        disabled={busy || isDefaultPreset(preset)}
-        onPress={() =>
-          Alert.alert(t("deletePreset"), t("deletePresetConfirm"), [
-            { text: t("cancel"), style: "cancel" },
-            {
-              text: t("deletePreset"),
-              style: "destructive",
-              onPress: () => apply({ kind: "deletePreset", id: preset.id }),
-            },
-          ])
-        }
-      />
+      {managing && (
+        <>
+          <TextField label={t("presetActionName")} value={name} onChange={setName} />
+          <Button
+            label={t("createPreset")}
+            disabled={busy || !name.trim()}
+            onPress={() => apply({ kind: "createPreset", deckId, name })}
+          />
+          <Button
+            label={t("duplicatePreset")}
+            disabled={busy || !name.trim()}
+            onPress={() => apply({ kind: "duplicatePreset", id: preset.id, deckId, name })}
+          />
+          <Button
+            label={t("renamePreset")}
+            disabled={busy || !name.trim() || name.trim() === preset.fields.name.value}
+            onPress={() => apply({ kind: "updatePreset", id: preset.id, patch: { name } })}
+          />
+          <Button
+            label={t("deletePreset")}
+            destructive
+            disabled={busy || isDefaultPreset(preset)}
+            onPress={() =>
+              Alert.alert(t("deletePreset"), t("deletePresetConfirm"), [
+                { text: t("cancel"), style: "cancel" },
+                {
+                  text: t("deletePreset"),
+                  style: "destructive",
+                  onPress: () => apply({ kind: "deletePreset", id: preset.id }),
+                },
+              ])
+            }
+          />
+        </>
+      )}
     </View>
   );
 }

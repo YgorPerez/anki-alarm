@@ -48,7 +48,7 @@ test("on the phone that linked it, the deck sends its reviews to AnkiDroid and p
   expect(await screen.findByText("Vinculado ao AnkiDroid")).toBeDefined();
 
   await press("Enviar revisões ao AnkiDroid");
-  expect(await screen.findByText("1 revisões enviadas ao AnkiDroid.")).toBeDefined();
+  expect(await screen.findByText("1 revisão enviada ao AnkiDroid.")).toBeDefined();
   expect(ankiDroid.answers.map((a) => [a.noteId, a.ord, a.ease, a.timeTakenMs])).toEqual([
     [501, 0, 3, 6000],
   ]);
@@ -58,7 +58,7 @@ test("on the phone that linked it, the deck sends its reviews to AnkiDroid and p
   await press("Puxar do AnkiDroid");
   expect(
     await screen.findByText(
-      "Do AnkiDroid: 0 notas novas, 0 editadas, 0 cartões com estado novo. 1 revisões enviadas.",
+      "Do AnkiDroid: 0 notas novas, 0 editadas, 0 cartões com estado novo. 1 revisão enviada.",
     ),
   ).toBeDefined();
   expect(ankiDroid.answers.map((a) => a.ease)).toEqual([3, 1]);
@@ -122,7 +122,7 @@ test("a deck shows pending answers before a sync and a global card explains miss
   expect(await screen.findByRole("alert")).toBeDefined();
   expect(await screen.findByText(/envio automático ao AnkiDroid parou/)).toBeDefined();
   await press(/Japonês/);
-  expect(await screen.findByText(/revisões pendentes para o AnkiDroid/)).toBeDefined();
+  expect(await screen.findByText(/revis(ões|ão) pendentes? para o AnkiDroid/)).toBeDefined();
 });
 
 test.each([
@@ -167,7 +167,7 @@ test("background sync respects this phone's toggle and refreshes pending counts"
   await show(anki);
   changeAppState("background");
   await press(/Japonês/);
-  expect(await screen.findByText(/revisões pendentes para o AnkiDroid/)).toBeDefined();
+  expect(await screen.findByText(/revis(ões|ão) pendentes? para o AnkiDroid/)).toBeDefined();
   expect(anki.answers).toHaveLength(0);
   await run((data) => data.setAutoSyncBack(true));
   changeAppState("active");

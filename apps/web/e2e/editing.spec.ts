@@ -55,6 +55,9 @@ test("an .apkg imports in the browser's database, edits keep after a reload, and
   await page.goto("/?lang=en");
   await page.getByRole("link", { name: "Edit Português::Verbos" }).click();
   await page.getByRole("button", { name: "Deck options" }).click();
+  // Save stays on screen however far the options run.
+  await page.getByRole("button", { name: "Export .apkg" }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeInViewport();
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export .apkg" }).click();
   const file = await download;

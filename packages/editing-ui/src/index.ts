@@ -63,6 +63,10 @@ export const editingMessages = {
       "Não foi possível verificar se o AnkiDroid usa FSRS. A API não informa essa opção; sem FSRS, os agendamentos vão diferir.",
     preset: "Predefinição",
     usedByDecks: "Usada por {count} baralhos",
+    usedByOneDeck: "Usada por 1 baralho",
+    managePresets: "Gerenciar predefinições",
+    presetFromAnki: "do Anki",
+    presetFromApp: "deste app",
     presetActionName: "Nome para a predefinição",
     createPreset: "Criar predefinição",
     duplicatePreset: "Duplicar predefinição",
@@ -179,6 +183,10 @@ export const editingMessages = {
       "Could not verify whether AnkiDroid uses FSRS. The API does not expose this setting; without FSRS, the schedules will differ.",
     preset: "Preset",
     usedByDecks: "Used by {count} decks",
+    usedByOneDeck: "Used by 1 deck",
+    managePresets: "Manage presets",
+    presetFromAnki: "from Anki",
+    presetFromApp: "this app",
     presetActionName: "Name for preset",
     createPreset: "Create preset",
     duplicatePreset: "Duplicate preset",
@@ -424,3 +432,36 @@ export const displayOrderFields = (locale: Locale) =>
       label,
     })),
   }));
+
+/** How many decks a preset serves, in both deck options screens' words. */
+export const usedByDecksText = (count: number, locale: Locale) =>
+  count === 1
+    ? editingMessages[locale].usedByOneDeck
+    : editingMessages[locale].usedByDecks.replace("{count}", String(count));
+
+/**
+ * The preset picker's options. Presets that share a name say where each came from, and a number
+ * within the same origin. This is only a label: a preset's stored name is what `.apkg` export writes
+ * and what gives Anki's Default its import id, so it stays as it is.
+ */
+export function presetChoices(
+  presets: readonly { id: string; fields: { name: { value: string } }; anki?: unknown }[],
+  locale: Locale,
+) {
+  const t = editingMessages[locale];
+  const key = (p: (typeof presets)[number]) => `${p.anki ? "anki" : "app"}:${p.fields.name.value}`;
+  const peers = (p: (typeof presets)[number]) =>
+    presets
+      .filter((other) => key(other) === key(p))
+      .map((other) => other.id)
+      // oxlint-disable-next-line unicorn/no-array-sort -- ES2022/Hermes target; sorts a fresh copy.
+      .sort();
+  return presets.map((p) => {
+    const name = p.fields.name.value;
+    if (presets.filter((other) => other.fields.name.value === name).length === 1)
+      return { value: p.id, label: name };
+    const rank = peers(p).indexOf(p.id);
+    const origin = p.anki ? t.presetFromAnki : t.presetFromApp;
+    return { value: p.id, label: `${name} (${origin})${rank ? ` ${rank + 1}` : ""}` };
+  });
+}

@@ -9,7 +9,7 @@ import { mediaBaseUrl, mediaUrl } from "./media.ts";
 const FINISHED = "audio-finished";
 
 export function StudyAudio(props: StudyAudioProps) {
-  const { clips, replay, finished, startReplay } = useStudyAudio(props);
+  const { clips, canReplay, replay, finished, startReplay } = useStudyAudio(props);
   const urls = clips.map(mediaUrl);
   const html = `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; media-src file: data:; script-src 'unsafe-inline'"><script>const urls=${JSON.stringify(urls).replace(/</g, "\\u003c")};let i=0;function next(){if(i>=urls.length){window.ReactNativeWebView.postMessage(${JSON.stringify(FINISHED)});return}const a=new Audio(urls[i++]);a.onended=next;a.onerror=next;a.play().catch(next)}next()</script>`;
   const baseUrl = mediaBaseUrl();
@@ -21,7 +21,9 @@ export function StudyAudio(props: StudyAudioProps) {
   }, [silentRun, finished]);
   return (
     <>
-      <Button label={editingCopy(props.locale)("replayAudio")} onPress={startReplay} />
+      {canReplay && (
+        <Button label={editingCopy(props.locale)("replayAudio")} onPress={startReplay} />
+      )}
       <View style={{ height: 0, overflow: "hidden" }} accessible={false}>
         <WebView
           testID="study-audio"

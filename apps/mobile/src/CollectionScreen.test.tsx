@@ -67,7 +67,7 @@ test("returning from study refreshes the deck's remaining counts", async () => {
   );
   await show();
   await fireEvent.press(await screen.findByRole("button", { name: /Count refresh/ }));
-  expect(await screen.findByLabelText("1 novos")).toBeTruthy();
+  expect(await screen.findByLabelText("1 novo")).toBeTruthy();
   await fireEvent.press(screen.getByRole("button", { name: "Estudar" }));
   await fireEvent.press(await screen.findByRole("button", { name: "Mostrar resposta" }));
   await fireEvent.press(screen.getByRole("button", { name: "Fácil" }));
