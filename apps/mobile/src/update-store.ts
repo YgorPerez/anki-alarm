@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/no-array-sort -- Hermes has no toSorted; only fresh arrays are sorted. */
 import { create } from "zustand";
 
 const CHECK_INTERVAL = 6 * 60 * 60 * 1000;
@@ -105,8 +106,6 @@ export function createUpdateStore(dependencies: UpdateDependencies) {
   const reattach = async (apk: Apk | undefined): Promise<ApkDownload> => {
     downloadId = undefined;
     const rows = await dependencies.listDownloads().catch(() => []);
-    // Hermes has no `toSorted`, and `filter` already made a fresh array.
-    // oxlint-disable-next-line unicorn/no-array-sort
     const [current] = rows
       .filter((row) => row.version === apk?.version)
       .sort((a, b) => finishedFirst[a.status] - finishedFirst[b.status] || b.id - a.id);
