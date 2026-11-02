@@ -105,9 +105,11 @@ export function createUpdateStore(dependencies: UpdateDependencies) {
   const reattach = async (apk: Apk | undefined): Promise<ApkDownload> => {
     downloadId = undefined;
     const rows = await dependencies.listDownloads().catch(() => []);
+    // Hermes has no `toSorted`, and `filter` already made a fresh array.
+    // oxlint-disable-next-line unicorn/no-array-sort
     const [current] = rows
       .filter((row) => row.version === apk?.version)
-      .toSorted((a, b) => finishedFirst[a.status] - finishedFirst[b.status] || b.id - a.id);
+      .sort((a, b) => finishedFirst[a.status] - finishedFirst[b.status] || b.id - a.id);
     await Promise.all(rows.filter((row) => row !== current).map((row) => remove(row.id)));
     if (!current || !apk) return { kind: "idle" };
     if (current.status === "active") {
