@@ -58,6 +58,10 @@ Gradle `assembleRelease` with the release signing configuration. The release con
 Keep both assets: a missing metadata file on a previous APK release stops CI rather than guessing
 that an OTA is compatible. An older or equal versionCode is rejected.
 
+The published APK holds `arm64-v8a` only, set by a Gradle flag in `release.yml`, so 32-bit and x86
+phones aren't supported. The flag isn't an input of the fingerprint. The E2E workflow builds its own
+`x86_64` APK for the emulator.
+
 A matching fingerprint publishes an Android EAS Update to `production`; the GitHub release has
 notes and no APK. It never publishes an OTA in the APK branch. Releases run serially and an existing
 release tag cannot be republished. Do not move published tags.
@@ -75,9 +79,26 @@ JS takes effect on the next cold start. No timer, resume handler, or alarm compl
 See [Expo's download behavior](https://docs.expo.dev/eas-update/download-updates/).
 
 Home checks the public GitHub releases API, skips OTA releases and offers an APK only if its
-versionCode exceeds the installed native build version. The banner is dismissible. Accepting downloads
-the APK into cache and opens Android's installer with a content URI and read permission. The user
-must allow installs from this app; Android still asks for confirmation. Failures leave a retry action.
+versionCode exceeds the installed native build version. The banner is dismissible.
+
+Accepting hands the download to Android's `DownloadManager` (`modules/apk-download`), into the app's
+external files directory. It needs no new permission prompt and allows metered and roaming networks.
+The shade shows it under the app's name, with progress and on completion, and it carries on if the
+app goes to the background or dies. Each download is tagged with its version: a relaunch re-attaches
+to a running, finished or failed download of the offered version instead of starting a second one,
+and removes those of any other version, including the one just installed.
+
+While the app is in the foreground, on a screen that may show the offer, it queries the download
+once a second for the percent. It doesn't poll in the background. A download the system reports as
+failed (no space, for one), that disappears from its list, or that moves no bytes for two foreground
+minutes (paused forever) is removed and reaches the retry state.
+
+A download accepted in this run opens Android's installer when it finishes, with
+`getUriForDownloadedFile`'s content URI and a read grant. On study, alarm or AnkiDroid import screens
+it waits for the return to a screen that may show the offer. A download found by a relaunch waits
+for a tap on Install. Tapping the finished notification goes to the system's Downloads handling;
+whether that opens the installer varies by Android version. The user must allow installs from this
+app; Android still asks for confirmation.
 
 `UpdateOffer` belongs only on Home and, when implemented, Settings. Keep it out of study, ring,
 alarm session and awake check screens. Those screens and Settings do not exist in the current shell;

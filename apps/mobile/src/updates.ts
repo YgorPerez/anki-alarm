@@ -1,8 +1,10 @@
 import { newerApk } from "@app/core";
 import { nativeBuildVersion } from "expo-application";
-import * as FileSystem from "expo-file-system/legacy";
 import { startActivityAsync } from "expo-intent-launcher";
 import * as Updates from "expo-updates";
+
+import native from "../modules/apk-download/index.ts";
+import type { Apk } from "./update-store.ts";
 
 export async function findApk() {
   const installed = Number(nativeBuildVersion);
@@ -21,27 +23,15 @@ export async function findApk() {
   }
 }
 
-export async function downloadApk(url: string, onProgress: (percent: number) => void) {
-  const download = FileSystem.createDownloadResumable(
-    url,
-    `${FileSystem.cacheDirectory}anki-alarm.apk`,
-    {},
-    ({ totalBytesWritten, totalBytesExpectedToWrite }) => {
-      if (totalBytesExpectedToWrite > 0)
-        onProgress(Math.floor((totalBytesWritten / totalBytesExpectedToWrite) * 100));
-    },
-  );
-  const result = await download.downloadAsync();
-  if (result?.status !== 200) throw new Error("APK download failed");
-  return result.uri;
-}
+export const listDownloads = () => native.list();
+export const startDownload = ({ url, version }: Apk) => native.start(url, version);
+export const removeDownload = (id: number) => native.remove(id);
 
 /** Resolves when the installer closes, installed or not: a cancelled install can open it again. */
-export async function openInstaller(file: string) {
-  const uri = await FileSystem.getContentUriAsync(file);
+export async function openInstaller(contentUri: string) {
   // Android owns installation and the per-app "allow unknown sources" consent.
   await startActivityAsync("android.intent.action.VIEW", {
-    data: uri,
+    data: contentUri,
     type: "application/vnd.android.package-archive",
     flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
   });

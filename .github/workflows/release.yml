@@ -99,7 +99,7 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
           printf '\napply from: "../../../../scripts/release/sign.gradle"\n' >> apps/mobile/android/app/build.gradle
           cd apps/mobile/android
-          ./gradlew :app:assembleRelease --no-daemon
+          ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/anki-alarm.apk"
       - name: Publish release
         env:
